@@ -70,7 +70,8 @@
           "color": "#0D9488"
         }
       ],
-      "expo-splash-screen"
+      "expo-splash-screen",
+      "expo-audio"
     ],
     "extra": {
       "router": {},

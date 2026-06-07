@@ -178,6 +178,7 @@ export interface Community {
 export interface TripWithDriver extends Trip {
   driver: Profile;
   vehicle?: Vehicle;
+  bookings?: (Booking & { reviews?: Review[] })[];
 }
 
 export interface BookingWithTrip extends Booking {

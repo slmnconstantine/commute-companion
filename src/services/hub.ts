@@ -147,3 +147,48 @@ export const createPost = async (
     user_has_liked: false
   } as HubPostWithAuthor;
 };
+
+export const deletePost = async (postId: string, userId: string): Promise<boolean> => {
+  const { error } = await supabase
+    .from('hub_posts')
+    .delete()
+    .match({ id: postId, author_id: userId });
+
+  if (error) {
+    console.error('Error deleting post:', error);
+    return false;
+  }
+  return true;
+};
+
+export const updatePost = async (postId: string, userId: string, statusTag: string, message: string): Promise<HubPostWithAuthor | null> => {
+  const { data, error } = await supabase
+    .from('hub_posts')
+    .update({ status_tag: statusTag, message })
+    .match({ id: postId, author_id: userId })
+    .select(`*, author:profiles!hub_posts_author_id_fkey(*)`)
+    .single();
+
+  if (error) {
+    console.error('Error updating post:', error);
+    return null;
+  }
+
+  return {
+    ...data,
+    author: Array.isArray(data.author) ? data.author[0] : data.author,
+  } as HubPostWithAuthor;
+};
+
+export const deleteAllUserPosts = async (userId: string, routeHash: string): Promise<boolean> => {
+  const { error } = await supabase
+    .from('hub_posts')
+    .delete()
+    .match({ author_id: userId, route_hash: routeHash });
+
+  if (error) {
+    console.error('Error deleting all user posts:', error);
+    return false;
+  }
+  return true;
+};

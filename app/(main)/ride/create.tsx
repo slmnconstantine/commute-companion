@@ -145,19 +145,42 @@ function TimePickerModal({
   selectedTime: string;
   theme: any;
 }) {
-  const slots = useMemo(() => {
-    const arr: { display: string; value: string }[] = [];
-    for (let h = 0; h < 24; h++) {
-      for (let m = 0; m < 60; m += 15) {
-        const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
-        const ampm = h < 12 ? 'AM' : 'PM';
-        const display = `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
-        const value = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-        arr.push({ display, value });
-      }
+  const [hour24, setHour24] = useState(() => {
+    const [h] = selectedTime.split(':');
+    return parseInt(h || '0', 10);
+  });
+  const [minute, setMinute] = useState(() => {
+    const [, m] = selectedTime.split(':');
+    return parseInt(m || '0', 10);
+  });
+
+  useEffect(() => {
+    if (visible) {
+      const [h, m] = selectedTime.split(':');
+      setHour24(parseInt(h || '0', 10));
+      setMinute(parseInt(m || '0', 10));
     }
-    return arr;
-  }, []);
+  }, [selectedTime, visible]);
+
+  const isPM = hour24 >= 12;
+  const hour12 = hour24 === 0 ? 12 : (hour24 > 12 ? hour24 - 12 : hour24);
+
+  const handleHourSelect = (h: number) => {
+    const newH24 = isPM ? (h === 12 ? 12 : h + 12) : (h === 12 ? 0 : h);
+    setHour24(newH24);
+  };
+
+  const handleAmPmSelect = (pm: boolean) => {
+    if (pm && !isPM) setHour24(hour24 + 12);
+    if (!pm && isPM) setHour24(hour24 - 12);
+  };
+
+  const handleSave = () => {
+    const hStr = String(hour24).padStart(2, '0');
+    const mStr = String(minute).padStart(2, '0');
+    onSelect(`${hStr}:${mStr}`);
+    onClose();
+  };
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -167,35 +190,60 @@ function TimePickerModal({
           <View style={pickerStyles.sheetHandle}>
             <View style={[pickerStyles.handleBar, { backgroundColor: theme.colors.border }]} />
           </View>
-          <Text style={[pickerStyles.sheetTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>
-            Select Departure Time
-          </Text>
-          <ScrollView style={pickerStyles.timeScroll} showsVerticalScrollIndicator={false}>
-            {slots.map((slot) => {
-              const isSelected = slot.value === selectedTime;
-              return (
-                <Pressable
-                  key={slot.value}
-                  style={[
-                    pickerStyles.timeSlot,
-                    isSelected && { backgroundColor: `${theme.colors.primary}15` },
-                  ]}
-                  onPress={() => { onSelect(slot.value); onClose(); }}
-                >
-                  <Text
-                    style={[
-                      pickerStyles.timeSlotText,
-                      { color: theme.colors.text, fontFamily: 'Inter-Regular' },
-                      isSelected && { color: theme.colors.primary, fontFamily: 'Inter-Bold' },
-                    ]}
-                  >
-                    {slot.display}
-                  </Text>
-                  {isSelected && <Ionicons name="checkmark-circle" size={22} color={theme.colors.primary} />}
+          
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginBottom: 12 }}>
+             <Text style={[pickerStyles.sheetTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', marginBottom: 0 }]}>
+                Departure Time
+             </Text>
+             <Pressable onPress={handleSave}>
+               <Text style={{ color: theme.colors.primary, fontFamily: 'Inter-Bold', fontSize: 16 }}>Done</Text>
+             </Pressable>
+          </View>
+
+          <View style={{ paddingHorizontal: 20 }}>
+            {/* Display */}
+            <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 24, marginTop: 10 }}>
+              <Text style={{ fontSize: 44, fontFamily: 'Inter-Bold', color: theme.colors.text }}>
+                {hour12}:{String(minute).padStart(2, '0')}
+              </Text>
+              <View style={{ marginLeft: 16, backgroundColor: theme.colors.background, borderRadius: 10, overflow: 'hidden', flexDirection: 'row' }}>
+                <Pressable onPress={() => handleAmPmSelect(false)} style={{ paddingVertical: 10, paddingHorizontal: 16, backgroundColor: !isPM ? theme.colors.primary : 'transparent' }}>
+                  <Text style={{ color: !isPM ? '#fff' : theme.colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 16 }}>AM</Text>
                 </Pressable>
-              );
-            })}
-          </ScrollView>
+                <Pressable onPress={() => handleAmPmSelect(true)} style={{ paddingVertical: 10, paddingHorizontal: 16, backgroundColor: isPM ? theme.colors.primary : 'transparent' }}>
+                  <Text style={{ color: isPM ? '#fff' : theme.colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 16 }}>PM</Text>
+                </Pressable>
+              </View>
+            </View>
+
+            {/* Hours Grid */}
+            <Text style={{ fontFamily: 'Inter-SemiBold', color: theme.colors.textMuted, marginBottom: 12 }}>Hour</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 24 }}>
+              {[1,2,3,4,5,6,7,8,9,10,11,12].map(h => (
+                <Pressable 
+                  key={`h-${h}`} 
+                  onPress={() => handleHourSelect(h)}
+                  style={{ width: '14.5%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: hour12 === h ? theme.colors.primary : theme.colors.background }}
+                >
+                  <Text style={{ color: hour12 === h ? '#fff' : theme.colors.text, fontFamily: hour12 === h ? 'Inter-Bold' : 'Inter-Medium', fontSize: 18 }}>{h}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            {/* Minutes Grid */}
+            <Text style={{ fontFamily: 'Inter-SemiBold', color: theme.colors.textMuted, marginBottom: 12 }}>Minute</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+              {[0, 15, 30, 45].map(m => (
+                <Pressable 
+                  key={`m-${m}`} 
+                  onPress={() => setMinute(m)}
+                  style={{ flex: 1, paddingVertical: 16, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: minute === m ? theme.colors.primary : theme.colors.background }}
+                >
+                  <Text style={{ color: minute === m ? '#fff' : theme.colors.text, fontFamily: minute === m ? 'Inter-Bold' : 'Inter-Medium', fontSize: 18 }}>{String(m).padStart(2, '0')}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
         </Pressable>
       </Pressable>
     </Modal>
@@ -453,8 +501,9 @@ export default function CreateRideScreen() {
             />
             <RasterSource
               id="osm"
-              tiles={['https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png']}
+              tiles={['https://tile.openstreetmap.org/{z}/{x}/{y}.png']}
               tileSize={256}
+              maxzoom={19}
             >
               <Layer id="osm-layer" type="raster" source="osm" />
             </RasterSource>

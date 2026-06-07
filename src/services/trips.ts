@@ -20,7 +20,7 @@ export async function getTrips(filters?: {
 }): Promise<TripWithDriver[]> {
   let query = supabase
     .from('trips')
-    .select(`*, driver:profiles!driver_id(*), vehicle:vehicles!vehicle_id(*)`);
+    .select(`*, driver:profiles!driver_id(*), vehicle:vehicles!vehicle_id(*), bookings(*, reviews(*))`);
 
   if (filters?.status) query = query.eq('status', filters.status);
   if (filters?.driverId) query = query.eq('driver_id', filters.driverId);

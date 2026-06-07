@@ -1,30 +1,16 @@
-/**
- * Set Route Screen
- *
- * Allows users to set their daily commute route (origin + destination).
- * Uses the existing geocoding service for place search, and map pinning.
- * Persists the route via RouteContext.
- */
-
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  Alert,
-  ActivityIndicator,
+  View, Text, TextInput, StyleSheet, ScrollView, Pressable, Alert, Animated
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Map, Camera, type MapRef, type CameraRef } from '@maplibre/maplibre-react-native';
+import { Map, Camera, RasterSource, Layer, GeoJSONSource, Marker, type CameraRef } from '@maplibre/maplibre-react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { useRoute } from '@/context/RouteContext';
-import { searchPlaces, GeocodingResult, reverseGeocode } from '@/services/geocoding';
 import { useLocation } from '@/hooks/useLocation';
+import { getRoute } from '@/services/routing';
+import { searchPlaces, GeocodingResult, reverseGeocode } from '@/services/geocoding';
 
 interface LocationData {
   lat: number;
@@ -32,55 +18,38 @@ interface LocationData {
   label: string;
 }
 
-// ── Stable mapStyle constant (MUST be outside component to avoid re-renders) ──
-const MAP_STYLE = {
-  version: 8 as const,
-  sources: {
-    osm: {
-      type: 'raster' as const,
-      tiles: ['https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png'],
-      tileSize: 256,
-    },
-  },
-  layers: [
-    {
-      id: 'osm-tiles',
-      type: 'raster' as const,
-      source: 'osm',
-    },
-  ],
-};
-
 export default function SetRouteScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { saveRoute, recentRoutes, setActiveRoute } = useRoute();
   const { location } = useLocation();
+  const { saveRoute } = useRoute();
 
   const [origin, setOrigin] = useState<LocationData | null>(null);
   const [destination, setDestination] = useState<LocationData | null>(null);
-  const [searchMode, setSearchMode] = useState<'origin' | 'destination' | null>(null);
-  const [mapMode, setMapMode] = useState<'origin' | 'destination' | null>(null);
+  const [routeCoords, setRouteCoords] = useState<{ latitude: number; longitude: number }[]>([]);
+  const [routeInfo, setRouteInfo] = useState<{ distanceKm: number; durationMin: number; polyline: string } | null>(null);
 
+  // Search state
+  const [searchMode, setSearchMode] = useState<'origin' | 'destination' | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<GeocodingResult[]>([]);
   const [searching, setSearching] = useState(false);
 
-  const [isConfirmingLocation, setIsConfirmingLocation] = useState(false);
+  // Map pin mode: which location the next map tap will set
+  const [pinMode, setPinMode] = useState<'origin' | 'destination'>('origin');
+  const [reverseGeocoding, setReverseGeocoding] = useState(false);
 
-  // Refs for the map picker
-  const mapRef = useRef<MapRef>(null);
   const cameraRef = useRef<CameraRef>(null);
 
   // Fly camera to user's real GPS location once it's loaded
   useEffect(() => {
-    // Only fly if location differs significantly from default Manila coords or if we know it's loaded
     if (location && cameraRef.current) {
-      cameraRef.current.flyTo({ center: [location.longitude, location.latitude], zoom: 15, duration: 1000 });
+      cameraRef.current.flyTo({ center: [location.longitude, location.latitude], zoom: 14, duration: 1000 });
     }
   }, [location]);
 
+  // ── Search handlers ──
   const handleSearch = async (query: string) => {
     setSearchQuery(query);
     if (query.length < 3) { setSearchResults([]); return; }
@@ -90,44 +59,79 @@ export default function SetRouteScreen() {
     setSearching(false);
   };
 
-  const handleSelectPlace = (place: GeocodingResult) => {
-    const loc: LocationData = { lat: place.lat, lng: place.lng, label: place.displayName };
-    if (searchMode === 'origin') setOrigin(loc);
-    else if (searchMode === 'destination') setDestination(loc);
-    setSearchMode(null);
-    setSearchQuery('');
-    setSearchResults([]);
-  };
-
-  /** Confirm the map center as the selected location */
-  const handleConfirmMapLocation = async () => {
-    setIsConfirmingLocation(true);
-    try {
-      // Use MapRef.getCenter() — the most reliable way to read the center
-      const center = await mapRef.current?.getCenter();
-      if (!center) {
-        Alert.alert('Error', 'Could not read the map center. Please try again.');
-        setIsConfirmingLocation(false);
-        return;
-      }
-
-      const [lng, lat] = center;
-      const label = await reverseGeocode(lat, lng);
-
-      const loc: LocationData = { lat, lng, label };
-      if (mapMode === 'origin') setOrigin(loc);
-      else if (mapMode === 'destination') setDestination(loc);
-
-      setMapMode(null);
-      setSearchMode(null);
-    } catch (err) {
-      console.error('Confirm location error:', err);
-      Alert.alert('Error', 'Failed to get the location. Please try again.');
-    } finally {
-      setIsConfirmingLocation(false);
+  /** Shared route calculation logic */
+  const calculateRouteIfReady = async (o: LocationData | null, d: LocationData | null) => {
+    if (!o || !d) return;
+    const route = await getRoute(o.lat, o.lng, d.lat, d.lng);
+    if (route) {
+      setRouteCoords(route.coordinates);
+      setRouteInfo({ distanceKm: route.distanceKm, durationMin: route.durationMin, polyline: route.encodedPolyline });
+      const lats = route.coordinates.map(c => c.latitude);
+      const lngs = route.coordinates.map(c => c.longitude);
+      cameraRef.current?.fitBounds(
+        [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)],
+        { padding: { top: 100, right: 50, bottom: 250, left: 50 }, duration: 1000 }
+      );
     }
   };
 
+  const handleSelectPlace = async (place: GeocodingResult) => {
+    const loc: LocationData = { lat: place.lat, lng: place.lng, label: place.displayName };
+    const newOrigin = searchMode === 'origin' ? loc : origin;
+    const newDest = searchMode === 'destination' ? loc : destination;
+    if (searchMode === 'origin') setOrigin(loc);
+    else setDestination(loc);
+
+    setSearchMode(null);
+    setSearchQuery('');
+    setSearchResults([]);
+
+    await calculateRouteIfReady(newOrigin, newDest);
+  };
+
+  // ── Map tap handler ──
+  const handleMapPress = async (event: any) => {
+    if (reverseGeocoding) return; // Prevent overlapping taps
+
+    let coords: [number, number] | null = null;
+    try {
+      if (event?.nativeEvent?.lngLat) {
+        coords = event.nativeEvent.lngLat;
+      } else if (event?.geometry?.coordinates) {
+        coords = event.geometry.coordinates;
+      }
+    } catch {}
+    if (!coords) return;
+
+    const [lng, lat] = coords;
+    setReverseGeocoding(true);
+
+    let label = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    try {
+      const addr = await reverseGeocode(lat, lng);
+      if (addr && addr !== 'Unknown location') label = addr;
+    } catch {}
+
+    const loc: LocationData = { lat, lng, label };
+
+    let newOrigin = origin;
+    let newDest = destination;
+
+    if (pinMode === 'origin') {
+      setOrigin(loc);
+      newOrigin = loc;
+      setPinMode('destination'); // Auto-advance to destination
+    } else {
+      setDestination(loc);
+      newDest = loc;
+      setPinMode('origin'); // Cycle back
+    }
+
+    setReverseGeocoding(false);
+    await calculateRouteIfReady(newOrigin, newDest);
+  };
+
+  // ── Save route handler ──
   const handleSaveRoute = async () => {
     if (!origin || !destination) {
       Alert.alert('Incomplete', 'Please set both origin and destination.');
@@ -149,130 +153,6 @@ export default function SetRouteScreen() {
     ]);
   };
 
-  // --- MAP MODE SCREEN ---
-  if (mapMode) {
-    return (
-      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        <View style={[styles.header, { paddingTop: insets.top + 8, backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
-          <Pressable onPress={() => setMapMode(null)} style={styles.headerBtn}>
-            <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
-          </Pressable>
-          <Text style={[styles.headerTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>
-            Pin {mapMode === 'origin' ? 'Origin' : 'Destination'}
-          </Text>
-          <View style={styles.headerBtn} />
-        </View>
-
-        <View style={{ flex: 1 }}>
-          <Map
-            ref={mapRef}
-            androidView="texture"
-            style={styles.map}
-            logo={false}
-            attribution={false}
-            compass={false}
-            mapStyle={MAP_STYLE as any}
-          >
-            <Camera
-              ref={cameraRef}
-              initialViewState={{
-                center: [location.longitude, location.latitude],
-                zoom: 15,
-              }}
-            />
-          </Map>
-
-          {/* Center Pin Overlay */}
-          <View style={styles.centerPinContainer} pointerEvents="none">
-            <Ionicons name="location" size={48} color={mapMode === 'origin' ? theme.colors.success : theme.colors.error} />
-          </View>
-
-          {/* Confirm Button */}
-          <View style={[styles.mapConfirmContainer, { paddingBottom: insets.bottom + 20 }]}>
-            <Pressable
-              style={[styles.saveButton, { backgroundColor: theme.colors.primary, marginHorizontal: 20 }]}
-              onPress={handleConfirmMapLocation}
-              disabled={isConfirmingLocation}
-            >
-              {isConfirmingLocation ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <>
-                  <Ionicons name="checkmark-circle" size={22} color="#fff" />
-                  <Text style={styles.saveButtonText}>Confirm Location</Text>
-                </>
-              )}
-            </Pressable>
-          </View>
-        </View>
-      </View>
-    );
-  }
-
-  // --- SEARCH MODE SCREEN ---
-  if (searchMode) {
-    return (
-      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        <View style={[styles.header, { paddingTop: insets.top + 8, backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
-          <Pressable onPress={() => { setSearchMode(null); setSearchResults([]); setSearchQuery(''); }} style={styles.headerBtn}>
-            <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
-          </Pressable>
-          <Text style={[styles.headerTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>
-            Search {searchMode === 'origin' ? 'Origin' : 'Destination'}
-          </Text>
-          <View style={styles.headerBtn} />
-        </View>
-
-        <View style={[styles.searchBar, { backgroundColor: theme.colors.surface, borderColor: theme.colors.primary }]}>
-          <Ionicons name="search" size={20} color={theme.colors.primary} />
-          <TextInput
-            value={searchQuery}
-            onChangeText={handleSearch}
-            placeholder={`Search for a place...`}
-            placeholderTextColor={theme.colors.textMuted}
-            style={[styles.searchInput, { color: theme.colors.text, fontFamily: 'Inter-Regular' }]}
-            autoFocus
-          />
-          {searchQuery.length > 0 && (
-            <Pressable onPress={() => { setSearchQuery(''); setSearchResults([]); }}>
-              <Ionicons name="close-circle" size={22} color={theme.colors.textMuted} />
-            </Pressable>
-          )}
-        </View>
-
-        {/* Choose on Map Button */}
-        <Pressable
-          style={[styles.chooseOnMapBtn, { backgroundColor: `${theme.colors.primary}15` }]}
-          onPress={() => setMapMode(searchMode)}
-        >
-          <Ionicons name="map-outline" size={20} color={theme.colors.primary} />
-          <Text style={[theme.typography.body, { color: theme.colors.primary, fontFamily: 'Inter-SemiBold', marginLeft: 8 }]}>
-            Choose on Map
-          </Text>
-        </Pressable>
-
-        <ScrollView style={styles.searchResultsList}>
-          {searchResults.map((result, i) => (
-            <Pressable
-              key={i}
-              style={[styles.searchItem, { borderBottomColor: theme.colors.border }]}
-              onPress={() => handleSelectPlace(result)}
-            >
-              <Ionicons name="location" size={20} color={theme.colors.primary} />
-              <Text style={[styles.searchItemText, { color: theme.colors.text, fontFamily: 'Inter-Regular' }]} numberOfLines={2}>
-                {result.displayName}
-              </Text>
-            </Pressable>
-          ))}
-          {searching && (
-            <Text style={[styles.searchingText, { color: theme.colors.textMuted }]}>Searching...</Text>
-          )}
-        </ScrollView>
-      </View>
-    );
-  }
-
-  // --- MAIN SET ROUTE SCREEN ---
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       {/* Header */}
@@ -280,95 +160,200 @@ export default function SetRouteScreen() {
         <Pressable onPress={() => router.back()} style={styles.headerBtn}>
           <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
         </Pressable>
-        <Text style={[styles.headerTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>Set Commute Route</Text>
+        <Text style={[styles.headerTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>
+          Set Commute Route
+        </Text>
         <View style={styles.headerBtn} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Info card */}
-        <View style={[styles.infoCard, { backgroundColor: `${theme.colors.primary}10`, borderColor: `${theme.colors.primary}25` }]}>
-          <Ionicons name="compass" size={24} color={theme.colors.primary} />
-          <Text style={[styles.infoText, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
-            Set your daily commute route to join a community of users who share the same path. Get real-time updates about traffic, tips, and more!
-          </Text>
-        </View>
-
-        {/* Route inputs */}
-        <Text style={[styles.sectionTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>Your Route</Text>
-
-        <Pressable
-          style={[styles.locationInput, { backgroundColor: theme.colors.surface, borderColor: origin ? theme.colors.primary : theme.colors.border }]}
-          onPress={() => setSearchMode('origin')}
-        >
-          <View style={[styles.locationDot, { backgroundColor: theme.colors.success }]} />
-          <Text
-            style={[styles.locationText, { color: origin ? theme.colors.text : theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}
-            numberOfLines={1}
-          >
-            {origin?.label || 'Set starting point (e.g. Home)'}
-          </Text>
-          <Ionicons name="search-outline" size={18} color={theme.colors.textMuted} />
-        </Pressable>
-
-        <View style={[styles.routeConnector, { borderColor: theme.colors.border }]} />
-
-        <Pressable
-          style={[styles.locationInput, { backgroundColor: theme.colors.surface, borderColor: destination ? theme.colors.primary : theme.colors.border }]}
-          onPress={() => setSearchMode('destination')}
-        >
-          <View style={[styles.locationDot, { backgroundColor: theme.colors.error }]} />
-          <Text
-            style={[styles.locationText, { color: destination ? theme.colors.text : theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}
-            numberOfLines={1}
-          >
-            {destination?.label || 'Set destination (e.g. Work, School)'}
-          </Text>
-          <Ionicons name="search-outline" size={18} color={theme.colors.textMuted} />
-        </Pressable>
-
-        {/* Save Button */}
-        {origin && destination && (
-          <Pressable
-            style={[styles.saveButton, { backgroundColor: theme.colors.primary }]}
-            onPress={handleSaveRoute}
-          >
-            <Ionicons name="checkmark-circle" size={22} color="#fff" />
-            <Text style={styles.saveButtonText}>Save Commute Route</Text>
-          </Pressable>
-        )}
-
-        {/* Recent Routes */}
-        {recentRoutes.length > 0 && (
-          <>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', marginTop: 32 }]}>
-              Recent Routes
-            </Text>
-            {recentRoutes.map((route) => (
-              <Pressable
-                key={route.id}
-                style={[styles.recentRoute, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
-                onPress={() => {
-                  setActiveRoute(route);
-                  Alert.alert('Route Set!', `Active route: ${route.label || route.origin_label + ' → ' + route.destination_label}`, [
-                    { text: 'OK', onPress: () => router.back() },
-                  ]);
-                }}
-              >
-                <Ionicons name="time-outline" size={20} color={theme.colors.textMuted} />
-                <View style={styles.recentRouteInfo}>
-                  <Text style={[styles.recentRouteLabel, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]} numberOfLines={1}>
-                    {route.label || `${route.origin_label.split(',')[0]} → ${route.destination_label.split(',')[0]}`}
-                  </Text>
-                  <Text style={[styles.recentRouteDate, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
-                    {new Date(route.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
+      {searchMode ? (
+        /* ═══ Search Overlay ═══ */
+        <View style={[styles.searchOverlay, { backgroundColor: theme.colors.background }]}>
+          <View style={[styles.searchBar, { backgroundColor: theme.colors.surface, borderColor: theme.colors.primary }]}>
+            <Ionicons name="search" size={20} color={theme.colors.primary} />
+            <TextInput
+              value={searchQuery}
+              onChangeText={handleSearch}
+              placeholder={`Search ${searchMode}...`}
+              placeholderTextColor={theme.colors.textMuted}
+              style={[styles.searchInput, { color: theme.colors.text, fontFamily: 'Inter-Regular' }]}
+              autoFocus
+            />
+            <Pressable onPress={() => { setSearchMode(null); setSearchResults([]); setSearchQuery(''); }}>
+              <Ionicons name="close-circle" size={22} color={theme.colors.textMuted} />
+            </Pressable>
+          </View>
+          <ScrollView style={styles.searchResults}>
+            {searchResults.map((result, i) => (
+              <Pressable key={i} style={[styles.searchItem, { borderBottomColor: theme.colors.border }]} onPress={() => handleSelectPlace(result)}>
+                <Ionicons name="location" size={20} color={theme.colors.primary} />
+                <Text style={[styles.searchItemText, { color: theme.colors.text, fontFamily: 'Inter-Regular' }]} numberOfLines={2}>
+                  {result.displayName}
+                </Text>
               </Pressable>
             ))}
-          </>
-        )}
-      </ScrollView>
+          </ScrollView>
+        </View>
+      ) : (
+        /* ═══ Route Map ═══ */
+        <View style={styles.mapContainer}>
+          <Map
+            style={styles.map}
+            logo={false}
+            attribution={false}
+            compass={false}
+            mapStyle={{ version: 8, sources: {}, layers: [] }}
+            onPress={handleMapPress}
+          >
+            <Camera
+              ref={cameraRef}
+              initialViewState={{
+                center: [location?.longitude || 121.0509, location?.latitude || 14.5818],
+                zoom: 14,
+              }}
+            />
+            <RasterSource
+              id="osm"
+              tiles={['https://tile.openstreetmap.org/{z}/{x}/{y}.png']}
+              tileSize={256}
+              maxzoom={19}
+            >
+              <Layer id="osm-layer" type="raster" source="osm" />
+            </RasterSource>
+
+            {/* User location indicator */}
+            {location && (
+              <Marker id="user-location" lngLat={[location.longitude, location.latitude]}>
+                <View style={styles.userDotOuter}>
+                  <View style={[styles.userDotInner, { backgroundColor: theme.colors.primary }]} />
+                </View>
+              </Marker>
+            )}
+
+            {origin && (
+              <Marker id="origin" lngLat={[origin.lng, origin.lat]}>
+                <View style={{ alignItems: 'center' }}>
+                  <Ionicons name="location" size={36} color={theme.colors.success} style={styles.pinShadow} />
+                </View>
+              </Marker>
+            )}
+            {destination && (
+              <Marker id="destination" lngLat={[destination.lng, destination.lat]}>
+                <View style={{ alignItems: 'center' }}>
+                  <Ionicons name="flag" size={36} color={theme.colors.error} style={styles.pinShadow} />
+                </View>
+              </Marker>
+            )}
+
+            {routeCoords.length > 0 && (
+              <GeoJSONSource
+                id="route"
+                data={{
+                  type: 'Feature',
+                  geometry: {
+                    type: 'LineString',
+                    coordinates: routeCoords.map(c => [c.longitude, c.latitude]),
+                  },
+                  properties: {}
+                }}
+              >
+                <Layer id="routeLayer" type="line" source="route" style={{ lineColor: '#0D9488', lineWidth: 4 }} />
+              </GeoJSONSource>
+            )}
+          </Map>
+
+          {/* Location inputs overlay */}
+          <View style={[styles.locationInputs, { backgroundColor: theme.colors.surface }]}>
+            <Pressable style={[styles.locationRow, { borderBottomColor: theme.colors.border }]} onPress={() => setSearchMode('origin')}>
+              <View style={[styles.locationDot, { backgroundColor: theme.colors.success }]} />
+              <Text style={[styles.locationText, { color: origin ? theme.colors.text : theme.colors.textMuted, fontFamily: 'Inter-Regular' }]} numberOfLines={1}>
+                {origin?.label || 'Set origin location'}
+              </Text>
+              <Pressable onPress={() => setSearchMode('origin')} hitSlop={8}>
+                <Ionicons name="search-outline" size={18} color={theme.colors.textMuted} />
+              </Pressable>
+            </Pressable>
+            <Pressable style={styles.locationRow} onPress={() => setSearchMode('destination')}>
+              <View style={[styles.locationDot, { backgroundColor: theme.colors.accent }]} />
+              <Text style={[styles.locationText, { color: destination ? theme.colors.text : theme.colors.textMuted, fontFamily: 'Inter-Regular' }]} numberOfLines={1}>
+                {destination?.label || 'Set destination location'}
+              </Text>
+              <Pressable onPress={() => setSearchMode('destination')} hitSlop={8}>
+                <Ionicons name="search-outline" size={18} color={theme.colors.textMuted} />
+              </Pressable>
+            </Pressable>
+          </View>
+
+          {/* Pin mode toggle */}
+          <View style={[styles.pinModeBar, { backgroundColor: theme.colors.surface }]}>
+            <Ionicons name="finger-print" size={16} color={theme.colors.primary} />
+            <Text style={[styles.pinModeLabel, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
+              Tap map to set:
+            </Text>
+            <Pressable
+              style={[
+                styles.pinModeBtn,
+                pinMode === 'origin' && { backgroundColor: `${theme.colors.success}20`, borderColor: theme.colors.success },
+              ]}
+              onPress={() => setPinMode('origin')}
+            >
+              <View style={[styles.pinModeDot, { backgroundColor: theme.colors.success }]} />
+              <Text style={[styles.pinModeBtnText, {
+                color: pinMode === 'origin' ? theme.colors.success : theme.colors.textMuted,
+                fontFamily: pinMode === 'origin' ? 'Inter-SemiBold' : 'Inter-Regular',
+              }]}>
+                Origin
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.pinModeBtn,
+                pinMode === 'destination' && { backgroundColor: `${theme.colors.error}20`, borderColor: theme.colors.error },
+              ]}
+              onPress={() => setPinMode('destination')}
+            >
+              <View style={[styles.pinModeDot, { backgroundColor: theme.colors.error }]} />
+              <Text style={[styles.pinModeBtnText, {
+                color: pinMode === 'destination' ? theme.colors.error : theme.colors.textMuted,
+                fontFamily: pinMode === 'destination' ? 'Inter-SemiBold' : 'Inter-Regular',
+              }]}>
+                Destination
+              </Text>
+            </Pressable>
+          </View>
+
+          {/* Reverse geocoding indicator */}
+          {reverseGeocoding && (
+            <View style={[styles.geocodingBanner, { backgroundColor: `${theme.colors.primary}DD` }]}>
+              <Text style={[styles.geocodingText, { fontFamily: 'Inter-Medium' }]}>📍 Getting address…</Text>
+            </View>
+          )}
+
+          {routeInfo && (
+            <View style={[styles.routeInfoCard, { backgroundColor: theme.colors.surface }]}>
+              <View style={styles.routeInfoRow}>
+                <Ionicons name="navigate" size={16} color={theme.colors.primary} />
+                <Text style={[styles.routeInfoText, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]}>
+                  {routeInfo.distanceKm} km
+                </Text>
+              </View>
+              <View style={styles.routeInfoRow}>
+                <Ionicons name="time" size={16} color={theme.colors.primary} />
+                <Text style={[styles.routeInfoText, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]}>
+                  {routeInfo.durationMin} min
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {origin && destination && routeInfo && (
+            <Pressable style={[styles.nextButton, { backgroundColor: theme.colors.primary }]} onPress={handleSaveRoute}>
+              <Text style={styles.nextButtonText}>Save Route</Text>
+              <Ionicons name="checkmark-circle" size={20} color="#fff" />
+            </Pressable>
+          )}
+        </View>
+      )}
     </View>
   );
 }
@@ -378,95 +363,39 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1 },
   headerBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { flex: 1, textAlign: 'center', fontSize: 17 },
-  scrollContent: { padding: 20, paddingBottom: 100 },
 
-  infoCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 16, borderRadius: 16, borderWidth: 1, marginBottom: 24 },
-  infoText: { flex: 1, fontSize: 13, lineHeight: 19 },
+  searchOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 },
+  searchBar: { flexDirection: 'row', alignItems: 'center', margin: 16, marginTop: 60, paddingHorizontal: 16, height: 56, borderRadius: 16, borderWidth: 1.5 },
+  searchInput: { flex: 1, marginLeft: 12, fontSize: 16 },
+  searchResults: { flex: 1 },
+  searchItem: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1 },
+  searchItemText: { fontSize: 15, marginLeft: 12, flex: 1 },
 
-  sectionTitle: { fontSize: 17, marginBottom: 14 },
+  mapContainer: { flex: 1 },
+  map: { flex: 1 },
 
-  locationInput: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderRadius: 14,
-    borderWidth: 1.5,
-  },
-  locationDot: { width: 12, height: 12, borderRadius: 6 },
-  locationText: { flex: 1, fontSize: 14 },
+  userDotOuter: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(13, 148, 136, 0.2)', alignItems: 'center', justifyContent: 'center' },
+  userDotInner: { width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: '#fff' },
+  pinShadow: { textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4 },
 
-  routeConnector: { width: 2, height: 20, marginLeft: 21, borderLeftWidth: 2, borderStyle: 'dashed' },
+  locationInputs: { position: 'absolute', top: 16, left: 16, right: 16, borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 5 },
+  locationRow: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1 },
+  locationDot: { width: 10, height: 10, borderRadius: 5, marginRight: 16 },
+  locationText: { flex: 1, fontSize: 15 },
 
-  saveButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    height: 56,
-    borderRadius: 16,
-    marginTop: 24,
-    shadowColor: '#0D9488',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  saveButtonText: { color: '#fff', fontSize: 16, fontFamily: 'Inter-SemiBold' },
+  pinModeBar: { position: 'absolute', bottom: 120, left: 16, right: 16, flexDirection: 'row', alignItems: 'center', padding: 8, paddingHorizontal: 16, borderRadius: 100, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
+  pinModeLabel: { fontSize: 13, marginLeft: 6, marginRight: 12 },
+  pinModeBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100, borderWidth: 1, borderColor: 'transparent', marginRight: 8 },
+  pinModeDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
+  pinModeBtnText: { fontSize: 13 },
 
-  recentRoute: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 16,
-    borderRadius: 14,
-    borderWidth: 1,
-    marginBottom: 10,
-  },
-  recentRouteInfo: { flex: 1, gap: 2 },
-  recentRouteLabel: { fontSize: 14 },
-  recentRouteDate: { fontSize: 12 },
+  geocodingBanner: { position: 'absolute', top: 130, alignSelf: 'center', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
+  geocodingText: { color: '#fff', fontSize: 13 },
 
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 52,
-    borderRadius: 14,
-    borderWidth: 2,
-    paddingHorizontal: 16,
-    gap: 12,
-    marginHorizontal: 16,
-    marginTop: 16,
-  },
-  searchInput: { flex: 1, fontSize: 16 },
-  searchResultsList: { paddingHorizontal: 16, marginTop: 16 },
-  searchItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, borderBottomWidth: 1, paddingHorizontal: 8 },
-  searchItemText: { flex: 1, fontSize: 14 },
-  searchingText: { textAlign: 'center', paddingVertical: 20, fontFamily: 'Inter-Regular' },
+  routeInfoCard: { position: 'absolute', bottom: 180, right: 16, padding: 12, borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
+  routeInfoRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 4 },
+  routeInfoText: { fontSize: 14, marginLeft: 8 },
 
-  chooseOnMapBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginHorizontal: 16,
-    marginTop: 12,
-    paddingVertical: 14,
-    borderRadius: 12,
-  },
-
-  map: { ...StyleSheet.absoluteFill },
-  centerPinContainer: {
-    ...StyleSheet.absoluteFill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: -24,
-  },
-  mapConfirmContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'transparent',
-  }
+  nextButton: { position: 'absolute', bottom: 32, left: 16, right: 16, height: 56, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', shadowColor: '#0D9488', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
+  nextButtonText: { color: '#fff', fontSize: 16, fontFamily: 'Inter-SemiBold', marginRight: 8 },
 });

@@ -367,11 +367,26 @@ export default function ActivityScreen() {
             {filteredDriverTrips.length > 0 && (
               <View style={{ marginBottom: filteredBookings.length > 0 ? 24 : 0 }}>
                 {isDriver && <Text style={[theme.typography.caption, { color: theme.colors.textMuted, marginBottom: 12, fontFamily: 'Inter-Medium', paddingLeft: 4 }]}>AS A DRIVER</Text>}
-                {filteredDriverTrips.map((trip) => (
-                  <View key={`driver-${trip.id}`} style={{ marginBottom: 14 }}>
-                    <TripCard trip={trip} onPress={() => router.push(`/(main)/ride/${trip.id}`)} />
-                  </View>
-                ))}
+                {filteredDriverTrips.map((trip) => {
+                  const tripReviews = trip.bookings?.flatMap(b => b.reviews || []) || [];
+                  const avgRating = tripReviews.length > 0 ? (tripReviews.reduce((sum, r) => sum + r.rating, 0) / tripReviews.length).toFixed(1) : null;
+                  
+                  return (
+                    <View key={`driver-${trip.id}`} style={{ marginBottom: 14 }}>
+                      <TripCard trip={trip} onPress={() => router.push(`/(main)/ride/${trip.id}`)} />
+                      {trip.status === 'completed' && tripReviews.length > 0 && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, paddingHorizontal: 4 }}>
+                          <View style={{ flexDirection: 'row', backgroundColor: `${theme.colors.accent}15`, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, alignItems: 'center' }}>
+                            <Ionicons name="star" color={theme.colors.accent} size={14} />
+                            <Text style={{ marginLeft: 6, color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 13 }}>
+                              {avgRating} <Text style={{ fontFamily: 'Inter-Regular', color: theme.colors.textMuted }}>from passengers</Text>
+                            </Text>
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
               </View>
             )}
             
@@ -385,7 +400,7 @@ export default function ActivityScreen() {
                     theme={theme}
                     onReview={() => {
                       if (item.status === 'completed' && (!item.reviews || item.reviews.length === 0)) {
-                        router.push(`/(main)/ride/review/${item.trip.driver_id}?bookingId=${item.id}`);
+                        router.push(`/(main)/ride/review/${item.id}?driverId=${item.trip.driver_id}`);
                       }
                     }}
                   />

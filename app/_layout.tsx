@@ -14,6 +14,9 @@ import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { RouteProvider } from '@/context/RouteContext';
+import { VoiceAssistantProvider } from '@/context/VoiceAssistantContext';
+import VoiceAssistantFab from '@/components/assistant/VoiceAssistantFab';
+import VoiceAssistantSheet from '@/components/assistant/VoiceAssistantSheet';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -76,7 +79,11 @@ export default function RootLayout() {
         <ThemeProvider>
           <AuthProvider>
             <RouteProvider>
-              <RootLayoutNav />
+              <VoiceAssistantProvider>
+                <RootLayoutNav />
+                <VoiceAssistantFab />
+                <VoiceAssistantSheet />
+              </VoiceAssistantProvider>
             </RouteProvider>
           </AuthProvider>
         </ThemeProvider>
