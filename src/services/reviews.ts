@@ -10,40 +10,13 @@ export async function submitReview(reviewData: Omit<Review, 'id' | 'created_at'>
 /** Submit a review and update the driver's average rating in their profile */
 export async function submitReviewAndUpdateProfile(reviewData: Omit<Review, 'id' | 'created_at'>): Promise<{ error: Error | null }> {
   try {
-    // 1. Insert the review
+    // Insert the review. A Postgres trigger will automatically update the profile's average rating.
     const { error: insertError } = await supabase.from('reviews').insert(reviewData);
     if (insertError) throw insertError;
-
-    // 2. Fetch the current profile stats
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('rating_avg, total_ratings')
-      .eq('id', reviewData.reviewee_id)
-      .single();
     
-    if (profileError) throw profileError;
-
-    // 3. Calculate new average
-    const currentTotal = profile?.total_ratings || 0;
-    const currentAvg = profile?.rating_avg || 0;
-    
-    const newTotal = currentTotal + 1;
-    const newAvg = ((currentAvg * currentTotal) + reviewData.rating) / newTotal;
-
-    // 4. Update the profile
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({
-        rating_avg: newAvg,
-        total_ratings: newTotal
-      })
-      .eq('id', reviewData.reviewee_id);
-      
-    if (updateError) throw updateError;
-
     return { error: null };
   } catch (err) {
-    console.error('Failed to submit review and update profile', err);
+    console.error('Failed to submit review', err);
     return { error: err as Error };
   }
 }

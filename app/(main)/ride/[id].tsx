@@ -143,8 +143,9 @@ export default function TripDetailScreen() {
           />
           <RasterSource
             id="osm"
-            tiles={['https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png']}
+            tiles={['https://tile.openstreetmap.org/{z}/{x}/{y}.png']}
             tileSize={256}
+            maxzoom={19}
           >
             <Layer id="osm-layer" type="raster" source="osm" />
           </RasterSource>

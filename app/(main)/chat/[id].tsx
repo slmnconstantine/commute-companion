@@ -39,7 +39,10 @@ export default function ChatScreen() {
             .eq('id', payload.new.id)
             .single();
           if (data) {
-            setMessages((prev) => [...prev, data as MessageWithSender]);
+            setMessages((prev) => {
+              if (prev.find(m => m.id === data.id)) return prev;
+              return [...prev, data as MessageWithSender];
+            });
           }
         }
       )
@@ -62,7 +65,13 @@ export default function ChatScreen() {
     if (!newMessage.trim() || !profile || !id) return;
     setSending(true);
     try {
-      await sendMessage(id, profile.id, newMessage.trim());
+      const { data, error } = await sendMessage(id, profile.id, newMessage.trim());
+      if (data) {
+        setMessages(prev => {
+          if (prev.find(m => m.id === data.id)) return prev;
+          return [...prev, { ...data, sender: profile } as MessageWithSender];
+        });
+      }
       setNewMessage('');
     } catch (e) {
       console.error('Failed to send message:', e);

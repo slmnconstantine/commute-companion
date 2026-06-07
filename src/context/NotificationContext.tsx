@@ -57,8 +57,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     if (!profile?.id) return;
 
     // Listen to real-time changes on the bookings table
+    const channelName = `bookings_changes_${profile.id}_${Date.now()}`;
     const subscription = supabase
-      .channel('public:bookings')
+      .channel(channelName)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'bookings' },
@@ -70,7 +71,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       .subscribe();
 
     return () => {
-      subscription.unsubscribe();
+      supabase.removeChannel(subscription);
     };
   }, [profile?.id, profile?.role]);
 

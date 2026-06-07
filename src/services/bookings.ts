@@ -19,17 +19,18 @@ export async function getCommuterBookings(commuterId: string): Promise<BookingWi
     .eq('commuter_id', commuterId)
     .order('created_at', { ascending: false });
   if (error) throw error;
-  
+
   const bookings = (data || []) as BookingWithTrip[];
-  
+
   // Self-healing: if a trip was completed/cancelled but the booking got stuck in pending/accepted
   return bookings.map(b => {
     if (b.trip && (b.trip.status === 'completed' || b.trip.status === 'cancelled')) {
       if (b.status === 'pending' || b.status === 'accepted') {
+        const newStatus = b.trip.status === 'cancelled' ? 'rejected' : 'completed';
         // Fire and forget update to fix it in the database
-        supabase.from('bookings').update({ status: b.trip.status }).eq('id', b.id).then();
+        supabase.from('bookings').update({ status: newStatus }).eq('id', b.id).then();
         // Instantly reflect the correct status in the UI
-        b.status = b.trip.status;
+        b.status = newStatus;
       }
     }
     return b;

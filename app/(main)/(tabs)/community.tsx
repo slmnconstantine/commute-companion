@@ -16,6 +16,7 @@ import {
   Platform,
   ActivityIndicator,
   Image,
+  Alert,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,7 +25,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useRoute } from '@/context/RouteContext';
 import { useAuth } from '@/context/AuthContext';
 import EmptyState from '@/components/common/EmptyState';
-import { getPosts, toggleLike, createPost, getComments, createComment } from '@/services/hub';
+import { getPosts, toggleLike, createPost, getComments, createComment, deletePost, updatePost } from '@/services/hub';
 import { HubPostWithAuthor, PostCommentWithAuthor } from '@/types/database';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ComponentProps<typeof Ionicons>['name'] }> = {
@@ -40,19 +41,27 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.
 function PostCard({
   post,
   theme,
+  currentUserId,
   onLike,
-  onCommentClick
+  onCommentClick,
+  onDelete,
+  onEditClick
 }: {
   post: HubPostWithAuthor;
   theme: ReturnType<typeof useTheme>['theme'];
+  currentUserId?: string;
   onLike: (postId: string, currentlyLiked: boolean) => void;
   onCommentClick: (post: HubPostWithAuthor) => void;
+  onDelete: (postId: string) => void;
+  onEditClick: (post: HubPostWithAuthor) => void;
 }) {
   const config = STATUS_CONFIG[post.status_tag] || STATUS_CONFIG.other;
-  
+
   // Format date loosely
   const date = new Date(post.created_at);
   const timeAgo = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  const displayTime = `${dateStr}, ${timeAgo}`;
 
   return (
     <View style={[styles.postCard, { backgroundColor: theme.colors.surface, shadowColor: theme.colors.shadow }]}>
@@ -73,16 +82,29 @@ function PostCard({
           <View style={styles.metaRow}>
             <Ionicons name="time-outline" size={11} color={theme.colors.textMuted} />
             <Text style={[theme.typography.small, { color: theme.colors.textMuted, marginLeft: 3 }]}>
-              {timeAgo}
+              {displayTime}
             </Text>
           </View>
         </View>
 
-        <View style={[styles.statusBadge, { backgroundColor: `${config.color}18` }]}>
-          <Ionicons name={config.icon} size={11} color={config.color} />
-          <Text style={[theme.typography.small, { fontSize: 10, color: config.color, fontFamily: 'Inter-Medium', marginLeft: 4 }]}>
-            {config.label}
-          </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={[styles.statusBadge, { backgroundColor: `${config.color}18` }]}>
+            <Ionicons name={config.icon} size={11} color={config.color} />
+            <Text style={[theme.typography.small, { fontSize: 10, color: config.color, fontFamily: 'Inter-Medium', marginLeft: 4 }]}>
+              {config.label}
+            </Text>
+          </View>
+          
+          {post.author_id === currentUserId && (
+            <View style={{ flexDirection: 'row', gap: 4 }}>
+              <Pressable onPress={() => onEditClick(post)} style={{ padding: 4 }}>
+                <Ionicons name="pencil-outline" size={16} color={theme.colors.primary} />
+              </Pressable>
+              <Pressable onPress={() => onDelete(post.id)} style={{ padding: 4 }}>
+                <Ionicons name="trash-outline" size={16} color={theme.colors.error} />
+              </Pressable>
+            </View>
+          )}
         </View>
       </View>
 
@@ -157,16 +179,17 @@ export default function CommunityScreen() {
   const { profile } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  
+
   const [posts, setPosts] = useState<HubPostWithAuthor[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // New Post State
+  // New/Edit Post State
   const [newPostVisible, setNewPostVisible] = useState(false);
   const [newPostMessage, setNewPostMessage] = useState('');
   const [selectedTag, setSelectedTag] = useState('other');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingPostId, setEditingPostId] = useState<string | null>(null);
 
   // Comments State
   const [commentsVisible, setCommentsVisible] = useState(false);
@@ -197,7 +220,7 @@ export default function CommunityScreen() {
 
   const handleLike = async (postId: string, currentlyLiked: boolean) => {
     if (!profile) return;
-    
+
     // Optimistic update
     setPosts(prev => prev.map(p => {
       if (p.id === postId) {
@@ -217,24 +240,95 @@ export default function CommunityScreen() {
     }
   };
 
-  const handleSubmitPost = async () => {
+  const handleDeletePost = (postId: string) => {
+    Alert.alert(
+      "Delete Post",
+      "Are you sure you want to delete this post?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Delete", 
+          style: "destructive",
+          onPress: async () => {
+            if (!profile) return;
+            
+            // Optimistically remove the post
+            setPosts(prev => prev.filter(p => p.id !== postId));
+            
+            const success = await deletePost(postId, profile.id);
+            if (!success) {
+              // Revert if failed
+              loadPosts();
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleEditClick = (post: HubPostWithAuthor) => {
+    setEditingPostId(post.id);
+    setNewPostMessage(post.message);
+    setSelectedTag(post.status_tag);
+    setNewPostVisible(true);
+  };
+
+  const closePostModal = () => {
+    setNewPostVisible(false);
+    setEditingPostId(null);
+    setNewPostMessage('');
+    setSelectedTag('other');
+  };
+
+  const confirmSubmitPost = () => {
+    if (editingPostId) {
+      Alert.alert(
+        "Save Changes",
+        "Are you sure you want to update this post?",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Save", onPress: executeSubmitPost }
+        ]
+      );
+    } else {
+      executeSubmitPost();
+    }
+  };
+
+  const executeSubmitPost = async () => {
     if (!profile || !activeRoute || !activeRoute.route_hash || !newPostMessage.trim()) return;
-    
+
     setIsSubmitting(true);
     try {
-      const post = await createPost(
-        profile.id,
-        activeRoute.route_hash,
-        selectedTag,
-        newPostMessage.trim(),
-        activeRoute.origin_lat,
-        activeRoute.origin_lng,
-        activeRoute.origin_label.split(',')[0]
-      );
-      
-      setPosts([post, ...posts]);
-      setNewPostVisible(false);
-      setNewPostMessage('');
+      if (editingPostId) {
+        const updatedPost = await updatePost(editingPostId, profile.id, selectedTag, newPostMessage.trim());
+        if (updatedPost) {
+          // Preserve like and comment counts locally
+          setPosts(prev => prev.map(p => {
+            if (p.id === editingPostId) {
+              return {
+                ...updatedPost,
+                likes_count: p.likes_count,
+                comments_count: p.comments_count,
+                user_has_liked: p.user_has_liked
+              };
+            }
+            return p;
+          }));
+        }
+      } else {
+        const post = await createPost(
+          profile.id,
+          activeRoute.route_hash,
+          selectedTag,
+          newPostMessage.trim(),
+          activeRoute.origin_lat,
+          activeRoute.origin_lng,
+          activeRoute.origin_label.split(',')[0]
+        );
+        setPosts([post, ...posts]);
+      }
+      closePostModal();
     } catch (err) {
       console.error(err);
     } finally {
@@ -253,12 +347,12 @@ export default function CommunityScreen() {
 
   const handleSubmitComment = async () => {
     if (!profile || !activePost || !newComment.trim()) return;
-    
+
     try {
       const comment = await createComment(activePost.id, profile.id, newComment.trim());
       setComments([...comments, comment]);
       setNewComment('');
-      
+
       // Update comment count on post
       setPosts(prev => prev.map(p => {
         if (p.id === activePost.id) {
@@ -276,7 +370,7 @@ export default function CommunityScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
       <View style={styles.header}>
-        <Text style={[theme.typography.heading, { color: theme.colors.text }]}>Route Community</Text>
+        <Text style={[theme.typography.heading, { color: theme.colors.text }]}>Community Hub</Text>
       </View>
 
       {!hasRoute ? (
@@ -304,7 +398,16 @@ export default function CommunityScreen() {
               <EmptyState icon="chatbubble-outline" title="No posts yet" message="Be the first to post an update on this route!" />
             ) : (
               posts.map((post) => (
-                <PostCard key={post.id} post={post} theme={theme} onLike={handleLike} onCommentClick={openComments} />
+                <PostCard
+                  key={post.id}
+                  post={post}
+                  theme={theme}
+                  currentUserId={profile?.id}
+                  onLike={handleLike}
+                  onCommentClick={openComments}
+                  onDelete={handleDeletePost}
+                  onEditClick={handleEditClick}
+                />
               ))
             )}
           </ScrollView>
@@ -316,22 +419,24 @@ export default function CommunityScreen() {
         </>
       )}
 
-      {/* NEW POST MODAL */}
-      <Modal visible={newPostVisible} animationType="slide" transparent={true}>
+      {/* NEW/EDIT POST MODAL */}
+      <Modal visible={newPostVisible} animationType="slide" transparent={true} onRequestClose={closePostModal}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.colors.background, paddingBottom: insets.bottom || 20 }]}>
             <View style={styles.modalHeader}>
-              <Pressable onPress={() => setNewPostVisible(false)}>
+              <Pressable onPress={closePostModal}>
                 <Text style={{ color: theme.colors.textMuted }}>Cancel</Text>
               </Pressable>
-              <Text style={[theme.typography.subtitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>New Update</Text>
-              <Pressable onPress={handleSubmitPost} disabled={!newPostMessage.trim() || isSubmitting}>
+              <Text style={[theme.typography.subtitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>
+                {editingPostId ? 'Edit Update' : 'New Update'}
+              </Text>
+              <Pressable onPress={confirmSubmitPost} disabled={!newPostMessage.trim() || isSubmitting}>
                 <Text style={{ color: newPostMessage.trim() ? theme.colors.primary : theme.colors.textMuted, fontFamily: 'Inter-SemiBold' }}>
-                  {isSubmitting ? 'Posting...' : 'Post'}
+                  {isSubmitting ? (editingPostId ? 'Saving...' : 'Posting...') : (editingPostId ? 'Save' : 'Post')}
                 </Text>
               </Pressable>
             </View>
-            
+
             <View style={styles.tagSelector}>
               {(Object.keys(STATUS_CONFIG) as Array<keyof typeof STATUS_CONFIG>).map((tag) => (
                 <Pressable
@@ -372,7 +477,7 @@ export default function CommunityScreen() {
                 <Ionicons name="close" size={24} color={theme.colors.text} />
               </Pressable>
             </View>
-            
+
             <ScrollView style={styles.commentsList}>
               {commentsLoading ? (
                 <ActivityIndicator color={theme.colors.primary} style={{ marginTop: 20 }} />
@@ -449,7 +554,7 @@ const styles = StyleSheet.create({
   actionsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14, paddingTop: 12, borderTopWidth: 1, gap: 20 },
   actionBtn: { flexDirection: 'row', alignItems: 'center' },
   fab: { position: 'absolute', right: 20, bottom: 88, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 8 },
-  
+
   // Modals
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
   modalContent: { height: '90%', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20 },
@@ -457,7 +562,7 @@ const styles = StyleSheet.create({
   tagSelector: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
   tagChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
   postInput: { flex: 1, borderRadius: 12, padding: 16, textAlignVertical: 'top', fontSize: 16 },
-  
+
   commentsContent: { height: '80%', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20 },
   commentsList: { flex: 1, marginBottom: 10 },
   commentItem: { paddingVertical: 12, borderBottomWidth: 1 },
