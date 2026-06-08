@@ -2,6 +2,8 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { Profile } from '@/types/database';
+import { updateProfile as updateProfileService } from '@/services/profiles';
+import { registerForPushNotificationsAsync } from '@/services/pushNotifications';
 
 interface AuthContextType {
   session: Session | null;
@@ -39,7 +41,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .select('*')
         .eq('id', userId)
         .single();
-      if (!error && data) setProfile(data as Profile);
+      if (!error && data) {
+        setProfile(data as Profile);
+        
+        // Register for push notifications
+        const token = await registerForPushNotificationsAsync();
+        if (token && data.push_token !== token) {
+          const { error: updateError } = await updateProfileService(userId, { push_token: token });
+          if (updateError) {
+            console.error('[PUSH] Failed to save push token to Supabase:', updateError);
+          } else {
+            console.log('[PUSH] Successfully saved push token to Supabase profile!');
+            setProfile((prev) => (prev ? { ...prev, push_token: token } : (data as Profile)));
+          }
+        }
+      }
     } catch (e) {
       console.error('Error fetching profile:', e);
     }
@@ -58,7 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         setSession(session);
-        if (event === 'SIGNED_IN' && session?.user) {
+        if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user) {
           await fetchProfile(session.user.id);
         } else if (event === 'SIGNED_OUT') {
           setProfile(null);

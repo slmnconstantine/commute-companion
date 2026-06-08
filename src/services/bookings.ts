@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { Booking, BookingWithTrip, BookingWithCommuter } from '@/types/database';
+import { sendPushNotification } from './pushNotifications';
 
 /** Create a booking request */
 export async function createBooking(bookingData: Omit<Booking, 'id' | 'created_at'>): Promise<{ data: Booking | null; error: Error | null }> {
@@ -8,6 +9,16 @@ export async function createBooking(bookingData: Omit<Booking, 'id' | 'created_a
     .insert(bookingData)
     .select()
     .single();
+
+  if (data && !error) {
+    // Notify the driver
+    const { data: tripData } = await supabase.from('trips').select('driver:profiles!driver_id(push_token)').eq('id', bookingData.trip_id).single();
+    const pushToken = (tripData?.driver as any)?.push_token;
+    if (pushToken) {
+      await sendPushNotification(pushToken, 'New Ride Request', 'A commuter has requested to join your ride!', { type: 'booking', bookingId: data.id });
+    }
+  }
+
   return { data: data as Booking | null, error: error as Error | null };
 }
 
@@ -50,6 +61,23 @@ export async function getTripBookings(tripId: string): Promise<BookingWithCommut
 
 /** Update booking status */
 export async function updateBookingStatus(id: string, status: string): Promise<void> {
-  const { error } = await supabase.from('bookings').update({ status }).eq('id', id);
+  const { error, data } = await supabase.from('bookings').update({ status }).eq('id', id).select('*, trip:trips(driver_id), commuter:profiles!commuter_id(push_token)').single();
+  
+  if (!error && data) {
+    const pushToken = (data.commuter as any)?.push_token;
+    if (pushToken) {
+      let title = 'Booking Update';
+      let body = `Your booking was updated to ${status}.`;
+      if (status === 'accepted') {
+        title = 'Ride Confirmed! 🎉';
+        body = 'The driver has accepted your booking request.';
+      } else if (status === 'rejected') {
+        title = 'Ride Declined';
+        body = 'The driver declined your booking request.';
+      }
+      await sendPushNotification(pushToken, title, body, { type: 'booking_update', status });
+    }
+  }
+
   if (error) throw new Error(`DB Error: ${error.message} (Code: ${error.code})`);
 }

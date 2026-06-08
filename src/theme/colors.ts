@@ -24,13 +24,15 @@ export interface Colors {
   shadow: string;
   overlay: string;
   inputBackground: string;
+  glassBackground: string;
+  gradientPrimary: [string, string];
   statusBar: 'dark-content' | 'light-content';
 }
 
 /** Shared semantic / brand colors that don't change between modes */
 const shared = {
-  primary: '#0D9488',
-  primaryDark: '#0F766E',
+  primary: '#10B981', // Emerald
+  primaryDark: '#059669',
   accent: '#F59E0B',
   success: '#10B981',
   warning: '#F59E0B',
@@ -39,6 +41,7 @@ const shared = {
   white: '#FFFFFF',
   black: '#000000',
   transparent: 'transparent',
+  gradientPrimary: ['#34D399', '#059669'] as [string, string],
 };
 
 export const lightColors: Colors = {
@@ -51,18 +54,20 @@ export const lightColors: Colors = {
   shadow: 'rgba(0, 0, 0, 0.08)',
   overlay: 'rgba(0, 0, 0, 0.5)',
   inputBackground: '#F1F5F9',
+  glassBackground: 'rgba(255, 255, 255, 0.85)',
   statusBar: 'dark-content',
 };
 
 export const darkColors: Colors = {
   ...shared,
-  background: '#0F172A',
-  surface: '#1E293B',
+  background: '#0B0F19',
+  surface: '#151C2C',
   text: '#F8FAFC',
   textMuted: '#94A3B8',
-  border: '#334155',
-  shadow: 'rgba(0, 0, 0, 0.3)',
-  overlay: 'rgba(0, 0, 0, 0.7)',
+  border: '#2A3448',
+  shadow: 'rgba(0, 0, 0, 0.4)',
+  overlay: 'rgba(0, 0, 0, 0.75)',
   inputBackground: '#1E293B',
+  glassBackground: 'rgba(21, 28, 44, 0.85)',
   statusBar: 'light-content',
 };

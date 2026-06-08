@@ -106,12 +106,14 @@ export default function TripCard({ trip, onPress }: TripCardProps) {
           </Text>
         </View>
         <View style={styles.infoItem}>
-          <Text style={[styles.fareText, { color: theme.colors.primary, fontFamily: 'Inter-Bold' }]}>
-            {formatCurrency(trip.fare_per_seat)}
+          <Text style={[styles.fareText, { color: trip.fare_per_seat === 0 ? theme.colors.success : theme.colors.primary, fontFamily: 'Inter-Bold' }]}>
+            {trip.fare_per_seat === 0 ? 'FREE' : formatCurrency(trip.fare_per_seat)}
           </Text>
-          <Text style={[styles.perSeat, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
-            /seat
-          </Text>
+          {trip.fare_per_seat > 0 && (
+            <Text style={[styles.perSeat, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
+              /seat
+            </Text>
+          )}
         </View>
       </View>
     </Pressable>

@@ -8,7 +8,7 @@ const corsHeaders = {
 
 // Define the Assistant Command structure
 interface AssistantCommand {
-  type: 'SEARCH_RIDES' | 'SUMMARIZE_ACTIVITY' | 'DRAFT_MESSAGE' | 'DRAFT_COMMUNITY_POST' | 'DELETE_POSTS' | 'PREPARE_BOOKING' | 'NAVIGATE' | 'CLARIFY' | 'NOOP';
+  type: 'SEARCH_RIDES' | 'SUMMARIZE_ACTIVITY' | 'DRAFT_MESSAGE' | 'DRAFT_COMMUNITY_POST' | 'DELETE_POSTS' | 'PREPARE_BOOKING' | 'ACCEPT_BOOKING' | 'PREPARE_RIDE_POST' | 'NAVIGATE' | 'CLARIFY' | 'NOOP';
   params: Record<string, any>;
   spokenReply: string;
   requiresConfirmation: boolean;
@@ -87,17 +87,20 @@ Map their request to one of the following commands:
 7. CLARIFY: the user's intent is unclear or ambiguous. You must ask a single clarifying question. Extracts: question.
 8. NOOP: generic chatter, unrecognizable, or outside app scope.
 9. DELETE_POSTS: user wants to delete their own updates/posts from the community hub.
+10. PREPARE_RIDE_POST: user (driver) wants to post/create a new ride. Extracts: 'time' (HH:MM format), 'date' (YYYY-MM-DD format), 'origin' (pickup location, e.g. "BGC"), 'destination' (drop-off location, e.g. "Makati"). If date is "today" or "tomorrow", convert it to actual date based on current context. If any are not specified, leave empty.
+11. ACCEPT_BOOKING: user (driver) wants to accept a pending booking request for their ride. Extracts: commuter_name (if specified).
 
 App Context:
 User Role: ${context.role}
 Active Route: ${context.activeRoute ? context.activeRoute.origin_label + ' to ' + context.activeRoute.destination_label : 'None'}
 Current Screen: ${context.currentScreen}
+Current Date/Time: ${new Date().toISOString()}
 Selected Trip ID: ${context.selectedTripId || 'None'}
 Selected Chat Room ID: ${context.selectedChatRoomId || 'None'}
 
 Return ONLY a JSON object matching this TypeScript interface exactly:
 {
-  "type": "SEARCH_RIDES" | "SUMMARIZE_ACTIVITY" | "DRAFT_MESSAGE" | "DRAFT_COMMUNITY_POST" | "DELETE_POSTS" | "PREPARE_BOOKING" | "NAVIGATE" | "CLARIFY" | "NOOP",
+  "type": "SEARCH_RIDES" | "SUMMARIZE_ACTIVITY" | "DRAFT_MESSAGE" | "DRAFT_COMMUNITY_POST" | "DELETE_POSTS" | "PREPARE_BOOKING" | "ACCEPT_BOOKING" | "PREPARE_RIDE_POST" | "NAVIGATE" | "CLARIFY" | "NOOP",
   "params": { ...any extracted parameters... },
   "spokenReply": "A concise, conversational response (1-2 sentences max) to read aloud to the user.",
   "requiresConfirmation": boolean

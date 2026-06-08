@@ -30,12 +30,12 @@ export default function TabLayout() {
           right: 16,
           height: 64,
           borderRadius: 20,
-          backgroundColor: theme.colors.surface,
           borderTopWidth: 0,
+          backgroundColor: theme.mode === 'dark' ? 'rgba(21, 28, 44, 0.95)' : 'rgba(255, 255, 255, 0.95)',
           shadowColor: '#000',
-          shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.1,
-          shadowRadius: 16,
+          shadowOffset: { width: 0, height: 10 },
+          shadowOpacity: 0.15,
+          shadowRadius: 20,
           elevation: 12,
           paddingBottom: 8,
           paddingTop: 8,
@@ -94,3 +94,5 @@ export default function TabLayout() {
     </Tabs>
   );
 }
+
+import { StyleSheet } from 'react-native';

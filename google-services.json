@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "339423137801",
+    "project_id": "coco-22c3f",
+    "storage_bucket": "coco-22c3f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:339423137801:android:c54a2aec4c656b309ce8d8",
+        "android_client_info": {
+          "package_name": "com.commutablecompanion.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC3l4ej7oCxc4Hs3kszoB1KfAWBO3Lmzb8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

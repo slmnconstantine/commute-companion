@@ -20,6 +20,7 @@ export interface Profile {
   avatar_url: string | null;
   rating_avg: number | null;
   total_ratings: number;
+  push_token?: string | null;
   created_at: string;
 }
 
