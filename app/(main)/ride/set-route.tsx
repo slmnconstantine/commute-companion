@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TextInput, StyleSheet, ScrollView, Pressable, Alert, Animated
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Map, Camera, RasterSource, Layer, GeoJSONSource, Marker, type CameraRef } from '@maplibre/maplibre-react-native';
@@ -20,13 +20,62 @@ interface LocationData {
 
 export default function SetRouteScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    mode?: string;
+    origin_lat?: string;
+    origin_lng?: string;
+    origin_label?: string;
+    destination_lat?: string;
+    destination_lng?: string;
+    destination_label?: string;
+  }>();
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { location } = useLocation();
-  const { saveRoute } = useRoute();
+  const { saveRoute, activeRoute } = useRoute();
 
-  const [origin, setOrigin] = useState<LocationData | null>(null);
-  const [destination, setDestination] = useState<LocationData | null>(null);
+  const [origin, setOrigin] = useState<LocationData | null>(() => {
+    if (params.origin_lat && params.origin_lng && params.origin_label) {
+      return {
+        lat: parseFloat(params.origin_lat),
+        lng: parseFloat(params.origin_lng),
+        label: params.origin_label,
+      };
+    }
+    if (params.mode === 'request') {
+      return null;
+    }
+    if (activeRoute) {
+      return {
+        lat: activeRoute.origin_lat,
+        lng: activeRoute.origin_lng,
+        label: activeRoute.origin_label,
+      };
+    }
+    return null;
+  });
+
+  const [destination, setDestination] = useState<LocationData | null>(() => {
+    if (params.destination_lat && params.destination_lng && params.destination_label) {
+      return {
+        lat: parseFloat(params.destination_lat),
+        lng: parseFloat(params.destination_lng),
+        label: params.destination_label,
+      };
+    }
+    if (params.mode === 'request') {
+      return null;
+    }
+    if (activeRoute) {
+      return {
+        lat: activeRoute.destination_lat,
+        lng: activeRoute.destination_lng,
+        label: activeRoute.destination_label,
+      };
+    }
+    return null;
+  });
+
   const [routeCoords, setRouteCoords] = useState<{ latitude: number; longitude: number }[]>([]);
   const [routeInfo, setRouteInfo] = useState<{ distanceKm: number; durationMin: number; polyline: string } | null>(null);
 
@@ -44,10 +93,10 @@ export default function SetRouteScreen() {
 
   // Fly camera to user's real GPS location once it's loaded
   useEffect(() => {
-    if (location && cameraRef.current) {
+    if (location && cameraRef.current && !activeRoute) {
       cameraRef.current.flyTo({ center: [location.longitude, location.latitude], zoom: 14, duration: 1000 });
     }
-  }, [location]);
+  }, [location, activeRoute]);
 
   // ── Search handlers ──
   const handleSearch = async (query: string) => {
@@ -74,6 +123,13 @@ export default function SetRouteScreen() {
       );
     }
   };
+
+  // Auto-calculate route on mount if prefilled
+  useEffect(() => {
+    if (origin && destination && routeCoords.length === 0) {
+      calculateRouteIfReady(origin, destination);
+    }
+  }, [origin, destination]);
 
   const handleSelectPlace = async (place: GeocodingResult) => {
     const loc: LocationData = { lat: place.lat, lng: place.lng, label: place.displayName };
@@ -138,6 +194,22 @@ export default function SetRouteScreen() {
       return;
     }
 
+    if (params.mode === 'request') {
+      router.navigate({
+        pathname: '/(main)/(tabs)/rides',
+        params: {
+          from_set_route: 'true',
+          req_origin_lat: String(origin.lat),
+          req_origin_lng: String(origin.lng),
+          req_origin_label: origin.label,
+          req_destination_lat: String(destination.lat),
+          req_destination_lng: String(destination.lng),
+          req_destination_label: destination.label,
+        }
+      });
+      return;
+    }
+
     await saveRoute({
       origin_label: origin.label,
       origin_lat: origin.lat,
@@ -161,7 +233,7 @@ export default function SetRouteScreen() {
           <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
         </Pressable>
         <Text style={[styles.headerTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>
-          Set Commute Route
+          {params.mode === 'request' ? 'Set Ride Request Route' : 'Set Commute Route'}
         </Text>
         <View style={styles.headerBtn} />
       </View>
@@ -348,7 +420,9 @@ export default function SetRouteScreen() {
 
           {origin && destination && routeInfo && (
             <Pressable style={[styles.nextButton, { backgroundColor: theme.colors.primary }]} onPress={handleSaveRoute}>
-              <Text style={styles.nextButtonText}>Save Route</Text>
+              <Text style={styles.nextButtonText}>
+                {params.mode === 'request' ? 'Confirm Request Route' : 'Save Route'}
+              </Text>
               <Ionicons name="checkmark-circle" size={20} color="#fff" />
             </Pressable>
           )}

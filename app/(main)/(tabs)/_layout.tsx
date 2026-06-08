@@ -7,7 +7,7 @@ import { useNotifications } from '@/context/NotificationContext';
 import { useAuth } from '@/context/AuthContext';
 
 export default function TabLayout() {
-  const { theme } = useTheme();
+  const { theme, mode } = useTheme();
   const { profile } = useAuth();
   const insets = useSafeAreaInsets();
   const { driverPendingCount, commuterUpcomingCount } = useNotifications();
@@ -31,7 +31,7 @@ export default function TabLayout() {
           height: 64,
           borderRadius: 20,
           borderTopWidth: 0,
-          backgroundColor: theme.mode === 'dark' ? 'rgba(21, 28, 44, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+          backgroundColor: mode === 'dark' ? 'rgba(21, 28, 44, 0.95)' : 'rgba(255, 255, 255, 0.95)',
           shadowColor: '#000',
           shadowOffset: { width: 0, height: 10 },
           shadowOpacity: 0.15,

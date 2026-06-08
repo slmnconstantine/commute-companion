@@ -108,7 +108,7 @@ export default function VehicleScreen() {
                     <View style={styles.vehicleInfo}>
                       <Text style={[styles.vehicleModel, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>{v.model}</Text>
                       <Text style={[styles.vehiclePlate, { color: theme.colors.textMuted }]}>{v.plate_number} • {v.capacity} seats</Text>
-                      <View style={[styles.badge, { backgroundColor: v.type === 'public' ? theme.colors.accent : theme.colors.secondary }]}>
+                      <View style={[styles.badge, { backgroundColor: v.type === 'public' ? theme.colors.accent : theme.colors.textMuted }]}>
                         <Text style={styles.badgeText}>{v.type === 'public' ? 'Public (PUV)' : 'Private'}</Text>
                       </View>
                     </View>

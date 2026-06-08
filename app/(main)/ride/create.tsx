@@ -104,23 +104,27 @@ function DatePickerModal({
                 return (
                   <Pressable
                     key={col}
-                    style={[
-                      pickerStyles.calCell,
-                      isSelected && { backgroundColor: theme.colors.primary, borderRadius: 20 },
-                    ]}
+                    style={pickerStyles.calCell}
                     disabled={isPast}
                     onPress={() => { onSelect(dateStr); onClose(); }}
                   >
-                    <Text
+                    <View
                       style={[
-                        pickerStyles.calDayNum,
-                        { color: isPast ? theme.colors.textMuted : theme.colors.text, fontFamily: 'Inter-Regular' },
-                        isSelected && { color: '#fff', fontFamily: 'Inter-Bold' },
-                        isToday && !isSelected && { color: theme.colors.primary, fontFamily: 'Inter-Bold' },
+                        pickerStyles.dayCircle,
+                        isSelected && { backgroundColor: theme.colors.primary },
                       ]}
                     >
-                      {day}
-                    </Text>
+                      <Text
+                        style={[
+                          pickerStyles.calDayNum,
+                          { color: isPast ? theme.colors.textMuted : theme.colors.text, fontFamily: 'Inter-Regular' },
+                          isSelected && { color: '#fff', fontFamily: 'Inter-Bold' },
+                          isToday && !isSelected && { color: theme.colors.primary, fontFamily: 'Inter-Bold' },
+                        ]}
+                      >
+                        {day}
+                      </Text>
+                    </View>
                     {isToday && !isSelected && <View style={[pickerStyles.todayDot, { backgroundColor: theme.colors.primary }]} />}
                   </Pressable>
                 );
@@ -133,9 +137,7 @@ function DatePickerModal({
   );
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// TimePickerModal — scrollable time-slot picker
-// ══════════════════════════════════════════════════════════════════════════════
+// TimePickerModal — modernized select picker
 function TimePickerModal({
   visible, onClose, onSelect, selectedTime, theme,
 }: {
@@ -153,12 +155,14 @@ function TimePickerModal({
     const [, m] = selectedTime.split(':');
     return parseInt(m || '0', 10);
   });
+  const [activePicker, setActivePicker] = useState<'hour' | 'minute'>('hour');
 
   useEffect(() => {
     if (visible) {
       const [h, m] = selectedTime.split(':');
       setHour24(parseInt(h || '0', 10));
       setMinute(parseInt(m || '0', 10));
+      setActivePicker('hour');
     }
   }, [selectedTime, visible]);
 
@@ -168,6 +172,9 @@ function TimePickerModal({
   const handleHourSelect = (h: number) => {
     const newH24 = isPM ? (h === 12 ? 12 : h + 12) : (h === 12 ? 0 : h);
     setHour24(newH24);
+    setTimeout(() => {
+      setActivePicker('minute');
+    }, 250);
   };
 
   const handleAmPmSelect = (pm: boolean) => {
@@ -186,63 +193,218 @@ function TimePickerModal({
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={pickerStyles.backdrop} onPress={onClose}>
         <Pressable style={[pickerStyles.timeSheet, { backgroundColor: theme.colors.surface }]} onPress={() => {}}>
-          {/* Handle */}
+          {/* Header handle */}
           <View style={pickerStyles.sheetHandle}>
             <View style={[pickerStyles.handleBar, { backgroundColor: theme.colors.border }]} />
           </View>
           
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginBottom: 12 }}>
-             <Text style={[pickerStyles.sheetTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', marginBottom: 0 }]}>
+          {/* Title Row */}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, marginBottom: 20 }}>
+             <Text style={{ color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 18 }}>
                 Departure Time
              </Text>
-             <Pressable onPress={handleSave}>
-               <Text style={{ color: theme.colors.primary, fontFamily: 'Inter-Bold', fontSize: 16 }}>Done</Text>
+             <Pressable 
+               onPress={handleSave}
+               style={{ backgroundColor: theme.colors.primary, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 100 }}
+             >
+               <Text style={{ color: '#fff', fontFamily: 'Inter-Bold', fontSize: 14 }}>Done</Text>
              </Pressable>
           </View>
 
-          <View style={{ paddingHorizontal: 20 }}>
-            {/* Display */}
-            <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 24, marginTop: 10 }}>
-              <Text style={{ fontSize: 44, fontFamily: 'Inter-Bold', color: theme.colors.text }}>
-                {hour12}:{String(minute).padStart(2, '0')}
-              </Text>
-              <View style={{ marginLeft: 16, backgroundColor: theme.colors.background, borderRadius: 10, overflow: 'hidden', flexDirection: 'row' }}>
-                <Pressable onPress={() => handleAmPmSelect(false)} style={{ paddingVertical: 10, paddingHorizontal: 16, backgroundColor: !isPM ? theme.colors.primary : 'transparent' }}>
-                  <Text style={{ color: !isPM ? '#fff' : theme.colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 16 }}>AM</Text>
+          <View style={{ paddingHorizontal: 24 }}>
+            {/* Elegant Digital Time Display capsule */}
+            <View style={{ 
+              flexDirection: 'row', 
+              justifyContent: 'space-between', 
+              alignItems: 'center', 
+              backgroundColor: theme.colors.inputBackground, 
+              borderRadius: 24, 
+              paddingHorizontal: 24, 
+              paddingVertical: 16,
+              marginBottom: 24,
+              borderWidth: 1,
+              borderColor: theme.colors.border
+            }}>
+              {/* Left Side: Time Selectors (Hour : Minute) */}
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                {/* Hour display button */}
+                <Pressable 
+                  onPress={() => setActivePicker('hour')}
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 4,
+                    borderRadius: 12,
+                    backgroundColor: activePicker === 'hour' ? `${theme.colors.primary}15` : 'transparent',
+                    borderWidth: 1.5,
+                    borderColor: activePicker === 'hour' ? theme.colors.primary : 'transparent',
+                  }}
+                >
+                  <Text style={{ 
+                    fontSize: 40, 
+                    fontFamily: 'Inter-Bold', 
+                    color: activePicker === 'hour' ? theme.colors.primary : theme.colors.text 
+                  }}>
+                    {hour12}
+                  </Text>
                 </Pressable>
-                <Pressable onPress={() => handleAmPmSelect(true)} style={{ paddingVertical: 10, paddingHorizontal: 16, backgroundColor: isPM ? theme.colors.primary : 'transparent' }}>
-                  <Text style={{ color: isPM ? '#fff' : theme.colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 16 }}>PM</Text>
+                
+                <Text style={{ fontSize: 36, fontFamily: 'Inter-Bold', color: theme.colors.textMuted, marginHorizontal: 4 }}>
+                  :
+                </Text>
+
+                {/* Minute display button */}
+                <Pressable 
+                  onPress={() => setActivePicker('minute')}
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 4,
+                    borderRadius: 12,
+                    backgroundColor: activePicker === 'minute' ? `${theme.colors.primary}15` : 'transparent',
+                    borderWidth: 1.5,
+                    borderColor: activePicker === 'minute' ? theme.colors.primary : 'transparent',
+                  }}
+                >
+                  <Text style={{ 
+                    fontSize: 40, 
+                    fontFamily: 'Inter-Bold', 
+                    color: activePicker === 'minute' ? theme.colors.primary : theme.colors.text 
+                  }}>
+                    {String(minute).padStart(2, '0')}
+                  </Text>
+                </Pressable>
+              </View>
+
+              {/* Right Side: Modern Segmented AM/PM selector */}
+              <View style={{ 
+                flexDirection: 'row', 
+                backgroundColor: theme.colors.background, 
+                borderRadius: 12, 
+                padding: 3,
+                borderWidth: 1,
+                borderColor: theme.colors.border
+              }}>
+                <Pressable 
+                  onPress={() => handleAmPmSelect(false)} 
+                  style={{ 
+                    paddingVertical: 8, 
+                    paddingHorizontal: 16, 
+                    borderRadius: 9, 
+                    backgroundColor: !isPM ? theme.colors.primary : 'transparent',
+                    shadowColor: !isPM ? theme.colors.primary : 'transparent',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.2,
+                    shadowRadius: 4,
+                    elevation: !isPM ? 2 : 0
+                  }}
+                >
+                  <Text style={{ color: !isPM ? '#fff' : theme.colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 14 }}>AM</Text>
+                </Pressable>
+                <Pressable 
+                  onPress={() => handleAmPmSelect(true)} 
+                  style={{ 
+                    paddingVertical: 8, 
+                    paddingHorizontal: 16, 
+                    borderRadius: 9, 
+                    backgroundColor: isPM ? theme.colors.primary : 'transparent',
+                    shadowColor: isPM ? theme.colors.primary : 'transparent',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.2,
+                    shadowRadius: 4,
+                    elevation: isPM ? 2 : 0
+                  }}
+                >
+                  <Text style={{ color: isPM ? '#fff' : theme.colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 14 }}>PM</Text>
                 </Pressable>
               </View>
             </View>
 
-            {/* Hours Grid */}
-            <Text style={{ fontFamily: 'Inter-SemiBold', color: theme.colors.textMuted, marginBottom: 12 }}>Hour</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 24 }}>
-              {[1,2,3,4,5,6,7,8,9,10,11,12].map(h => (
-                <Pressable 
-                  key={`h-${h}`} 
-                  onPress={() => handleHourSelect(h)}
-                  style={{ width: '14.5%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: hour12 === h ? theme.colors.primary : theme.colors.background }}
-                >
-                  <Text style={{ color: hour12 === h ? '#fff' : theme.colors.text, fontFamily: hour12 === h ? 'Inter-Bold' : 'Inter-Medium', fontSize: 18 }}>{h}</Text>
-                </Pressable>
-              ))}
-            </View>
-
-            {/* Minutes Grid */}
-            <Text style={{ fontFamily: 'Inter-SemiBold', color: theme.colors.textMuted, marginBottom: 12 }}>Minute</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-              {[0, 15, 30, 45].map(m => (
-                <Pressable 
-                  key={`m-${m}`} 
-                  onPress={() => setMinute(m)}
-                  style={{ flex: 1, paddingVertical: 16, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: minute === m ? theme.colors.primary : theme.colors.background }}
-                >
-                  <Text style={{ color: minute === m ? '#fff' : theme.colors.text, fontFamily: minute === m ? 'Inter-Bold' : 'Inter-Medium', fontSize: 18 }}>{String(m).padStart(2, '0')}</Text>
-                </Pressable>
-              ))}
-            </View>
+            {/* Dynamic Selector Area */}
+            {activePicker === 'hour' ? (
+              <View style={{ marginBottom: 16 }}>
+                {/* Hours Grid */}
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <Text style={{ fontFamily: 'Inter-SemiBold', fontSize: 13, color: theme.colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Select Hour
+                  </Text>
+                  <Text style={{ fontFamily: 'Inter-Medium', fontSize: 12, color: theme.colors.primary }}>
+                    Tapping an hour auto-switches to minutes
+                  </Text>
+                </View>
+                
+                {/* 3x4 clean numeric pad layout */}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14, justifyContent: 'center', marginBottom: 12 }}>
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(h => {
+                    const isSelected = hour12 === h;
+                    return (
+                      <Pressable 
+                        key={`h-${h}`} 
+                        onPress={() => handleHourSelect(h)}
+                        style={{ 
+                          width: '21%', 
+                          aspectRatio: 1, 
+                          alignItems: 'center', 
+                          justifyContent: 'center', 
+                          borderRadius: 100, 
+                          backgroundColor: isSelected ? theme.colors.primary : theme.colors.inputBackground,
+                          borderWidth: 1.5,
+                          borderColor: isSelected ? theme.colors.primary : 'transparent',
+                          shadowColor: isSelected ? theme.colors.primary : 'transparent',
+                          shadowOffset: { width: 0, height: 4 },
+                          shadowOpacity: 0.2,
+                          shadowRadius: 4,
+                          elevation: isSelected ? 3 : 0
+                        }}
+                      >
+                        <Text style={{ 
+                          color: isSelected ? '#fff' : theme.colors.text, 
+                          fontFamily: isSelected ? 'Inter-Bold' : 'Inter-Medium', 
+                          fontSize: 18 
+                        }}>{h}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : (
+              <View style={{ marginBottom: 16 }}>
+                {/* Minutes Grid */}
+                <Text style={{ fontFamily: 'Inter-SemiBold', fontSize: 13, color: theme.colors.textMuted, marginBottom: 16, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Select Minute
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, justifyContent: 'center', marginBottom: 20 }}>
+                  {[0, 15, 30, 45].map(m => {
+                    const isSelected = minute === m;
+                    return (
+                      <Pressable 
+                        key={`m-${m}`} 
+                        onPress={() => setMinute(m)}
+                        style={{ 
+                          width: '21%', 
+                          aspectRatio: 1, 
+                          alignItems: 'center', 
+                          justifyContent: 'center', 
+                          borderRadius: 100, 
+                          backgroundColor: isSelected ? theme.colors.primary : theme.colors.inputBackground,
+                          borderWidth: 1.5,
+                          borderColor: isSelected ? theme.colors.primary : 'transparent',
+                          shadowColor: isSelected ? theme.colors.primary : 'transparent',
+                          shadowOffset: { width: 0, height: 4 },
+                          shadowOpacity: 0.2,
+                          shadowRadius: 4,
+                          elevation: isSelected ? 3 : 0
+                        }}
+                      >
+                        <Text style={{ 
+                          color: isSelected ? '#fff' : theme.colors.text, 
+                          fontFamily: isSelected ? 'Inter-Bold' : 'Inter-Medium', 
+                          fontSize: 18 
+                        }}>{String(m).padStart(2, '0')}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
           </View>
         </Pressable>
       </Pressable>
@@ -261,13 +423,53 @@ export default function CreateRideScreen() {
   const { location } = useLocation();
 
   const [step, setStep] = useState(1); // 1: route, 2: details, 3: confirm
-  const [origin, setOrigin] = useState<LocationData | null>(null);
-  const [destination, setDestination] = useState<LocationData | null>(null);
+  const params = useLocalSearchParams<{
+    time?: string;
+    date?: string;
+    origin?: string;
+    destination?: string;
+    origin_lat?: string;
+    origin_lng?: string;
+    origin_label?: string;
+    destination_lat?: string;
+    destination_lng?: string;
+    destination_label?: string;
+    seats?: string;
+  }>();
+
+  const [origin, setOrigin] = useState<LocationData | null>(() => {
+    if (params.origin_lat && params.origin_lng && params.origin_label) {
+      return {
+        lat: parseFloat(params.origin_lat),
+        lng: parseFloat(params.origin_lng),
+        label: params.origin_label,
+      };
+    }
+    return null;
+  });
+
+  const [destination, setDestination] = useState<LocationData | null>(() => {
+    if (params.destination_lat && params.destination_lng && params.destination_label) {
+      return {
+        lat: parseFloat(params.destination_lat),
+        lng: parseFloat(params.destination_lng),
+        label: params.destination_label,
+      };
+    }
+    return null;
+  });
+
   const [routeCoords, setRouteCoords] = useState<{ latitude: number; longitude: number }[]>([]);
   const [routeInfo, setRouteInfo] = useState<{ distanceKm: number; durationMin: number; polyline: string } | null>(null);
-  const params = useLocalSearchParams<{ time?: string; date?: string; origin?: string; destination?: string }>();
   
-  const [availableSeats, setAvailableSeats] = useState(3);
+  const [availableSeats, setAvailableSeats] = useState(() => {
+    if (params.seats) {
+      const s = parseInt(params.seats, 10);
+      if (!isNaN(s) && s >= 1 && s <= 6) return s;
+    }
+    return 3;
+  });
+
   const [departureDate, setDepartureDate] = useState(params.date || '');
   const [departureTime, setDepartureTime] = useState(params.time || '');
   const [isFree, setIsFree] = useState(false);
@@ -292,10 +494,11 @@ export default function CreateRideScreen() {
 
   // Fly camera to user's real GPS location once it's loaded
   useEffect(() => {
-    if (location && cameraRef.current) {
+    const hasPrefilledRoute = !!(params.origin_lat && params.destination_lat);
+    if (location && cameraRef.current && !hasPrefilledRoute) {
       cameraRef.current.flyTo({ center: [location.longitude, location.latitude], zoom: 14, duration: 1000 });
     }
-  }, [location]);
+  }, [location, params.origin_lat, params.destination_lat]);
 
   const fareBreakdown = routeInfo 
     ? calculateFare(routeInfo.distanceKm, routeInfo.durationMin, availableSeats)
@@ -360,6 +563,13 @@ export default function CreateRideScreen() {
       );
     }
   };
+
+  // Auto-calculate route coordinates and info on mount if locations are prefilled
+  useEffect(() => {
+    if (origin && destination && routeCoords.length === 0) {
+      calculateRouteIfReady(origin, destination);
+    }
+  }, [origin, destination]);
 
   const handleSelectPlace = async (place: GeocodingResult) => {
     const loc: LocationData = { lat: place.lat, lng: place.lng, label: place.displayName };
@@ -988,6 +1198,13 @@ const pickerStyles = StyleSheet.create({
   calCell: { flex: 1, alignItems: 'center', justifyContent: 'center', height: 40 },
   calDayLabel: { fontSize: 12 },
   calDayNum: { fontSize: 15 },
+  dayCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   todayDot: { width: 4, height: 4, borderRadius: 2, marginTop: 2 },
 
   /* Time picker */
