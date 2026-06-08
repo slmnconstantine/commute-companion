@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
-import { updateProfile } from '@/services/profiles';
+import { updateProfile, updateVerification } from '@/services/profiles';
 import { pickImage, takePhoto, uploadGovernmentId } from '@/services/storage';
 
 export default function VerificationScreen() {
@@ -16,6 +16,7 @@ export default function VerificationScreen() {
 
   const [idImage, setIdImage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const isVerified = !!(profile?.is_verified && profile?.verified_badge);
 
   const handlePickImage = async () => {
     const base64 = await pickImage();
@@ -35,14 +36,7 @@ export default function VerificationScreen() {
       const url = await uploadGovernmentId(profile.id, idImage);
       if (!url) throw new Error("Failed to upload ID image.");
 
-      // For the demo, we instantly verify the user.
-      // In a real app, this would set a pending status for manual review.
-      const { error } = await updateProfile(profile.id, { 
-        government_id_url: url,
-        is_verified: true,
-        verified_badge: true
-      });
-      
+      const { error } = await updateVerification(profile.id, true, url);
       if (error) throw error;
       
       await refreshProfile();
@@ -56,7 +50,26 @@ export default function VerificationScreen() {
     }
   };
 
-  const isVerified = profile?.is_verified && profile?.verified_badge;
+  const handleDemoOverride = async () => {
+    if (!profile) return;
+    setSubmitting(true);
+    try {
+      const nextStatus = !isVerified;
+      const { error } = await updateVerification(profile.id, nextStatus);
+      if (error) throw error;
+      await refreshProfile();
+      Alert.alert(
+        'Demo Override Success',
+        nextStatus 
+          ? 'Your profile is now verified! The badge is active.'
+          : 'Your verification status has been reset.'
+      );
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Demo override failed.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -122,6 +135,25 @@ export default function VerificationScreen() {
             </Pressable>
           </View>
         )}
+
+        {/* Demo Override Button */}
+        <Pressable
+          style={[
+            styles.overrideBtn,
+            { 
+              borderColor: theme.colors.accent, 
+              borderWidth: 1.5,
+              backgroundColor: `${theme.colors.accent}10`
+            }
+          ]}
+          onPress={handleDemoOverride}
+          disabled={submitting}
+        >
+          <Ionicons name="flash" size={18} color={theme.colors.accent} />
+          <Text style={[styles.overrideText, { color: theme.colors.accent, fontFamily: 'Inter-SemiBold' }]}>
+            {isVerified ? 'Demo: Reset Verification (Override) 🔄' : 'Demo: Instantly Verify Me (Override) ⚡'}
+          </Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -145,4 +177,17 @@ const styles = StyleSheet.create({
   changeBtn: { position: 'absolute', top: 12, right: 12, backgroundColor: '#fff', borderRadius: 12 },
   submitBtn: { width: '100%', height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   submitBtnText: { color: '#fff', fontSize: 16, fontFamily: 'Inter-SemiBold' },
+  overrideBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    width: '100%',
+    height: 50,
+    borderRadius: 16,
+    marginTop: 24,
+  },
+  overrideText: {
+    fontSize: 14,
+  },
 });

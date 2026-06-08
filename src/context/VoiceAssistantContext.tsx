@@ -117,13 +117,13 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
         
         if (isYes) {
           setSpokenReply('Okay, executing now.');
-          Speech.speak('Okay, executing now.', { onDone: () => executeCommand(command) });
+          Speech.speak('Okay, executing now.', { onDone: () => { executeCommand(command); } });
         } else if (isNo) {
           setSpokenReply('Action cancelled.');
-          Speech.speak('Action cancelled.', { onDone: () => cancel() });
+          Speech.speak('Action cancelled.', { onDone: () => { cancel(); } });
         } else {
           setSpokenReply("I didn't catch a clear yes or no. Cancelling action.");
-          Speech.speak("I didn't catch a clear yes or no. Cancelling action.", { onDone: () => cancel() });
+          Speech.speak("I didn't catch a clear yes or no. Cancelling action.", { onDone: () => { cancel(); } });
         }
         return;
       }

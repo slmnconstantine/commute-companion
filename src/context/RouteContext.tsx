@@ -63,6 +63,16 @@ function generateRouteHash(originLat: number, originLng: number, destLat: number
   return `${oLat},${oLng}_${dLat},${dLng}`;
 }
 
+function isJsonLabel(label: string | null) {
+  if (!label) return false;
+  try {
+    const parsed = JSON.parse(label);
+    return !!(parsed && typeof parsed === 'object');
+  } catch (e) {
+    return false;
+  }
+}
+
 export function RouteProvider({ children }: { children: React.ReactNode }) {
   const { profile } = useAuth();
   const [activeRoute, setActiveRouteState] = useState<Route | null>(null);
@@ -91,7 +101,7 @@ export function RouteProvider({ children }: { children: React.ReactNode }) {
 
         if (data) {
           setRecentRoutes(data as Route[]);
-          const active = data.find((r: Route) => r.is_active);
+          const active = data.find((r: Route) => r.is_active && !isJsonLabel(r.label));
           if (active) setActiveRouteState(active);
         }
       } catch (e) {
@@ -150,8 +160,10 @@ export function RouteProvider({ children }: { children: React.ReactNode }) {
   const setActiveRoute = useCallback(async (route: Route) => {
     if (!profile) return;
 
-    // Set all other to false and set this one to true in Supabase
-    await supabase.from('routes').update({ is_active: false }).eq('user_id', profile.id);
+    // Set previous commute route to inactive and set this one to true in Supabase
+    if (activeRoute) {
+      await supabase.from('routes').update({ is_active: false }).eq('id', activeRoute.id);
+    }
     
     const { error } = await supabase.from('routes').update({ is_active: true }).eq('id', route.id);
     if (error) {

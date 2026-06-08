@@ -2,6 +2,16 @@ import { supabase } from '@/lib/supabase';
 import { HubPostWithAuthor, PostCommentWithAuthor } from '@/types/database';
 import { sendPushNotification } from './pushNotifications';
 
+function isJsonLabel(label: string | null) {
+  if (!label) return false;
+  try {
+    const parsed = JSON.parse(label);
+    return !!(parsed && typeof parsed === 'object');
+  } catch (e) {
+    return false;
+  }
+}
+
 export const getPosts = async (routeHash: string, currentUserId: string): Promise<HubPostWithAuthor[]> => {
   // Fetch posts with author info and counts for likes/comments
   const { data: posts, error } = await supabase
@@ -162,12 +172,16 @@ export const createPost = async (
   
   const authorProfile = Array.isArray(data.author) ? data.author[0] : data.author;
   
-  // Notify other users tracking this route
-  const { data: routesData, error: routesError } = await supabase.from('routes').select('user_id').eq('route_hash', routeHash);
+  // Notify other users tracking this route (only commute routes, ignoring temporary ride request routes)
+  const { data: routesData, error: routesError } = await supabase.from('routes').select('user_id, label').eq('route_hash', routeHash).eq('is_active', true);
   console.log("Found routes for push:", routesData, "Error:", routesError);
   
   if (routesData && routesData.length > 0) {
-    const userIds = Array.from(new Set(routesData.map(r => r.user_id))).filter(id => id !== userId);
+    const userIds = Array.from(new Set(
+      routesData
+        .filter(r => !isJsonLabel(r.label))
+        .map(r => r.user_id)
+    )).filter(id => id !== userId);
     console.log("Filtered userIds for push:", userIds);
     
     if (userIds.length > 0) {

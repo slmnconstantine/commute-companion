@@ -9,6 +9,12 @@ export async function createTrip(tripData: Omit<Trip, 'id' | 'created_at'>): Pro
     .insert(tripData)
     .select()
     .single();
+    
+  if (!error && data) {
+    notifyMatchingCommuters(data as Trip).catch(err => {
+      console.error('Error notifying matching commuters:', err);
+    });
+  }
   return { data: data as Trip | null, error: error as Error | null };
 }
 
@@ -57,6 +63,48 @@ export async function updateTripStatus(id: string, status: string): Promise<{ er
   const { error } = await supabase.from('trips').update({ status }).eq('id', id);
   
   if (!error) {
+    if (status === 'completed') {
+      try {
+        // Fetch accepted bookings for this trip to sum their platform fees
+        const { data: bookings } = await supabase
+          .from('bookings')
+          .select('platform_fee')
+          .eq('trip_id', id)
+          .eq('status', 'accepted');
+
+        const totalFee = (bookings || []).reduce((sum, b) => sum + (b.platform_fee || 0), 0);
+
+        if (totalFee > 0) {
+          // Fetch the driver ID from the trip
+          const { data: trip } = await supabase
+            .from('trips')
+            .select('driver_id')
+            .eq('id', id)
+            .single();
+
+          if (trip?.driver_id) {
+            // Fetch the driver's current profile to update balance
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('platform_fee_balance')
+              .eq('id', trip.driver_id)
+              .single();
+
+            const currentBalance = (profile?.platform_fee_balance as number) || 0;
+            const newBalance = currentBalance + totalFee;
+
+            // Update the balance in Supabase profiles table
+            await supabase
+              .from('profiles')
+              .update({ platform_fee_balance: newBalance })
+              .eq('id', trip.driver_id);
+          }
+        }
+      } catch (feeError) {
+        console.error('Failed to accumulate platform fee:', feeError);
+      }
+    }
+
     if (status === 'completed' || status === 'cancelled') {
       // Cascade status to bookings
       await supabase
@@ -132,4 +180,76 @@ export async function searchNearbyTrips(
 /** Get driver's trips */
 export async function getDriverTrips(driverId: string): Promise<TripWithDriver[]> {
   return getTrips({ driverId });
+}
+
+function generateRouteHash(originLat: number, originLng: number, destLat: number, destLng: number) {
+  const oLat = originLat.toFixed(2);
+  const oLng = originLng.toFixed(2);
+  const dLat = destLat.toFixed(2);
+  const dLng = destLng.toFixed(2);
+  return `${oLat},${oLng}_${dLat},${dLng}`;
+}
+
+function isJsonLabel(label: string | null) {
+  if (!label) return false;
+  try {
+    const parsed = JSON.parse(label);
+    return !!(parsed && typeof parsed === 'object');
+  } catch (e) {
+    return false;
+  }
+}
+
+/** Find and notify commuters whose ride requests match the route of the newly created trip */
+export async function notifyMatchingCommuters(trip: Trip): Promise<void> {
+  try {
+    const routeHash = generateRouteHash(
+      trip.origin_lat,
+      trip.origin_lng,
+      trip.destination_lat,
+      trip.destination_lng
+    );
+
+    // Query active routes matching this route hash
+    const { data: routes, error } = await supabase
+      .from('routes')
+      .select('*, user:profiles!routes_user_id_fkey(*)')
+      .eq('route_hash', routeHash)
+      .eq('is_active', true);
+
+    if (error || !routes) {
+      console.error('Failed to query matching commuter requests:', error);
+      return;
+    }
+
+    // Filter to ensure it belongs to a commuter and has a JSON request label
+    const matches = routes.filter((r: any) => {
+      const isCommuter = r.user?.role === 'commuter';
+      if (!isCommuter) return false;
+      return isJsonLabel(r.label);
+    });
+
+    console.log(`Found ${matches.length} matching commuter requests for route ${routeHash}`);
+
+    // Send push notification to each matching commuter
+    for (const match of matches) {
+      const token = match.user?.push_token;
+      if (token) {
+        console.log(`Sending Ride Matched push to ${match.user.full_name} (${token})`);
+        await sendPushNotification(
+          token,
+          'Ride Matched! 🚗',
+          `A driver has offered a ride matching your requested route from ${trip.origin_label.split(',')[0]} to ${trip.destination_label.split(',')[0]}.`,
+          {
+            type: 'ride_matched',
+            tripId: trip.id,
+            origin: trip.origin_label,
+            destination: trip.destination_label,
+          }
+        );
+      }
+    }
+  } catch (err) {
+    console.error('Error in notifyMatchingCommuters:', err);
+  }
 }

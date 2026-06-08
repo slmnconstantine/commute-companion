@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import * as Notifications from 'expo-notifications';
+import { Alert } from 'react-native';
+import { router } from 'expo-router';
 
 interface NotificationContextType {
   driverPendingCount: number;
@@ -74,6 +77,55 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       supabase.removeChannel(subscription);
     };
   }, [profile?.id, profile?.role]);
+
+  // Push notifications foreground/background click handling
+  useEffect(() => {
+    if (!profile?.id) return;
+
+    // 1. Foreground Notification Listener: Trigger custom Alert popup
+    const foregroundSub = Notifications.addNotificationReceivedListener((notification) => {
+      const { title, body, data } = notification.request.content;
+      console.log('[PUSH] Received in-app match notification:', title, body, data);
+
+      if (data && data.type === 'ride_matched') {
+        Alert.alert(
+          title || 'Ride Matched! 🚗',
+          body || 'A driver has offered a ride matching your requested route.',
+          [
+            {
+              text: 'View Ride',
+              onPress: () => {
+                if (data.tripId) {
+                  router.push(`/(main)/ride/${data.tripId}` as any);
+                }
+              }
+            },
+            {
+              text: 'Dismiss',
+              style: 'cancel'
+            }
+          ]
+        );
+      }
+    });
+
+    // 2. Background Tap Listener: Auto-route to the matching ride page
+    const backgroundSub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const { data } = response.notification.request.content;
+      console.log('[PUSH] User tapped background notification:', data);
+
+      if (data && data.tripId) {
+        if (data.type === 'ride_matched' || data.type === 'trip_update') {
+          router.push(`/(main)/ride/${data.tripId}` as any);
+        }
+      }
+    });
+
+    return () => {
+      foregroundSub.remove();
+      backgroundSub.remove();
+    };
+  }, [profile?.id]);
 
   return (
     <NotificationContext.Provider

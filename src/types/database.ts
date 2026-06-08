@@ -21,6 +21,7 @@ export interface Profile {
   rating_avg: number | null;
   total_ratings: number;
   push_token?: string | null;
+  platform_fee_balance?: number;
   created_at: string;
 }
 

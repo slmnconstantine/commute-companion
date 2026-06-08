@@ -8,7 +8,7 @@
  * Includes dark-mode toggle, demo override, and sign-out.
  */
 
-import React from 'react';
+import React, { useCallback } from 'react';
 import {
   View,
   Text,
@@ -20,7 +20,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import Avatar from '@/components/common/Avatar';
@@ -45,8 +45,14 @@ interface MenuSection {
 
 export default function ProfileScreen() {
   const { theme, mode, toggleTheme } = useTheme();
-  const { profile, signOut, updateProfile } = useAuth();
+  const { profile, signOut, updateProfile, refreshProfile } = useAuth();
   const router = useRouter();
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshProfile().catch(console.error);
+    }, [])
+  );
 
   const isDriver = profile?.role === 'driver';
 
@@ -89,6 +95,30 @@ export default function ProfileScreen() {
               Alert.alert('Success! ✅', 'You are now a verified driver.');
             } else {
               Alert.alert('Error', 'Failed to update profile.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleDemoAddFee = () => {
+    Alert.alert(
+      'Demo: Add Outstanding Fee',
+      'This will add ₱50.00 to your outstanding platform fee balance for testing purposes.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm',
+          onPress: async () => {
+            const currentBalance = profile?.platform_fee_balance || 0;
+            const { error } = await updateProfile({
+              platform_fee_balance: currentBalance + 50.0,
+            });
+            if (!error) {
+              Alert.alert('Success! ✅', 'Added ₱50.00 to your outstanding platform fee balance.');
+            } else {
+              Alert.alert('Error', 'Failed to update balance.');
             }
           },
         },
@@ -158,6 +188,16 @@ export default function ProfileScreen() {
           onPress: handleDemoOverride,
           color: theme.colors.accent,
         },
+        ...(isDriver
+          ? [
+              {
+                icon: 'wallet-outline' as const,
+                label: 'Demo: Add ₱50 Outstanding Fee',
+                onPress: handleDemoAddFee,
+                color: theme.colors.accent,
+              },
+            ]
+          : []),
       ],
     },
     {
@@ -291,6 +331,76 @@ export default function ProfileScreen() {
             </Text>
           </View>
         </View>
+
+        {/* ── Outstanding Balance Card (Drivers only) ──────────────── */}
+        {isDriver && (
+          <View
+            style={[
+              styles.balanceCard,
+              {
+                backgroundColor: theme.colors.surface,
+                shadowColor: theme.colors.shadow,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
+            <View style={styles.balanceInfo}>
+              <View style={styles.balanceHeader}>
+                <Ionicons name="wallet-outline" size={20} color={theme.colors.textMuted} />
+                <Text
+                  style={[
+                    theme.typography.small,
+                    {
+                      color: theme.colors.textMuted,
+                      fontFamily: 'Inter-Medium',
+                      marginLeft: 6,
+                    },
+                  ]}
+                >
+                  Outstanding Platform Fees
+                </Text>
+              </View>
+              <Text
+                style={[
+                  theme.typography.heading,
+                  {
+                    color: theme.colors.text,
+                    fontFamily: 'Outfit-Bold',
+                    marginTop: 4,
+                  },
+                ]}
+              >
+                ₱{profile?.platform_fee_balance !== undefined ? profile.platform_fee_balance.toFixed(2) : '0.00'}
+              </Text>
+            </View>
+            <Pressable
+              style={({ pressed }) => [
+                styles.payButton,
+                {
+                  backgroundColor: theme.colors.primary,
+                  opacity: pressed ? 0.9 : 1,
+                  transform: [{ scale: pressed ? 0.98 : 1 }],
+                },
+              ]}
+              onPress={() => router.push('/(main)/payment/pay-fees')}
+            >
+              <Text
+                style={[
+                  theme.typography.body,
+                  { color: theme.colors.white, fontFamily: 'Inter-SemiBold' },
+                ]}
+              >
+                Pay Balance
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={16}
+                color={theme.colors.white}
+                style={{ marginLeft: 4 }}
+              />
+            </Pressable>
+          </View>
+        )}
 
         {/* ── Become a Driver Card (Commuters only) ────────────────── */}
         {!isDriver && (
@@ -572,5 +682,35 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     marginTop: 4,
+  },
+
+  /* Balance Card */
+  balanceCard: {
+    marginHorizontal: 20,
+    marginBottom: 24,
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  balanceInfo: {
+    flex: 1,
+  },
+  balanceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  payButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
   },
 });

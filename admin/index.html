@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Administrative Control Portal for Commute Companion - manage user accounts, verify government IDs, and monitor platform registration statistics.">
+  <title>Commute Companion - Admin Portal</title>
+  
+  <!-- Premium Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- CSS Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+  
+  <!-- Supabase JS Client CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  
+  <!-- Toast Notification System -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Main Grid Layout -->
+  <div class="app-layout">
+    
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-logo">
+          <i data-lucide="shield-check" class="brand-icon"></i>
+        </div>
+        <div class="brand-details">
+          <h2>Commute</h2>
+          <span>Companion Admin</span>
+        </div>
+      </div>
+      
+      <nav class="sidebar-nav">
+        <button id="btn-tab-dashboard" class="nav-item active" onclick="switchTab('dashboard')">
+          <i data-lucide="layout-dashboard"></i>
+          <span>Dashboard</span>
+        </button>
+        <button id="btn-tab-users" class="nav-item" onclick="switchTab('users')">
+          <i data-lucide="users"></i>
+          <span>User Directory</span>
+          <span id="badge-total-users" class="nav-badge">0</span>
+        </button>
+        <button id="btn-tab-verification" class="nav-item" onclick="switchTab('verification')">
+          <i data-lucide="id-card"></i>
+          <span>Verification Inbox</span>
+          <span id="badge-pending-verifications" class="nav-badge badge-pending">0</span>
+        </button>
+      </nav>
+      
+      <div class="sidebar-footer">
+        <button id="btn-open-settings" class="nav-item settings-trigger" onclick="openSettingsModal()">
+          <i data-lucide="settings"></i>
+          <span>Connection Settings</span>
+        </button>
+        <div class="connection-status-pill unconfigured" id="db-status-pill">
+          <span class="status-dot"></span>
+          <span id="db-status-text">Disconnected</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Container -->
+    <main class="main-content">
+      
+      <!-- Top Navigation/Header -->
+      <header class="header">
+        <div class="header-search">
+          <i data-lucide="search" class="search-icon"></i>
+          <input type="text" id="global-search" placeholder="Quick search users by name or username..." oninput="handleGlobalSearch(this.value)">
+        </div>
+        <div class="header-actions">
+          <button id="btn-mock-mode-toggle" class="mock-mode-pill active" onclick="toggleMockMode()">
+            <span class="mock-dot"></span>
+            <span id="mock-mode-label">Mock Mode: Active</span>
+          </button>
+          <div class="admin-profile">
+            <div class="avatar-circle">AD</div>
+            <div class="profile-meta">
+              <h4>System Admin</h4>
+              <span id="role-level-text">Standard Access</span>
+            </div>
+          </div>
+        </div>
+      </header>
+      
+      <!-- Content View Area -->
+      <div class="content-view">
+        
+        <!-- DASHBOARD TAB -->
+        <section id="view-dashboard" class="tab-view active">
+          <div class="view-header animate-fade-in">
+            <h1>Platform Performance & Verification Dashboard</h1>
+            <p>Real-time analytics on user roles, ratings, and identity verification funnel status.</p>
+          </div>
+          
+          <!-- Key Metrics Grid -->
+          <div class="metrics-grid">
+            <div class="metric-card animate-slide-up" style="animation-delay: 0.05s;">
+              <div class="metric-header text-purple">
+                <i data-lucide="users"></i>
+                <span class="metric-label">Total Accounts</span>
+              </div>
+              <div class="metric-value" id="stat-total-users">0</div>
+              <p class="metric-desc">Registered profiles in Supabase</p>
+            </div>
+            
+            <div class="metric-card animate-slide-up" style="animation-delay: 0.1s;">
+              <div class="metric-header text-teal">
+                <i data-lucide="car"></i>
+                <span class="metric-label">Drivers</span>
+              </div>
+              <div class="metric-value" id="stat-drivers">0</div>
+              <div class="metric-progress-bar">
+                <div id="stat-drivers-percentage" class="progress bg-teal" style="width: 0%"></div>
+              </div>
+              <p class="metric-desc"><span id="stat-drivers-pct-text">0%</span> of total platform users</p>
+            </div>
+            
+            <div class="metric-card animate-slide-up" style="animation-delay: 0.15s;">
+              <div class="metric-header text-blue">
+                <i data-lucide="user"></i>
+                <span class="metric-label">Commuters</span>
+              </div>
+              <div class="metric-value" id="stat-commuters">0</div>
+              <div class="metric-progress-bar">
+                <div id="stat-commuters-percentage" class="progress bg-blue" style="width: 0%"></div>
+              </div>
+              <p class="metric-desc"><span id="stat-commuters-pct-text">0%</span> of total platform users</p>
+            </div>
+            
+            <div class="metric-card animate-slide-up" style="animation-delay: 0.2s;">
+              <div class="metric-header text-yellow">
+                <i data-lucide="star"></i>
+                <span class="metric-label">Average Rating</span>
+              </div>
+              <div class="metric-value" id="stat-avg-rating">0.0</div>
+              <p class="metric-desc">Across all rated driver/commuter profiles</p>
+            </div>
+          </div>
+
+          <!-- Funnel & Quick Links -->
+          <div class="dashboard-details-grid">
+            <div class="detail-card animate-slide-up" style="animation-delay: 0.25s;">
+              <h3>Identity Verification Funnel</h3>
+              <p class="card-subtitle">Current status distribution of submitted government documents</p>
+              
+              <div class="funnel-container">
+                <div class="funnel-item">
+                  <div class="funnel-info">
+                    <span>Verified Users</span>
+                    <strong id="stat-verified-count">0</strong>
+                  </div>
+                  <div class="metric-progress-bar">
+                    <div id="funnel-verified-bar" class="progress bg-green" style="width: 0%"></div>
+                  </div>
+                </div>
+                
+                <div class="funnel-item">
+                  <div class="funnel-info">
+                    <span>Pending Verification</span>
+                    <strong id="stat-pending-count">0</strong>
+                  </div>
+                  <div class="metric-progress-bar">
+                    <div id="funnel-pending-bar" class="progress bg-amber" style="width: 0%"></div>
+                  </div>
+                </div>
+                
+                <div class="funnel-item">
+                  <div class="funnel-info">
+                    <span>Unverified Accounts</span>
+                    <strong id="stat-unverified-count">0</strong>
+                  </div>
+                  <div class="metric-progress-bar">
+                    <div id="funnel-unverified-bar" class="progress bg-red" style="width: 0%"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="detail-card quick-actions-card animate-slide-up" style="animation-delay: 0.3s;">
+              <h3>Quick Verification Tasks</h3>
+              <p class="card-subtitle">Actions requiring immediate attention</p>
+              <div class="quick-inbox-preview" id="quick-inbox-list">
+                <!-- Will be dynamically populated with pending IDs -->
+                <div class="empty-state">
+                  <i data-lucide="check-circle" class="empty-icon text-green"></i>
+                  <p>All verifications are up to date!</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- USER DIRECTORY TAB -->
+        <section id="view-users" class="tab-view">
+          <div class="view-header">
+            <h1>User Accounts Directory</h1>
+            <p>Search, filter, edit details, adjust ratings, or delete driver and commuter accounts.</p>
+          </div>
+          
+          <!-- Filters & Controls toolbar -->
+          <div class="toolbar-card">
+            <div class="toolbar-row">
+              <div class="filter-group">
+                <label>Filter Role:</label>
+                <div class="segmented-control">
+                  <button id="filter-role-all" class="segment active" onclick="setRoleFilter('all')">All</button>
+                  <button id="filter-role-drivers" class="segment" onclick="setRoleFilter('driver')">Drivers</button>
+                  <button id="filter-role-commuters" class="segment" onclick="setRoleFilter('commuter')">Commuters</button>
+                </div>
+              </div>
+              
+              <div class="filter-group">
+                <label>Verification:</label>
+                <div class="segmented-control">
+                  <button id="filter-verify-all" class="segment active" onclick="setVerifyFilter('all')">All</button>
+                  <button id="filter-verify-verified" class="segment" onclick="setVerifyFilter('verified')">Verified</button>
+                  <button id="filter-verify-pending" class="segment" onclick="setVerifyFilter('pending')">Pending</button>
+                  <button id="filter-verify-unverified" class="segment" onclick="setVerifyFilter('unverified')">Unverified</button>
+                </div>
+              </div>
+
+              <div class="filter-group">
+                <label>Sort By:</label>
+                <select id="select-sort" class="styled-select" onchange="setSorting(this.value)">
+                  <option value="created_at-desc">Joined (Newest First)</option>
+                  <option value="created_at-asc">Joined (Oldest First)</option>
+                  <option value="full_name-asc">Name (A - Z)</option>
+                  <option value="rating_avg-desc">Rating (Highest)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Users Directory Grid -->
+          <div id="users-grid" class="users-grid">
+            <!-- Dynamically rendered user cards -->
+          </div>
+        </section>
+
+        <!-- VERIFICATION INBOX TAB -->
+        <section id="view-verification" class="tab-view">
+          <div class="view-header">
+            <h1>Government ID Verification Inbox</h1>
+            <p>Review uploaded documents from platform commuters and drivers to approve or reject credentials.</p>
+          </div>
+
+          <div class="verification-layout">
+            <div class="inbox-list-panel" id="inbox-submissions-list">
+              <!-- Dynamically populated with pending submissions -->
+            </div>
+            
+            <div class="inbox-detail-panel" id="inbox-submission-viewer">
+              <div class="empty-viewer-state">
+                <i data-lucide="eye" class="empty-viewer-icon"></i>
+                <h3>Select a submission to review</h3>
+                <p>Verify Government ID documents, cross-reference account credentials, and toggle user verification status.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+        
+      </div>
+    </main>
+  </div>
+
+  <!-- SETTINGS MODAL -->
+  <div id="settings-modal" class="modal-backdrop">
+    <div class="modal-content animate-zoom-in">
+      <div class="modal-header">
+        <h3>Supabase Database Configuration</h3>
+        <button class="btn-close-modal" onclick="closeSettingsModal()">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-intro-text">This portal connects directly to the Supabase client. Provide a service role key to bypass Row-Level Security (RLS) policies for administrative writes.</p>
+        
+        <div class="input-field-group">
+          <label for="settings-supabase-url">Supabase Project URL</label>
+          <input type="text" id="settings-supabase-url" placeholder="https://xxxx.supabase.co" class="styled-input">
+        </div>
+        
+        <div class="input-field-group">
+          <label for="settings-supabase-anon-key">Anon Key</label>
+          <input type="password" id="settings-supabase-anon-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6..." class="styled-input">
+        </div>
+
+        <div class="input-field-group border-top">
+          <label for="settings-supabase-service-role">
+            Service Role Key (Admin Bypass Key)
+            <span class="badge-role badge-danger">High Privilege</span>
+          </label>
+          <input type="password" id="settings-supabase-service-role" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6..." class="styled-input">
+          <span class="field-help-text">Allows deleting profiles and updating verification records of other users. Stored locally in your browser.</span>
+        </div>
+
+        <div class="modal-status-box" id="settings-status-box">
+          <i data-lucide="alert-circle" class="status-icon"></i>
+          <span id="settings-status-message">Connection is unconfigured.</span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeSettingsModal()">Cancel</button>
+        <button id="btn-save-settings" class="btn btn-primary" onclick="saveSettings()">Save Configuration</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- USER EDIT / PROFILE DETAIL MODAL -->
+  <div id="user-edit-modal" class="modal-backdrop">
+    <div class="modal-content animate-zoom-in width-wide">
+      <div class="modal-header">
+        <h3 id="edit-modal-title">Edit User Profile</h3>
+        <button class="btn-close-modal" onclick="closeUserEditModal()">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="edit-profile-layout">
+          <!-- Left side fields -->
+          <div class="edit-fields-column">
+            <input type="hidden" id="edit-user-id">
+            
+            <div class="input-field-group">
+              <label for="edit-full-name">Full Name</label>
+              <input type="text" id="edit-full-name" placeholder="John Doe" class="styled-input">
+            </div>
+            
+            <div class="input-field-group">
+              <label for="edit-username">Username</label>
+              <input type="text" id="edit-username" placeholder="johndoe12" class="styled-input">
+            </div>
+
+            <div class="input-field-row">
+              <div class="input-field-group width-half">
+                <label for="edit-role">User Role</label>
+                <select id="edit-role" class="styled-select">
+                  <option value="commuter">Commuter</option>
+                  <option value="driver">Driver</option>
+                </select>
+              </div>
+              <div class="input-field-group width-half">
+                <label for="edit-rating">Average Rating</label>
+                <input type="number" id="edit-rating" step="0.1" min="0" max="5" placeholder="5.0" class="styled-input">
+              </div>
+            </div>
+
+            <div class="input-field-group">
+              <label>Verification Status</label>
+              <div class="checkbox-row-container">
+                <label class="custom-checkbox-label">
+                  <input type="checkbox" id="edit-is-verified">
+                  <span class="checkbox-box"></span>
+                  <span>Is Verified (`is_verified` true)</span>
+                </label>
+                <label class="custom-checkbox-label">
+                  <input type="checkbox" id="edit-verified-badge">
+                  <span class="checkbox-box"></span>
+                  <span>Has Verified Badge (`verified_badge` true)</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right side image/identity details -->
+          <div class="edit-id-column">
+            <div class="id-document-preview-box">
+              <label>Government ID Document</label>
+              <div id="edit-id-preview-container" class="id-preview-frame">
+                <!-- Image or placeholder -->
+              </div>
+              <div class="mock-upload-toolbar">
+                <button class="btn btn-secondary btn-small" onclick="generateMockId()">
+                  <i data-lucide="sparkles"></i>
+                  Mock ID Upload (Demo)
+                </button>
+                <button class="btn btn-danger btn-small" id="btn-clear-id" onclick="clearGovernmentId()">
+                  <i data-lucide="trash-2"></i>
+                  Clear ID
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="danger-zone-card">
+          <h4>Danger Zone</h4>
+          <p>Once you delete an account, it cannot be undone. All linked trips, bookings, and messages will remain orphaned or deleted according to DB cascading.</p>
+          <button id="btn-delete-profile" class="btn btn-danger btn-large" onclick="deleteUserProfile()">
+            <i data-lucide="user-minus"></i>
+            Delete User Account Completely
+          </button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeUserEditModal()">Cancel</button>
+        <button id="btn-save-user" class="btn btn-primary" onclick="saveUserProfile()">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LIGHTBOX IMAGE MODAL -->
+  <div id="lightbox-modal" class="modal-backdrop lightbox" onclick="closeLightbox()">
+    <div class="lightbox-content animate-zoom-in">
+      <img id="lightbox-image" src="" alt="Government ID Enlaged View">
+      <span class="lightbox-caption" id="lightbox-caption">Jane's ID Card</span>
+    </div>
+  </div>
+
+  <!-- App Script Logic -->
+  <script src="app.js"></script>
+</body>
+</html>
