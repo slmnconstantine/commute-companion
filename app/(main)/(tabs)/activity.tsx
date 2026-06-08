@@ -54,10 +54,12 @@ function ActivityCard({
   booking,
   theme,
   onReview,
+  onPress,
 }: {
   booking: BookingWithTrip;
   theme: ReturnType<typeof useTheme>['theme'];
   onReview?: () => void;
+  onPress?: () => void;
 }) {
   const statusInfo = STATUS_STYLES[booking.status] || STATUS_STYLES.pending;
   const statusColor = theme.colors[statusInfo.colorKey];
@@ -72,6 +74,7 @@ function ActivityCard({
         },
       ]}
     >
+      <Pressable onPress={onPress}>
       {/* Top row: date / status */}
       <View style={styles.cardTopRow}>
         <View style={styles.dateRow}>
@@ -217,6 +220,7 @@ function ActivityCard({
           </Text>
         </View>
       )}
+      </Pressable>
     </Pressable>
   );
 }
@@ -398,6 +402,7 @@ export default function ActivityScreen() {
                     key={`passenger-${item.id}`}
                     booking={item}
                     theme={theme}
+                    onPress={() => router.push(`/(main)/ride/${item.trip_id}` as any)}
                     onReview={() => {
                       if (item.status === 'completed' && (!item.reviews || item.reviews.length === 0)) {
                         router.push(`/(main)/ride/review/${item.id}?driverId=${item.trip.driver_id}`);

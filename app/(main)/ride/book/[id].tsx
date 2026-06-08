@@ -118,7 +118,9 @@ export default function BookRideScreen() {
           <Text style={[styles.cardTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>Fare Summary</Text>
           <View style={styles.fareRow}>
             <Text style={[styles.fareLabel, { color: theme.colors.textMuted }]}>Fare per seat</Text>
-            <Text style={[styles.fareValue, { color: theme.colors.text }]}>{formatCurrency(trip.fare_per_seat)}</Text>
+            <Text style={[styles.fareValue, { color: trip.fare_per_seat === 0 ? theme.colors.success : theme.colors.text, fontFamily: trip.fare_per_seat === 0 ? 'Inter-SemiBold' : 'Inter-Regular' }]}>
+              {trip.fare_per_seat === 0 ? 'FREE' : formatCurrency(trip.fare_per_seat)}
+            </Text>
           </View>
           <View style={styles.fareRow}>
             <Text style={[styles.fareLabel, { color: theme.colors.textMuted }]}>Seats</Text>
@@ -126,12 +128,16 @@ export default function BookRideScreen() {
           </View>
           <View style={styles.fareRow}>
             <Text style={[styles.fareLabel, { color: theme.colors.textMuted }]}>Platform fee</Text>
-            <Text style={[styles.fareValue, { color: theme.colors.text }]}>{formatCurrency(platformFee)}</Text>
+            <Text style={[styles.fareValue, { color: theme.colors.text }]}>
+              {trip.fare_per_seat === 0 ? 'FREE' : formatCurrency(platformFee)}
+            </Text>
           </View>
           <View style={[styles.fareDivider, { backgroundColor: theme.colors.border }]} />
           <View style={styles.fareRow}>
             <Text style={[styles.fareTotalLabel, { color: theme.colors.text, fontFamily: 'Inter-Bold' }]}>Total</Text>
-            <Text style={[styles.fareTotalValue, { color: theme.colors.primary, fontFamily: 'Inter-Bold' }]}>{formatCurrency(totalFare + platformFee)}</Text>
+            <Text style={[styles.fareTotalValue, { color: trip.fare_per_seat === 0 ? theme.colors.success : theme.colors.primary, fontFamily: 'Inter-Bold' }]}>
+              {trip.fare_per_seat === 0 ? 'FREE' : formatCurrency(totalFare + platformFee)}
+            </Text>
           </View>
         </View>
       </ScrollView>

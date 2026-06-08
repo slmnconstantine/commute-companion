@@ -1,9 +1,42 @@
 import { supabase } from '@/lib/supabase';
 import { Review, ReviewWithProfiles } from '@/types/database';
+import { sendPushNotification } from './pushNotifications';
+
+/** Helper to notify the reviewee of a new review */
+async function notifyReviewee(reviewData: Omit<Review, 'id' | 'created_at'>) {
+  try {
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('push_token')
+      .eq('id', reviewData.reviewee_id)
+      .single();
+      
+    if (profileData?.push_token) {
+      const { data: reviewerData } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', reviewData.reviewer_id)
+        .single();
+      const reviewerName = reviewerData?.full_name || 'A user';
+
+      await sendPushNotification(
+        profileData.push_token,
+        'New Review Received ⭐',
+        `${reviewerName} rated you ${reviewData.rating} stars: "${reviewData.comment || ''}"`,
+        { type: 'review', bookingId: reviewData.booking_id }
+      );
+    }
+  } catch (e) {
+    console.error('Error sending review push notification:', e);
+  }
+}
 
 /** Submit a review */
 export async function submitReview(reviewData: Omit<Review, 'id' | 'created_at'>): Promise<{ error: Error | null }> {
   const { error } = await supabase.from('reviews').insert(reviewData);
+  if (!error) {
+    notifyReviewee(reviewData);
+  }
   return { error: error as Error | null };
 }
 
@@ -14,6 +47,7 @@ export async function submitReviewAndUpdateProfile(reviewData: Omit<Review, 'id'
     const { error: insertError } = await supabase.from('reviews').insert(reviewData);
     if (insertError) throw insertError;
     
+    notifyReviewee(reviewData);
     return { error: null };
   } catch (err) {
     console.error('Failed to submit review', err);

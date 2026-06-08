@@ -25,6 +25,7 @@ import { useNotifications } from '@/context/NotificationContext';
 import EmptyState from '@/components/common/EmptyState';
 
 import { getDriverTrips, getTrips } from '@/services/trips';
+import { getCommuterRequests, CommuterRequest } from '@/services/rideRequests';
 import type { TripWithDriver } from '@/types/database';
 import TripCard from '@/components/ride/TripCard';
 
@@ -78,6 +79,7 @@ export default function RidesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [myRides, setMyRides] = useState<TripWithDriver[]>([]);
   const [availableRides, setAvailableRides] = useState<TripWithDriver[]>([]);
+  const [rideRequests, setRideRequests] = useState<CommuterRequest[]>([]);
 
   const loadData = useCallback(async () => {
     try {
@@ -88,7 +90,25 @@ export default function RidesScreen() {
       // Load my rides if user is driver
       if (profile?.id && isDriver) {
         const myPostedRides = await getDriverTrips(profile.id);
+        myPostedRides.sort((a, b) => {
+          const activeA = ['open', 'ongoing', 'full'].includes(a.status);
+          const activeB = ['open', 'ongoing', 'full'].includes(b.status);
+          if (activeA && !activeB) return -1;
+          if (!activeA && activeB) return 1;
+          
+          const timeA = new Date(a.departure_time).getTime();
+          const timeB = new Date(b.departure_time).getTime();
+          
+          if (activeA) {
+            return timeA - timeB; // Nearest departure first
+          } else {
+            return timeB - timeA; // Most recently completed first
+          }
+        });
         setMyRides(myPostedRides);
+        
+        const requests = await getCommuterRequests();
+        setRideRequests(requests);
       }
     } catch (e) {
       console.log('Error loading trips', e);
@@ -287,11 +307,46 @@ export default function RidesScreen() {
                   </View>
                 ))
               ) : (
-                <EmptyState
-                  icon="map-outline"
-                  title="No Rides Posted"
-                  message="You haven't posted any rides yet. Create your first ride!"
-                />
+                <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginBottom: 14 }}>
+                  You don't have any active posted rides.
+                </Text>
+              )}
+
+              {/* Ride Requests Board */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14, marginTop: 16 }}>
+                <Text style={[styles.myRidesTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', marginBottom: 0 }]}>
+                  Commuter Ride Requests
+                </Text>
+              </View>
+              {rideRequests.length > 0 ? (
+                rideRequests.map((req) => (
+                  <View key={req.id} style={[styles.createRideCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, marginBottom: 12, paddingVertical: 12 }]}>
+                    <View style={[styles.createRideIcon, { backgroundColor: `${theme.colors.accent}15`, width: 40, height: 40, borderRadius: 20 }]}>
+                      <Ionicons name="person" size={20} color={theme.colors.accent} />
+                    </View>
+                    <View style={styles.createRideInfo}>
+                      <Text style={[styles.createRideTitle, { color: theme.colors.text, fontFamily: 'Inter-Medium', fontSize: 15 }]}>
+                        {req.commuter.full_name} is looking for a ride
+                      </Text>
+                      <Text style={[styles.createRideDesc, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 12 }]} numberOfLines={1}>
+                        From: {req.origin_label.split(',')[0]}
+                      </Text>
+                      <Text style={[styles.createRideDesc, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 12 }]} numberOfLines={1}>
+                        To: {req.destination_label.split(',')[0]}
+                      </Text>
+                    </View>
+                    <Pressable 
+                      style={{ backgroundColor: theme.colors.primary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
+                      onPress={() => router.push('/(main)/ride/create' as any)}
+                    >
+                      <Text style={{ color: '#fff', fontSize: 12, fontFamily: 'Inter-SemiBold' }}>Offer Ride</Text>
+                    </Pressable>
+                  </View>
+                ))
+              ) : (
+                <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginBottom: 14 }}>
+                  There are currently no active commuter requests.
+                </Text>
               )}
             </>
           ) : (

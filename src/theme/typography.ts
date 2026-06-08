@@ -6,22 +6,22 @@
  */
 
 export const typography = {
-  /** Hero / splash text — 32px Inter-Bold */
+  /** Hero / splash text — 32px Outfit-Bold */
   display: {
     fontSize: 32,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'Outfit-Bold',
     lineHeight: 40,
   },
-  /** Screen headings — 24px Inter-SemiBold */
+  /** Screen headings — 24px Outfit-SemiBold */
   heading: {
     fontSize: 24,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'Outfit-SemiBold',
     lineHeight: 32,
   },
-  /** Section titles — 20px Inter-SemiBold */
+  /** Section titles — 20px Outfit-SemiBold */
   title: {
     fontSize: 20,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'Outfit-SemiBold',
     lineHeight: 28,
   },
   /** Card / list subtitles — 18px Inter-Medium */

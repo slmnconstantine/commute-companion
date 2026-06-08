@@ -15,12 +15,18 @@ export async function getProfile(userId: string): Promise<Profile | null> {
 /** Update profile fields */
 export async function updateProfile(
   userId: string,
-  updates: Partial<Pick<Profile, 'full_name' | 'avatar_url' | 'government_id_url'>>
+  updates: Partial<Pick<Profile, 'full_name' | 'avatar_url' | 'government_id_url' | 'push_token'>>
 ): Promise<{ error: Error | null }> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('profiles')
     .update(updates)
-    .eq('id', userId);
+    .eq('id', userId)
+    .select();
+    
+  if (!error && (!data || data.length === 0)) {
+    return { error: new Error('Update failed: 0 rows modified. Check RLS policies.') };
+  }
+  
   return { error: error as Error | null };
 }
 

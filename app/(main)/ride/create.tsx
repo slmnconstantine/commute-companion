@@ -2,7 +2,7 @@ import React, { useState, useRef, useMemo, useEffect } from 'react';
 import {
   View, Text, TextInput, StyleSheet, ScrollView, Pressable, Alert, Animated, Platform, Modal,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Map, Camera, RasterSource, Layer, GeoJSONSource, Marker, type CameraRef } from '@maplibre/maplibre-react-native';
@@ -265,9 +265,12 @@ export default function CreateRideScreen() {
   const [destination, setDestination] = useState<LocationData | null>(null);
   const [routeCoords, setRouteCoords] = useState<{ latitude: number; longitude: number }[]>([]);
   const [routeInfo, setRouteInfo] = useState<{ distanceKm: number; durationMin: number; polyline: string } | null>(null);
+  const params = useLocalSearchParams<{ time?: string; date?: string; origin?: string; destination?: string }>();
+  
   const [availableSeats, setAvailableSeats] = useState(3);
-  const [departureDate, setDepartureDate] = useState('');
-  const [departureTime, setDepartureTime] = useState('');
+  const [departureDate, setDepartureDate] = useState(params.date || '');
+  const [departureTime, setDepartureTime] = useState(params.time || '');
+  const [isFree, setIsFree] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // Search state
@@ -294,9 +297,43 @@ export default function CreateRideScreen() {
     }
   }, [location]);
 
-  const fareBreakdown = routeInfo
+  const fareBreakdown = routeInfo 
     ? calculateFare(routeInfo.distanceKm, routeInfo.durationMin, availableSeats)
     : null;
+
+  // ── Auto-Geocode from Voice Assistant Params ──
+  useEffect(() => {
+    const autoGeocode = async () => {
+      if (params.origin && params.destination && !origin && !destination) {
+        setLoading(true);
+        try {
+          const originResults = await searchPlaces(params.origin);
+          const destResults = await searchPlaces(params.destination);
+
+          let newOrigin: LocationData | null = null;
+          let newDest: LocationData | null = null;
+
+          if (originResults.length > 0) {
+            newOrigin = { lat: originResults[0].lat, lng: originResults[0].lng, label: originResults[0].displayName };
+            setOrigin(newOrigin);
+          }
+          if (destResults.length > 0) {
+            newDest = { lat: destResults[0].lat, lng: destResults[0].lng, label: destResults[0].displayName };
+            setDestination(newDest);
+          }
+
+          if (newOrigin && newDest) {
+            await calculateRouteIfReady(newOrigin, newDest);
+          }
+        } catch (e) {
+          console.error("Auto geocode failed:", e);
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+    autoGeocode();
+  }, [params.origin, params.destination]);
 
   // ── Search handlers ──
   const handleSearch = async (query: string) => {
@@ -405,7 +442,7 @@ export default function CreateRideScreen() {
         route_polyline: routeInfo.polyline,
         departure_time: depTime,
         available_seats: availableSeats,
-        fare_per_seat: fareBreakdown.totalPerSeat,
+        fare_per_seat: isFree ? 0 : fareBreakdown.totalPerSeat,
         status: 'open',
       });
 
@@ -695,20 +732,56 @@ export default function CreateRideScreen() {
             </Pressable>
           </View>
 
+          <Text style={[styles.sectionTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', marginTop: 24 }]}>Fare Option</Text>
+          <Pressable
+            style={[
+              styles.freeFareToggle,
+              { 
+                backgroundColor: theme.colors.surface, 
+                borderColor: isFree ? theme.colors.primary : theme.colors.border,
+                borderWidth: isFree ? 1.5 : 1
+              }
+            ]}
+            onPress={() => setIsFree(!isFree)}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+              <Ionicons 
+                name={isFree ? "gift-outline" : "cash-outline"} 
+                size={22} 
+                color={isFree ? theme.colors.primary : theme.colors.textMuted} 
+              />
+              <View style={{ marginLeft: 12 }}>
+                <Text style={{ color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 14 }}>
+                  Make this ride FREE 🎁
+                </Text>
+                <Text style={{ color: theme.colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 12, marginTop: 2 }}>
+                  Share your commute without charging passengers
+                </Text>
+              </View>
+            </View>
+            <Ionicons 
+              name={isFree ? "checkbox" : "square-outline"} 
+              size={24} 
+              color={isFree ? theme.colors.primary : theme.colors.textMuted} 
+            />
+          </Pressable>
+
           {fareBreakdown && (
             <>
               <Text style={[styles.sectionTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', marginTop: 24 }]}>Fare Estimate</Text>
-              <View style={[styles.fareCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-                <FareLine label="Base fare" amount={fareBreakdown.baseFare} theme={theme} />
-                <FareLine label={`Distance (${routeInfo?.distanceKm} km)`} amount={fareBreakdown.distanceCost} theme={theme} />
-                <FareLine label={`Duration (${routeInfo?.durationMin} min)`} amount={fareBreakdown.timeCost} theme={theme} />
+              <View style={[styles.fareCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, opacity: isFree ? 0.6 : 1 }]}>
+                <FareLine label="Base fare" amount={isFree ? 0 : fareBreakdown.baseFare} theme={theme} />
+                <FareLine label={`Distance (${routeInfo?.distanceKm} km)`} amount={isFree ? 0 : fareBreakdown.distanceCost} theme={theme} />
+                <FareLine label={`Duration (${routeInfo?.durationMin} min)`} amount={isFree ? 0 : fareBreakdown.timeCost} theme={theme} />
                 <View style={[styles.fareDivider, { backgroundColor: theme.colors.border }]} />
-                <FareLine label="Per seat" amount={fareBreakdown.costPerSeat} theme={theme} />
-                <FareLine label="Platform fee (10%)" amount={fareBreakdown.platformFee} theme={theme} />
+                <FareLine label="Per seat" amount={isFree ? 0 : fareBreakdown.costPerSeat} theme={theme} />
+                <FareLine label="Platform fee (10%)" amount={isFree ? 0 : fareBreakdown.platformFee} theme={theme} />
                 <View style={[styles.fareDivider, { backgroundColor: theme.colors.border }]} />
                 <View style={styles.fareRow}>
                   <Text style={[styles.fareTotalLabel, { color: theme.colors.text, fontFamily: 'Inter-Bold' }]}>Total per seat</Text>
-                  <Text style={[styles.fareTotalAmount, { color: theme.colors.primary, fontFamily: 'Inter-Bold' }]}>{formatCurrency(fareBreakdown.totalPerSeat)}</Text>
+                  <Text style={[styles.fareTotalAmount, { color: isFree ? theme.colors.success : theme.colors.primary, fontFamily: 'Inter-Bold' }]}>
+                    {isFree ? 'FREE' : formatCurrency(fareBreakdown.totalPerSeat)}
+                  </Text>
                 </View>
               </View>
             </>
@@ -742,8 +815,8 @@ export default function CreateRideScreen() {
             {departureDate && departureTime && (
               <Text style={[styles.confirmText, { color: theme.colors.textMuted }]}>Departure: {displayDate} at {displayTime}</Text>
             )}
-            <Text style={[styles.confirmText, { color: theme.colors.primary, fontFamily: 'Inter-Bold', fontSize: 18, marginTop: 8 }]}>
-              {fareBreakdown ? formatCurrency(fareBreakdown.totalPerSeat) : '—'} per seat
+            <Text style={[styles.confirmText, { color: isFree ? theme.colors.success : theme.colors.primary, fontFamily: 'Inter-Bold', fontSize: 18, marginTop: 8 }]}>
+              {isFree ? 'FREE' : (fareBreakdown ? formatCurrency(fareBreakdown.totalPerSeat) : '—')} per seat
             </Text>
           </View>
 
@@ -799,6 +872,14 @@ const styles = StyleSheet.create({
   headerBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { flex: 1, textAlign: 'center', fontSize: 17 },
   progressBar: { flexDirection: 'row', gap: 8, paddingHorizontal: 24, paddingVertical: 12 },
+  freeFareToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginTop: 8,
+  },
   progressStep: { flex: 1, height: 4, borderRadius: 2 },
   mapContainer: { flex: 1 },
   map: { flex: 1 },

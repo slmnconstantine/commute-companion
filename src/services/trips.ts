@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { Trip, TripWithDriver } from '@/types/database';
+import { sendPushNotification } from './pushNotifications';
 
 /** Create a new trip */
 export async function createTrip(tripData: Omit<Trip, 'id' | 'created_at'>): Promise<{ data: Trip | null; error: Error | null }> {
@@ -46,15 +47,57 @@ export async function getTripById(id: string): Promise<TripWithDriver | null> {
 
 /** Update trip status */
 export async function updateTripStatus(id: string, status: string): Promise<{ error: Error | null }> {
+  // Fetch accepted/pending bookings before status changes to know who to notify
+  const { data: bookingsData } = await supabase
+    .from('bookings')
+    .select('commuter_id, commuter:profiles!commuter_id(push_token)')
+    .eq('trip_id', id)
+    .in('status', status === 'cancelled' ? ['accepted', 'pending'] : ['accepted']);
+
   const { error } = await supabase.from('trips').update({ status }).eq('id', id);
   
-  if (!error && (status === 'completed' || status === 'cancelled')) {
-    // Cascade status to bookings
-    await supabase
-      .from('bookings')
-      .update({ status: status })
-      .eq('trip_id', id)
-      .in('status', ['accepted', 'pending']);
+  if (!error) {
+    if (status === 'completed' || status === 'cancelled') {
+      // Cascade status to bookings
+      await supabase
+        .from('bookings')
+        .update({ status: status })
+        .eq('trip_id', id)
+        .in('status', ['accepted', 'pending']);
+    }
+
+    // Send push notifications to passengers
+    if (bookingsData && bookingsData.length > 0) {
+      // Fetch driver name to personalize the notification
+      const { data: tripData } = await supabase
+        .from('trips')
+        .select('driver:profiles!driver_id(full_name)')
+        .eq('id', id)
+        .single();
+      const driverName = (tripData?.driver as any)?.full_name || 'Your driver';
+
+      let title = '';
+      let body = '';
+      if (status === 'ongoing') {
+        title = 'Ride Started! 🚗';
+        body = `${driverName} has started the trip. Tap to view live tracking.`;
+      } else if (status === 'completed') {
+        title = 'Trip Completed! 🏁';
+        body = 'You have arrived at your destination. Thank you for riding!';
+      } else if (status === 'cancelled') {
+        title = 'Trip Cancelled ❌';
+        body = `We're sorry, your scheduled ride with ${driverName} was cancelled.`;
+      }
+
+      if (title && body) {
+        bookingsData.forEach((b: any) => {
+          const token = b.commuter?.push_token;
+          if (token) {
+            sendPushNotification(token, title, body, { type: 'trip_update', tripId: id, status });
+          }
+        });
+      }
+    }
   }
   
   return { error: error as Error | null };

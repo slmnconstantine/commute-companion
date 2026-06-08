@@ -12,7 +12,9 @@ import { getOrCreateChatRoom, joinChatRoom, getChatRoom } from '@/services/chatR
 import { sendMessage } from '@/services/messages';
 import { decodePolyline } from '@/services/routing';
 import { formatDepartureTime } from '@/utils/dateFormatter';
-import { formatCurrency, calculateFare } from '@/utils/fareCalculator';
+import { formatCurrency, calculateFare, getDriverPayout } from '@/utils/fareCalculator';
+import { startBroadcastingLocation, stopBroadcastingLocation, subscribeToDriverLocation } from '@/services/liveTracking';
+import * as Location from 'expo-location';
 import Avatar from '@/components/common/Avatar';
 import Badge from '@/components/common/Badge';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
@@ -28,6 +30,7 @@ export default function TripDetailScreen() {
   const [trip, setTrip] = useState<TripWithDriver | null>(null);
   const [loading, setLoading] = useState(true);
   const [routeCoords, setRouteCoords] = useState<{ latitude: number; longitude: number }[]>([]);
+  const [driverLiveLocation, setDriverLiveLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   
   const [bookings, setBookings] = useState<BookingWithCommuter[]>([]);
   const [chatRoomId, setChatRoomId] = useState<string | null>(null);
@@ -58,6 +61,52 @@ export default function TripDetailScreen() {
       setLoading(false);
     }
   };
+
+  // Handle Live Tracking
+  useEffect(() => {
+    if (!trip || !profile) return;
+    
+    let locationSubscription: Location.LocationSubscription | null = null;
+    let unsubscribeCommuter: (() => void) | null = null;
+
+    const setupTracking = async () => {
+      const isDriver = profile.id === trip.driver_id;
+
+      if (isDriver && trip.status === 'ongoing') {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Denied', 'Location permission is required to broadcast your location.');
+          return;
+        }
+
+        locationSubscription = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.High, distanceInterval: 10 },
+          (loc) => {
+            setDriverLiveLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+            startBroadcastingLocation(trip.id, profile.id, {
+              latitude: loc.coords.latitude,
+              longitude: loc.coords.longitude,
+              heading: loc.coords.heading,
+              speed: loc.coords.speed,
+              timestamp: loc.timestamp,
+            });
+          }
+        );
+      } else if (!isDriver && trip.status === 'ongoing') {
+        unsubscribeCommuter = subscribeToDriverLocation(trip.id, (loc) => {
+          setDriverLiveLocation({ latitude: loc.latitude, longitude: loc.longitude });
+        });
+      }
+    };
+
+    setupTracking();
+
+    return () => {
+      if (locationSubscription) locationSubscription.remove();
+      if (trip.status !== 'ongoing') stopBroadcastingLocation();
+      if (unsubscribeCommuter) unsubscribeCommuter();
+    };
+  }, [trip?.status, profile?.id]);
 
   const handleAcceptBooking = async (booking: BookingWithCommuter) => {
     setProcessingBookingId(booking.id);
@@ -158,6 +207,14 @@ export default function TripDetailScreen() {
             <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: '#F59E0B', borderWidth: 2, borderColor: '#fff' }} />
           </Marker>
 
+          {driverLiveLocation && (
+            <Marker id="driverLive" lngLat={[driverLiveLocation.longitude, driverLiveLocation.latitude]}>
+              <View style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}>
+                <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: theme.colors.primary, borderWidth: 3, borderColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5 }} />
+              </View>
+            </Marker>
+          )}
+
           {routeCoords.length > 0 && (
             <GeoJSONSource
               id="route"
@@ -238,7 +295,17 @@ export default function TripDetailScreen() {
         {/* Trip Stats */}
         <View style={styles.statsRow}>
           <StatItem icon="people" label="Seats" value={`${trip.available_seats}`} theme={theme} />
-          <StatItem icon="cash" label="Per seat" value={formatCurrency(trip.fare_per_seat)} theme={theme} highlight />
+          {isDriver ? (
+            <StatItem 
+              icon="wallet" 
+              label="Net Earnings" 
+              value={formatCurrency(getDriverPayout(trip.fare_per_seat).netPayout)} 
+              theme={theme} 
+              highlight 
+            />
+          ) : (
+            <StatItem icon="cash" label="Per seat" value={trip.fare_per_seat === 0 ? 'FREE' : formatCurrency(trip.fare_per_seat)} theme={theme} highlight />
+          )}
         </View>
 
         {/* Bookings Section (Driver Only) */}
@@ -283,10 +350,12 @@ export default function TripDetailScreen() {
       {!isDriver && trip.status === 'open' && !userBooking && (
         <View style={[styles.bottomCTA, { backgroundColor: theme.colors.surface, paddingBottom: insets.bottom + 16, borderTopColor: theme.colors.border }]}>
           <View style={styles.ctaInfo}>
-            <Text style={[styles.ctaPrice, { color: theme.colors.primary, fontFamily: 'Inter-Bold' }]}>
-              {formatCurrency(trip.fare_per_seat)}
+            <Text style={[styles.ctaPrice, { color: trip.fare_per_seat === 0 ? theme.colors.success : theme.colors.primary, fontFamily: 'Inter-Bold' }]}>
+              {trip.fare_per_seat === 0 ? 'FREE' : formatCurrency(trip.fare_per_seat)}
             </Text>
-            <Text style={[styles.ctaPerSeat, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>per seat</Text>
+            {trip.fare_per_seat > 0 && (
+              <Text style={[styles.ctaPerSeat, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>per seat</Text>
+            )}
           </View>
           <Pressable
             style={[styles.ctaButton, { backgroundColor: theme.colors.primary }]}

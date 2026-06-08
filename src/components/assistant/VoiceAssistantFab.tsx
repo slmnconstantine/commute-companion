@@ -1,5 +1,7 @@
 import React from 'react';
-import { StyleSheet, Pressable } from 'react-native';
+import { StyleSheet, useWindowDimensions } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, runOnJS } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import { useVoiceAssistant } from '@/context/VoiceAssistantContext';
@@ -10,9 +12,15 @@ export default function VoiceAssistantFab() {
   const { theme } = useTheme();
   const { startRecording, state } = useVoiceAssistant();
   const { activeRoute } = useRoute();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   
   const segments = useSegments();
   const pathname = usePathname();
+
+  // Shared values for dragging
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const isDragging = useSharedValue(false);
 
   // Determine context
   const currentScreen = segments[segments.length - 1] || 'Home';
@@ -39,19 +47,77 @@ export default function VoiceAssistantFab() {
 
   // Only show on main screens
   const inMainGroup = segments[0] === '(main)';
+
+  const panGesture = Gesture.Pan()
+    .onStart(() => {
+      isDragging.value = true;
+    })
+    .onUpdate((event) => {
+      translateX.value = event.translationX;
+      translateY.value = event.translationY;
+    })
+    .onEnd(() => {
+      isDragging.value = false;
+      
+      // Snap to edges or stay in bounds
+      // For simplicity, just spring back to (0,0) or keep the position and reset translation
+      // Actually, standard draggable FABs usually snap to the left or right edge.
+      // But a simple free-drag can just offset the base position.
+      // We will just let it stay where dragged, but we need to update the base offset
+      // so the next drag starts from the new position.
+    });
+
+  // Since updating base offset without layout info is tricky, 
+  // the easiest robust draggable is to just use context in onUpdate:
+  const offsetX = useSharedValue(0);
+  const offsetY = useSharedValue(0);
+
+  const betterPanGesture = Gesture.Pan()
+    .onStart(() => {
+      isDragging.value = true;
+    })
+    .onUpdate((event) => {
+      translateX.value = offsetX.value + event.translationX;
+      translateY.value = offsetY.value + event.translationY;
+    })
+    .onEnd(() => {
+      isDragging.value = false;
+      // Save the offset for the next drag
+      offsetX.value = translateX.value;
+      offsetY.value = translateY.value;
+    });
+
+  const tapGesture = Gesture.Tap().onEnd(() => {
+    runOnJS(handlePress)();
+  });
+
+  const composedGesture = Gesture.Simultaneous(betterPanGesture, tapGesture);
+
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [
+        { translateX: translateX.value },
+        { translateY: translateY.value },
+        { scale: isDragging.value ? 1.1 : 1 },
+      ],
+    };
+  });
+
   if (!inMainGroup) return null;
 
   return (
-    <Pressable
-      style={[
-        styles.fab,
-        { backgroundColor: theme.colors.primary },
-        state !== 'idle' && state !== 'error' && { opacity: 0 } // Hide FAB when sheet is open
-      ]}
-      onPress={handlePress}
-    >
-      <Ionicons name="mic" size={24} color="#fff" />
-    </Pressable>
+    <GestureDetector gesture={composedGesture}>
+      <Animated.View
+        style={[
+          styles.fab,
+          { backgroundColor: theme.colors.primary },
+          state !== 'idle' && state !== 'error' && { opacity: 0 },
+          animatedStyle,
+        ]}
+      >
+        <Ionicons name="mic" size={24} color="#fff" />
+      </Animated.View>
+    </GestureDetector>
   );
 }
 

@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { HubPostWithAuthor, PostCommentWithAuthor } from '@/types/database';
+import { sendPushNotification } from './pushNotifications';
 
 export const getPosts = async (routeHash: string, currentUserId: string): Promise<HubPostWithAuthor[]> => {
   // Fetch posts with author info and counts for likes/comments
@@ -64,6 +65,16 @@ export const toggleLike = async (postId: string, userId: string, currentlyLiked:
       console.error('Error liking post:', error);
       return false;
     }
+    
+    // Send push notification to the post author
+    const { data: postData } = await supabase.from('hub_posts').select('author_id').eq('id', postId).single();
+    if (postData && postData.author_id !== userId) {
+      const { data: authorData } = await supabase.from('profiles').select('push_token').eq('id', postData.author_id).single();
+      const { data: likerData } = await supabase.from('profiles').select('full_name').eq('id', userId).single();
+      if (authorData?.push_token && likerData?.full_name) {
+        sendPushNotification(authorData.push_token, 'New Like ❤️', `${likerData.full_name} liked your post!`, { type: 'hub_post', postId });
+      }
+    }
   }
   return true;
 };
@@ -105,6 +116,16 @@ export const createComment = async (postId: string, userId: string, content: str
 
   if (error) throw error;
   
+  // Send push notification to the post author
+  const { data: postData } = await supabase.from('hub_posts').select('author_id').eq('id', postId).single();
+  if (postData && postData.author_id !== userId) {
+    const { data: authorData } = await supabase.from('profiles').select('push_token').eq('id', postData.author_id).single();
+    const commenterName = Array.isArray(data.author) ? data.author[0].full_name : data.author.full_name;
+    if (authorData?.push_token && commenterName) {
+      sendPushNotification(authorData.push_token, 'New Comment 💬', `${commenterName} commented: "${content}"`, { type: 'hub_post', postId });
+    }
+  }
+  
   return {
     ...data,
     author: Array.isArray(data.author) ? data.author[0] : data.author
@@ -139,9 +160,34 @@ export const createPost = async (
 
   if (error) throw error;
   
+  const authorProfile = Array.isArray(data.author) ? data.author[0] : data.author;
+  
+  // Notify other users tracking this route
+  const { data: routesData, error: routesError } = await supabase.from('routes').select('user_id').eq('route_hash', routeHash);
+  console.log("Found routes for push:", routesData, "Error:", routesError);
+  
+  if (routesData && routesData.length > 0) {
+    const userIds = Array.from(new Set(routesData.map(r => r.user_id))).filter(id => id !== userId);
+    console.log("Filtered userIds for push:", userIds);
+    
+    if (userIds.length > 0) {
+      const { data: profilesData, error: profilesError } = await supabase.from('profiles').select('push_token').in('id', userIds);
+      console.log("Fetched profiles for push:", profilesData, "Error:", profilesError);
+      
+      if (profilesData) {
+        profilesData.forEach(p => {
+          if (p.push_token) {
+            console.log("Sending push to:", p.push_token);
+            sendPushNotification(p.push_token, `Community Update: ${statusTag}`, `${authorProfile.full_name} posted an update on your route.`, { type: 'hub_post', routeHash });
+          }
+        });
+      }
+    }
+  }
+  
   return {
     ...data,
-    author: Array.isArray(data.author) ? data.author[0] : data.author,
+    author: authorProfile,
     likes_count: 0,
     comments_count: 0,
     user_has_liked: false

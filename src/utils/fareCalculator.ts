@@ -41,9 +41,17 @@ export function calculateFare(
   return { baseFare, distanceCost, timeCost, subtotal, costPerSeat, platformFee, totalPerSeat };
 }
 
-/**
- * Format a numeric amount as a Philippine Peso string (e.g. `₱123.00`).
- */
 export function formatCurrency(amount: number): string {
   return `₱${amount.toFixed(2)}`;
+}
+
+/**
+ * Reverse calculate driver net payout and platform fee from the total fare.
+ * Total = Net + (Net * PLATFORM_FEE_RATE)
+ * Net = Total / (1 + PLATFORM_FEE_RATE)
+ */
+export function getDriverPayout(totalFare: number): { netPayout: number; platformFee: number } {
+  const netPayout = totalFare / (1 + PLATFORM_FEE_RATE);
+  const platformFee = totalFare - netPayout;
+  return { netPayout, platformFee };
 }
