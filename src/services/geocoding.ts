@@ -1,4 +1,5 @@
 import { NOMINATIM_BASE_URL, PHOTON_BASE_URL } from '@/lib/constants';
+import { handleServiceError } from '@/utils/errorHelper';
 
 export interface GeocodingResult {
   lat: number;
@@ -22,7 +23,7 @@ export async function geocode(query: string): Promise<GeocodingResult[]> {
       type: item.type,
     }));
   } catch (error) {
-    console.error('Geocoding error:', error);
+    handleServiceError('Geocoding error:', error);
     return [];
   }
 }
@@ -46,7 +47,7 @@ export async function searchPlaces(query: string): Promise<GeocodingResult[]> {
       type: f.properties.osm_value,
     }));
   } catch (error) {
-    console.error('Place search error:', error);
+    handleServiceError('Place search error:', error);
     return [];
   }
 }

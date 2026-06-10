@@ -102,29 +102,6 @@ export default function ProfileScreen() {
     );
   };
 
-  const handleDemoAddFee = () => {
-    Alert.alert(
-      'Demo: Add Outstanding Fee',
-      'This will add ₱50.00 to your outstanding platform fee balance for testing purposes.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Confirm',
-          onPress: async () => {
-            const currentBalance = profile?.platform_fee_balance || 0;
-            const { error } = await updateProfile({
-              platform_fee_balance: currentBalance + 50.0,
-            });
-            if (!error) {
-              Alert.alert('Success! ✅', 'Added ₱50.00 to your outstanding platform fee balance.');
-            } else {
-              Alert.alert('Error', 'Failed to update balance.');
-            }
-          },
-        },
-      ]
-    );
-  };
 
   // ── Menu Sections ─────────────────────────────────────────────
 
@@ -188,16 +165,7 @@ export default function ProfileScreen() {
           onPress: handleDemoOverride,
           color: theme.colors.accent,
         },
-        ...(isDriver
-          ? [
-              {
-                icon: 'wallet-outline' as const,
-                label: 'Demo: Add ₱50 Outstanding Fee',
-                onPress: handleDemoAddFee,
-                color: theme.colors.accent,
-              },
-            ]
-          : []),
+
       ],
     },
     {

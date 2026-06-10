@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { Trip, TripWithDriver } from '@/types/database';
 import { sendPushNotification } from './pushNotifications';
+import { handleServiceError } from '@/utils/errorHelper';
 
 /** Create a new trip */
 export async function createTrip(tripData: Omit<Trip, 'id' | 'created_at'>): Promise<{ data: Trip | null; error: Error | null }> {
@@ -12,7 +13,7 @@ export async function createTrip(tripData: Omit<Trip, 'id' | 'created_at'>): Pro
     
   if (!error && data) {
     notifyMatchingCommuters(data as Trip).catch(err => {
-      console.error('Error notifying matching commuters:', err);
+      handleServiceError('Error notifying matching commuters:', err);
     });
   }
   return { data: data as Trip | null, error: error as Error | null };
@@ -101,7 +102,7 @@ export async function updateTripStatus(id: string, status: string): Promise<{ er
           }
         }
       } catch (feeError) {
-        console.error('Failed to accumulate platform fee:', feeError);
+        handleServiceError('Failed to accumulate platform fee:', feeError);
       }
     }
 
@@ -218,7 +219,7 @@ export async function notifyMatchingCommuters(trip: Trip): Promise<void> {
       .eq('is_active', true);
 
     if (error || !routes) {
-      console.error('Failed to query matching commuter requests:', error);
+      handleServiceError('Failed to query matching commuter requests:', error);
       return;
     }
 
@@ -250,6 +251,32 @@ export async function notifyMatchingCommuters(trip: Trip): Promise<void> {
       }
     }
   } catch (err) {
-    console.error('Error in notifyMatchingCommuters:', err);
+    handleServiceError('Error in notifyMatchingCommuters:', err);
   }
+}
+
+/** Delete a trip and cancel all bookings related to it */
+export async function deleteTrip(id: string): Promise<{ error: Error | null }> {
+  // First, delete bookings related to this trip
+  const { error: bookingsError } = await supabase
+    .from('bookings')
+    .delete()
+    .eq('trip_id', id);
+
+  if (bookingsError) {
+    handleServiceError('Failed to delete bookings for trip:', bookingsError);
+    return { error: bookingsError as unknown as Error };
+  }
+
+  // Next, delete the trip itself
+  const { error } = await supabase
+    .from('trips')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    handleServiceError('Failed to delete trip:', error);
+  }
+
+  return { error: error as unknown as Error };
 }

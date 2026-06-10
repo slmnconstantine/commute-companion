@@ -22,7 +22,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { useRoute } from '@/context/RouteContext';
@@ -84,7 +84,7 @@ function DatePickerModal({
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={pickerStyles.backdrop} onPress={onClose}>
-        <Pressable style={[pickerStyles.card, { backgroundColor: theme.colors.surface }]} onPress={() => {}}>
+        <Pressable style={[pickerStyles.card, { backgroundColor: theme.colors.surface }]} onPress={() => { }}>
           {/* Header */}
           <View style={pickerStyles.calHeader}>
             <Pressable onPress={prevMonth} hitSlop={12}>
@@ -208,34 +208,34 @@ function TimePickerModal({
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={pickerStyles.backdrop} onPress={onClose}>
-        <Pressable style={[pickerStyles.timeSheet, { backgroundColor: theme.colors.surface }]} onPress={() => {}}>
+        <Pressable style={[pickerStyles.timeSheet, { backgroundColor: theme.colors.surface }]} onPress={() => { }}>
           {/* Header handle */}
           <View style={pickerStyles.sheetHandle}>
             <View style={[pickerStyles.handleBar, { backgroundColor: theme.colors.border }]} />
           </View>
-          
+
           {/* Title Row */}
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, marginBottom: 20 }}>
-             <Text style={{ color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 18 }}>
-                Departure Time
-             </Text>
-             <Pressable 
-               onPress={handleSave}
-               style={{ backgroundColor: theme.colors.primary, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 100 }}
-             >
-               <Text style={{ color: '#fff', fontFamily: 'Inter-Bold', fontSize: 14 }}>Done</Text>
-             </Pressable>
+            <Text style={{ color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 18 }}>
+              Departure Time
+            </Text>
+            <Pressable
+              onPress={handleSave}
+              style={{ backgroundColor: theme.colors.primary, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 100 }}
+            >
+              <Text style={{ color: '#fff', fontFamily: 'Inter-Bold', fontSize: 14 }}>Done</Text>
+            </Pressable>
           </View>
 
           <View style={{ paddingHorizontal: 24 }}>
             {/* Elegant Digital Time Display capsule */}
-            <View style={{ 
-              flexDirection: 'row', 
-              justifyContent: 'space-between', 
-              alignItems: 'center', 
-              backgroundColor: theme.colors.inputBackground, 
-              borderRadius: 24, 
-              paddingHorizontal: 24, 
+            <View style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              backgroundColor: theme.colors.inputBackground,
+              borderRadius: 24,
+              paddingHorizontal: 24,
               paddingVertical: 16,
               marginBottom: 24,
               borderWidth: 1,
@@ -244,7 +244,7 @@ function TimePickerModal({
               {/* Left Side: Time Selectors (Hour : Minute) */}
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 {/* Hour display button */}
-                <Pressable 
+                <Pressable
                   onPress={() => setActivePicker('hour')}
                   style={{
                     paddingHorizontal: 12,
@@ -255,21 +255,21 @@ function TimePickerModal({
                     borderColor: activePicker === 'hour' ? theme.colors.primary : 'transparent',
                   }}
                 >
-                  <Text style={{ 
-                    fontSize: 40, 
-                    fontFamily: 'Inter-Bold', 
-                    color: activePicker === 'hour' ? theme.colors.primary : theme.colors.text 
+                  <Text style={{
+                    fontSize: 40,
+                    fontFamily: 'Inter-Bold',
+                    color: activePicker === 'hour' ? theme.colors.primary : theme.colors.text
                   }}>
                     {hour12}
                   </Text>
                 </Pressable>
-                
+
                 <Text style={{ fontSize: 36, fontFamily: 'Inter-Bold', color: theme.colors.textMuted, marginHorizontal: 4 }}>
                   :
                 </Text>
 
                 {/* Minute display button */}
-                <Pressable 
+                <Pressable
                   onPress={() => setActivePicker('minute')}
                   style={{
                     paddingHorizontal: 12,
@@ -280,10 +280,10 @@ function TimePickerModal({
                     borderColor: activePicker === 'minute' ? theme.colors.primary : 'transparent',
                   }}
                 >
-                  <Text style={{ 
-                    fontSize: 40, 
-                    fontFamily: 'Inter-Bold', 
-                    color: activePicker === 'minute' ? theme.colors.primary : theme.colors.text 
+                  <Text style={{
+                    fontSize: 40,
+                    fontFamily: 'Inter-Bold',
+                    color: activePicker === 'minute' ? theme.colors.primary : theme.colors.text
                   }}>
                     {String(minute).padStart(2, '0')}
                   </Text>
@@ -291,20 +291,20 @@ function TimePickerModal({
               </View>
 
               {/* Right Side: Modern Segmented AM/PM selector */}
-              <View style={{ 
-                flexDirection: 'row', 
-                backgroundColor: theme.colors.background, 
-                borderRadius: 12, 
+              <View style={{
+                flexDirection: 'row',
+                backgroundColor: theme.colors.background,
+                borderRadius: 12,
                 padding: 3,
                 borderWidth: 1,
                 borderColor: theme.colors.border
               }}>
-                <Pressable 
-                  onPress={() => handleAmPmSelect(false)} 
-                  style={{ 
-                    paddingVertical: 8, 
-                    paddingHorizontal: 16, 
-                    borderRadius: 9, 
+                <Pressable
+                  onPress={() => handleAmPmSelect(false)}
+                  style={{
+                    paddingVertical: 8,
+                    paddingHorizontal: 16,
+                    borderRadius: 9,
                     backgroundColor: !isPM ? theme.colors.primary : 'transparent',
                     shadowColor: !isPM ? theme.colors.primary : 'transparent',
                     shadowOffset: { width: 0, height: 2 },
@@ -315,12 +315,12 @@ function TimePickerModal({
                 >
                   <Text style={{ color: !isPM ? '#fff' : theme.colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 14 }}>AM</Text>
                 </Pressable>
-                <Pressable 
-                  onPress={() => handleAmPmSelect(true)} 
-                  style={{ 
-                    paddingVertical: 8, 
-                    paddingHorizontal: 16, 
-                    borderRadius: 9, 
+                <Pressable
+                  onPress={() => handleAmPmSelect(true)}
+                  style={{
+                    paddingVertical: 8,
+                    paddingHorizontal: 16,
+                    borderRadius: 9,
                     backgroundColor: isPM ? theme.colors.primary : 'transparent',
                     shadowColor: isPM ? theme.colors.primary : 'transparent',
                     shadowOffset: { width: 0, height: 2 },
@@ -346,21 +346,21 @@ function TimePickerModal({
                     Tapping an hour auto-switches to minutes
                   </Text>
                 </View>
-                
+
                 {/* 3x4 clean numeric pad layout */}
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14, justifyContent: 'center', marginBottom: 12 }}>
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(h => {
                     const isSelected = hour12 === h;
                     return (
-                      <Pressable 
-                        key={`h-${h}`} 
+                      <Pressable
+                        key={`h-${h}`}
                         onPress={() => handleHourSelect(h)}
-                        style={{ 
-                          width: '21%', 
-                          aspectRatio: 1, 
-                          alignItems: 'center', 
-                          justifyContent: 'center', 
-                          borderRadius: 100, 
+                        style={{
+                          width: '21%',
+                          aspectRatio: 1,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderRadius: 100,
                           backgroundColor: isSelected ? theme.colors.primary : theme.colors.inputBackground,
                           borderWidth: 1.5,
                           borderColor: isSelected ? theme.colors.primary : 'transparent',
@@ -371,10 +371,10 @@ function TimePickerModal({
                           elevation: isSelected ? 3 : 0
                         }}
                       >
-                        <Text style={{ 
-                          color: isSelected ? '#fff' : theme.colors.text, 
-                          fontFamily: isSelected ? 'Inter-Bold' : 'Inter-Medium', 
-                          fontSize: 18 
+                        <Text style={{
+                          color: isSelected ? '#fff' : theme.colors.text,
+                          fontFamily: isSelected ? 'Inter-Bold' : 'Inter-Medium',
+                          fontSize: 18
                         }}>{h}</Text>
                       </Pressable>
                     );
@@ -391,15 +391,15 @@ function TimePickerModal({
                   {[0, 15, 30, 45].map(m => {
                     const isSelected = minute === m;
                     return (
-                      <Pressable 
-                        key={`m-${m}`} 
+                      <Pressable
+                        key={`m-${m}`}
                         onPress={() => setMinute(m)}
-                        style={{ 
-                          width: '21%', 
-                          aspectRatio: 1, 
-                          alignItems: 'center', 
-                          justifyContent: 'center', 
-                          borderRadius: 100, 
+                        style={{
+                          width: '21%',
+                          aspectRatio: 1,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderRadius: 100,
                           backgroundColor: isSelected ? theme.colors.primary : theme.colors.inputBackground,
                           borderWidth: 1.5,
                           borderColor: isSelected ? theme.colors.primary : 'transparent',
@@ -410,10 +410,10 @@ function TimePickerModal({
                           elevation: isSelected ? 3 : 0
                         }}
                       >
-                        <Text style={{ 
-                          color: isSelected ? '#fff' : theme.colors.text, 
-                          fontFamily: isSelected ? 'Inter-Bold' : 'Inter-Medium', 
-                          fontSize: 18 
+                        <Text style={{
+                          color: isSelected ? '#fff' : theme.colors.text,
+                          fontFamily: isSelected ? 'Inter-Bold' : 'Inter-Medium',
+                          fontSize: 18
                         }}>{String(m).padStart(2, '0')}</Text>
                       </Pressable>
                     );
@@ -727,7 +727,7 @@ export default function RidesScreen() {
                 const m = String(dateObj.getMonth() + 1).padStart(2, '0');
                 const d = String(dateObj.getDate()).padStart(2, '0');
                 setRequestDate(`${y}-${m}-${d}`);
-                
+
                 const hr = String(dateObj.getHours()).padStart(2, '0');
                 const mn = String(dateObj.getMinutes()).padStart(2, '0');
                 setRequestTime(`${hr}:${mn}`);
@@ -759,23 +759,16 @@ export default function RidesScreen() {
       // Load my rides if user is driver
       if (profile?.id && isDriver) {
         const myPostedRides = await getDriverTrips(profile.id);
-        myPostedRides.sort((a, b) => {
-          const activeA = ['open', 'ongoing', 'full'].includes(a.status);
-          const activeB = ['open', 'ongoing', 'full'].includes(b.status);
-          if (activeA && !activeB) return -1;
-          if (!activeA && activeB) return 1;
-          
+        const activePostedRides = myPostedRides.filter((a) =>
+          ['open', 'ongoing', 'full'].includes(a.status)
+        );
+        activePostedRides.sort((a, b) => {
           const timeA = new Date(a.departure_time).getTime();
           const timeB = new Date(b.departure_time).getTime();
-          
-          if (activeA) {
-            return timeA - timeB; // Nearest departure first
-          } else {
-            return timeB - timeA; // Most recently completed first
-          }
+          return timeA - timeB; // Nearest departure first
         });
-        setMyRides(myPostedRides);
-        
+        setMyRides(activePostedRides);
+
         const requests = await getCommuterRequests();
         setRideRequests(requests);
       }
@@ -784,9 +777,11 @@ export default function RidesScreen() {
     }
   }, [profile?.id, isDriver, params]);
 
-  React.useEffect(() => {
-    loadData();
-  }, [loadData, activeSegment]);
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData, activeSegment])
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -1016,11 +1011,6 @@ export default function RidesScreen() {
                 <Text style={[styles.myRidesTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', marginBottom: 0 }]}>
                   My Posted Rides
                 </Text>
-                {driverPendingCount > 0 && (
-                  <View style={[styles.badgeIndicator, { backgroundColor: theme.colors.error }]}>
-                    <Text style={styles.badgeText}>{driverPendingCount} new request{driverPendingCount !== 1 && 's'}</Text>
-                  </View>
-                )}
               </View>
               {myRides.length > 0 ? (
                 myRides.map((trip) => (
@@ -1057,7 +1047,7 @@ export default function RidesScreen() {
                       const m = String(dateObj.getMonth() + 1).padStart(2, '0');
                       const d = String(dateObj.getDate()).padStart(2, '0');
                       dateStr = `${y}-${m}-${d}`;
-                      
+
                       const hr = String(dateObj.getHours()).padStart(2, '0');
                       const mn = String(dateObj.getMinutes()).padStart(2, '0');
                       timeStr = `${hr}:${mn}`;
@@ -1092,7 +1082,7 @@ export default function RidesScreen() {
                           <Text style={[styles.createRideTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 15 }]}>
                             {req.commuter?.full_name}
                           </Text>
-                          
+
                           <Text style={[styles.createRideDesc, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 12 }]} numberOfLines={1}>
                             From: {req.origin_label.split(',')[0]}
                           </Text>
@@ -1116,7 +1106,7 @@ export default function RidesScreen() {
                           </View>
                         </View>
                       </View>
-                      <Pressable 
+                      <Pressable
                         style={{ backgroundColor: theme.colors.primary, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 }}
                         onPress={handleOfferRide}
                       >
@@ -1149,11 +1139,11 @@ export default function RidesScreen() {
         onRequestClose={() => setShowRequestModal(false)}
       >
         <Pressable style={pickerStyles.backdrop} onPress={() => setShowRequestModal(false)}>
-          <KeyboardAvoidingView 
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={[pickerStyles.timeSheet, { backgroundColor: theme.colors.surface }]}
           >
-            <Pressable onPress={() => {}} style={{ width: '100%' }}>
+            <Pressable onPress={() => { }} style={{ width: '100%' }}>
               {/* Handle bar */}
               <View style={pickerStyles.sheetHandle}>
                 <View style={[pickerStyles.handleBar, { backgroundColor: theme.colors.border }]} />
@@ -1173,19 +1163,19 @@ export default function RidesScreen() {
                 {(() => {
                   const displayOrigin = reqOrigin || (activeRoute ? { lat: activeRoute.origin_lat, lng: activeRoute.origin_lng, label: activeRoute.origin_label } : null);
                   const displayDestination = reqDestination || (activeRoute ? { lat: activeRoute.destination_lat, lng: activeRoute.destination_lng, label: activeRoute.destination_label } : null);
-                  
+
                   if (!displayOrigin || !displayDestination) return null;
-                  
+
                   return (
                     <Pressable
                       style={[
                         styles.routeSummaryCard,
-                        { 
-                          backgroundColor: theme.colors.background, 
-                          borderColor: theme.colors.border, 
-                          borderWidth: 1, 
-                          borderRadius: 12, 
-                          padding: 12, 
+                        {
+                          backgroundColor: theme.colors.background,
+                          borderColor: theme.colors.border,
+                          borderWidth: 1,
+                          borderRadius: 12,
+                          padding: 12,
                           marginBottom: 20,
                           flexDirection: 'row',
                           alignItems: 'center',

@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { Route, Profile } from '@/types/database';
+import { handleServiceError } from '@/utils/errorHelper';
 
 export interface CommuterRequest extends Route {
   commuter: Profile;
@@ -26,7 +27,7 @@ export const getCommuterRequests = async (): Promise<CommuterRequest[]> => {
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Error fetching commuter requests:', error);
+    handleServiceError('Error fetching commuter requests:', error);
     return [];
   }
 

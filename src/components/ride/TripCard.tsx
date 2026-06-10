@@ -10,6 +10,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
+import { useAuth } from '@/context/AuthContext';
 import { TripWithDriver } from '@/types/database';
 import { formatDepartureTime } from '@/utils/dateFormatter';
 import { formatCurrency } from '@/utils/fareCalculator';
@@ -23,6 +24,12 @@ interface TripCardProps {
 
 export default function TripCard({ trip, onPress }: TripCardProps) {
   const { theme } = useTheme();
+  const { profile } = useAuth();
+
+  const isMyPostedRide = profile?.id === trip.driver_id;
+  const pendingRequestsCount = isMyPostedRide && trip.bookings
+    ? trip.bookings.filter((b) => b.status === 'pending').length
+    : 0;
 
   return (
     <Pressable
@@ -56,16 +63,25 @@ export default function TripCard({ trip, onPress }: TripCardProps) {
             </Text>
           </View>
         </View>
-        <Badge
-          label={trip.status}
-          variant={
-            trip.status === 'open' || trip.status === 'full'
-              ? 'pending'
-              : trip.status === 'ongoing'
-                ? 'active'
-                : 'completed'
-          }
-        />
+        <View style={styles.badgeRow}>
+          {pendingRequestsCount > 0 && (
+            <View style={[styles.pendingBadge, { backgroundColor: theme.colors.error }]}>
+              <Text style={styles.pendingBadgeText}>
+                {pendingRequestsCount} new request{pendingRequestsCount !== 1 && 's'}
+              </Text>
+            </View>
+          )}
+          <Badge
+            label={trip.status}
+            variant={
+              trip.status === 'open' || trip.status === 'full'
+                ? 'pending'
+                : trip.status === 'ongoing'
+                  ? 'active'
+                  : 'completed'
+            }
+          />
+        </View>
       </View>
 
       {/* Route */}
@@ -134,6 +150,23 @@ const styles = StyleSheet.create({
   },
   driverInfo: {
     flex: 1,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pendingBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pendingBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontFamily: 'Inter-Bold',
   },
   driverName: {
     fontSize: 15,

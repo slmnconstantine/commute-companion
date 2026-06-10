@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { Review, ReviewWithProfiles } from '@/types/database';
 import { sendPushNotification } from './pushNotifications';
+import { handleServiceError } from '@/utils/errorHelper';
 
 /** Helper to notify the reviewee of a new review */
 async function notifyReviewee(reviewData: Omit<Review, 'id' | 'created_at'>) {
@@ -27,7 +28,7 @@ async function notifyReviewee(reviewData: Omit<Review, 'id' | 'created_at'>) {
       );
     }
   } catch (e) {
-    console.error('Error sending review push notification:', e);
+    handleServiceError('Error sending review push notification:', e);
   }
 }
 
@@ -50,7 +51,7 @@ export async function submitReviewAndUpdateProfile(reviewData: Omit<Review, 'id'
     notifyReviewee(reviewData);
     return { error: null };
   } catch (err) {
-    console.error('Failed to submit review', err);
+    handleServiceError('Failed to submit review', err);
     return { error: err as Error };
   }
 }

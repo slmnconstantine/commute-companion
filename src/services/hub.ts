@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { HubPostWithAuthor, PostCommentWithAuthor } from '@/types/database';
 import { sendPushNotification } from './pushNotifications';
+import { handleServiceError } from '@/utils/errorHelper';
 
 function isJsonLabel(label: string | null) {
   if (!label) return false;
@@ -26,7 +27,7 @@ export const getPosts = async (routeHash: string, currentUserId: string): Promis
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Error fetching posts:', error);
+    handleServiceError('Error fetching posts:', error);
     return [];
   }
 
@@ -63,7 +64,7 @@ export const toggleLike = async (postId: string, userId: string, currentlyLiked:
       .match({ post_id: postId, user_id: userId });
     
     if (error) {
-      console.error('Error unliking post:', error);
+      handleServiceError('Error unliking post:', error);
       return false;
     }
   } else {
@@ -72,7 +73,7 @@ export const toggleLike = async (postId: string, userId: string, currentlyLiked:
       .insert({ post_id: postId, user_id: userId });
       
     if (error) {
-      console.error('Error liking post:', error);
+      handleServiceError('Error liking post:', error);
       return false;
     }
     
@@ -100,7 +101,7 @@ export const getComments = async (postId: string): Promise<PostCommentWithAuthor
     .order('created_at', { ascending: true });
 
   if (error) {
-    console.error('Error fetching comments:', error);
+    handleServiceError('Error fetching comments:', error);
     return [];
   }
 
@@ -215,7 +216,7 @@ export const deletePost = async (postId: string, userId: string): Promise<boolea
     .match({ id: postId, author_id: userId });
 
   if (error) {
-    console.error('Error deleting post:', error);
+    handleServiceError('Error deleting post:', error);
     return false;
   }
   return true;
@@ -230,7 +231,7 @@ export const updatePost = async (postId: string, userId: string, statusTag: stri
     .single();
 
   if (error) {
-    console.error('Error updating post:', error);
+    handleServiceError('Error updating post:', error);
     return null;
   }
 
@@ -247,7 +248,7 @@ export const deleteAllUserPosts = async (userId: string, routeHash: string): Pro
     .match({ author_id: userId, route_hash: routeHash });
 
   if (error) {
-    console.error('Error deleting all user posts:', error);
+    handleServiceError('Error deleting all user posts:', error);
     return false;
   }
   return true;

@@ -1,5 +1,6 @@
 import { OSRM_BASE_URL } from '@/lib/constants';
 import polyline from '@mapbox/polyline';
+import { handleServiceError } from '@/utils/errorHelper';
 
 export interface RouteResult {
   coordinates: { latitude: number; longitude: number }[];
@@ -35,7 +36,7 @@ export async function getRoute(
       encodedPolyline: route.geometry,
     };
   } catch (error) {
-    console.error('Routing error:', error);
+    handleServiceError('Routing error:', error);
     return null;
   }
 }

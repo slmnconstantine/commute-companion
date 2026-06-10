@@ -23,15 +23,24 @@ export default function VoiceAssistantFab() {
   const isDragging = useSharedValue(false);
 
   // Determine context
-  const currentScreen = segments[segments.length - 1] || 'Home';
+  let currentScreen = segments[segments.length - 1] || 'Home';
   let selectedTripId = null;
   let selectedChatRoomId = null;
 
-  if (pathname.startsWith('/(main)/ride/') && segments.length > 2) {
-    selectedTripId = segments[segments.length - 1];
-  }
-  if (pathname.startsWith('/(main)/chat/') && segments.length > 2) {
-    selectedChatRoomId = segments[segments.length - 1];
+  if (pathname.startsWith('/ride/')) {
+    const parts = pathname.split('/');
+    const idParam = parts[2];
+    if (idParam && !['create', 'set-route', 'book', 'review'].includes(idParam)) {
+      selectedTripId = idParam;
+      currentScreen = 'RideDetails';
+    }
+  } else if (pathname.startsWith('/chat/')) {
+    const parts = pathname.split('/');
+    const idParam = parts[2];
+    if (idParam) {
+      selectedChatRoomId = idParam;
+      currentScreen = 'ChatDetails';
+    }
   }
 
   const handlePress = () => {
