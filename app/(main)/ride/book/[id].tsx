@@ -7,6 +7,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { getTripById } from '@/services/trips';
 import { createBooking } from '@/services/bookings';
+import { supabase } from '@/lib/supabase';
 import { formatCurrency, calculateFare } from '@/utils/fareCalculator';
 import { formatDepartureTime } from '@/utils/dateFormatter';
 import { TripWithDriver } from '@/types/database';
@@ -48,6 +49,25 @@ export default function BookRideScreen() {
         platform_fee: platformFee,
       });
       if (error) throw error;
+
+      // Deactivate any matching active ride request for this passenger
+      try {
+        const oLat = trip.origin_lat.toFixed(2);
+        const oLng = trip.origin_lng.toFixed(2);
+        const dLat = trip.destination_lat.toFixed(2);
+        const dLng = trip.destination_lng.toFixed(2);
+        const routeHash = `${oLat},${oLng}_${dLat},${dLng}`;
+
+        await supabase
+          .from('routes')
+          .update({ is_active: false })
+          .eq('user_id', profile.id)
+          .eq('route_hash', routeHash)
+          .eq('is_active', true);
+      } catch (deactivateErr) {
+        console.warn('Failed to deactivate matching active request:', deactivateErr);
+      }
+
       Alert.alert('Booking Sent!', 'Your booking request has been sent to the driver.', [
         { text: 'OK', onPress: () => router.back() },
       ]);

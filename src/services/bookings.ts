@@ -81,3 +81,9 @@ export async function updateBookingStatus(id: string, status: string): Promise<v
 
   if (error) throw new Error(`DB Error: ${error.message} (Code: ${error.code})`);
 }
+
+/** Delete a booking */
+export async function deleteBooking(id: string): Promise<void> {
+  const { error } = await supabase.from('bookings').delete().eq('id', id);
+  if (error) throw new Error(`DB Error: ${error.message}`);
+}

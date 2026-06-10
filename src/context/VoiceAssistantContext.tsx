@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from './AuthContext';
 import { sendMessage } from '@/services/messages';
+import { getOrCreateChatRoom, joinChatRoom, getChatRoom } from '@/services/chatRooms';
 import { createPost, deleteAllUserPosts } from '@/services/hub';
 import { getTripBookings, updateBookingStatus } from '@/services/bookings';
 
@@ -19,15 +20,23 @@ export interface AssistantCommand {
   transcript: string;
 }
 
+export interface VoiceMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+}
+
 interface VoiceAssistantContextValue {
   state: AssistantState;
   transcript: string;
   spokenReply: string;
+  conversation: VoiceMessage[];
   command: AssistantCommand | null;
   startRecording: (contextData: any, preserveCommand?: boolean) => Promise<void>;
   stopRecording: () => Promise<void>;
   cancel: () => void;
   confirmAction: () => Promise<void>;
+  clearConversation: () => void;
 }
 
 const VoiceAssistantContext = createContext<VoiceAssistantContextValue | undefined>(undefined);
@@ -36,6 +45,7 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AssistantState>('idle');
   const [transcript, setTranscript] = useState('');
   const [spokenReply, setSpokenReply] = useState('');
+  const [conversation, setConversation] = useState<VoiceMessage[]>([]);
   const [command, setCommand] = useState<AssistantCommand | null>(null);
   const [currentContext, setCurrentContext] = useState<any>(null);
 
@@ -50,6 +60,7 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
       Speech.stop();
       if (!preserveCommand) {
         setCommand(null);
+        setConversation([]);
       }
       setTranscript('');
       setSpokenReply('');
@@ -67,7 +78,10 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
       console.error('Failed to start recording', e);
       setState('error');
       setSpokenReply(e.message || 'Could not start microphone');
-      setTimeout(() => setState('idle'), 3000);
+      setTimeout(() => {
+        setState('idle');
+        setConversation([]);
+      }, 3000);
     }
   }, [recorder]);
 
@@ -117,12 +131,15 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
         
         if (isYes) {
           setSpokenReply('Okay, executing now.');
+          setConversation(prev => [...prev, { id: Date.now().toString(), role: 'user', text: t }, { id: (Date.now() + 1).toString(), role: 'assistant', text: 'Okay, executing now.' }]);
           Speech.speak('Okay, executing now.', { onDone: () => { executeCommand(command); } });
         } else if (isNo) {
           setSpokenReply('Action cancelled.');
+          setConversation(prev => [...prev, { id: Date.now().toString(), role: 'user', text: t }, { id: (Date.now() + 1).toString(), role: 'assistant', text: 'Action cancelled.' }]);
           Speech.speak('Action cancelled.', { onDone: () => { cancel(); } });
         } else {
           setSpokenReply("I didn't catch a clear yes or no. Cancelling action.");
+          setConversation(prev => [...prev, { id: Date.now().toString(), role: 'user', text: t }, { id: (Date.now() + 1).toString(), role: 'assistant', text: "I didn't catch a clear yes or no. Cancelling action." }]);
           Speech.speak("I didn't catch a clear yes or no. Cancelling action.", { onDone: () => { cancel(); } });
         }
         return;
@@ -131,6 +148,11 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
       setTranscript(result.transcript);
       setSpokenReply(result.spokenReply);
       setCommand(result);
+      setConversation(prev => [
+        ...prev,
+        { id: Date.now().toString(), role: 'user', text: result.transcript },
+        { id: (Date.now() + 1).toString(), role: 'assistant', text: result.spokenReply }
+      ]);
 
       if (result.spokenReply) {
         setState('speaking');
@@ -160,8 +182,12 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
       console.error('Voice Assistant Error:', e);
       setState('error');
       setSpokenReply('Sorry, there was an error processing your command.');
+      setConversation(prev => [...prev, { id: Date.now().toString(), role: 'assistant', text: 'Sorry, there was an error processing your command.' }]);
       Speech.speak('Sorry, there was an error processing your command.', {
-        onDone: () => setState('idle')
+        onDone: () => {
+          setState('idle');
+          setConversation([]);
+        }
       });
     }
   }, [state, recorder, profile, currentContext]);
@@ -175,7 +201,12 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
     setCommand(null);
     setTranscript('');
     setSpokenReply('');
+    setConversation([]);
   }, [state, recorder]);
+
+  const clearConversation = useCallback(() => {
+    setConversation([]);
+  }, []);
 
   const confirmAction = useCallback(async () => {
     if (state !== 'confirming' || !command) return;
@@ -229,7 +260,27 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
             }
             
             await updateBookingStatus(targetBooking.id, 'accepted');
-            // Provide voice feedback handled by AI spokenReply
+            
+            // Create/fetch chat room and join members
+            try {
+              let room = await getChatRoom(tripId);
+              let isNewRoom = false;
+              if (!room) {
+                room = await getOrCreateChatRoom(tripId);
+                isNewRoom = true;
+              }
+              if (room) {
+                await joinChatRoom(room.id, targetBooking.commuter_id);
+                if (isNewRoom && profile?.id) {
+                  await joinChatRoom(room.id, profile.id);
+                }
+                if (profile?.id) {
+                  await sendMessage(room.id, profile.id, `${targetBooking.commuter?.full_name || 'Passenger'} has joined the trip!`, true);
+                }
+              }
+            } catch (chatErr) {
+              console.error('Error setting up chatroom for accepted booking via voice:', chatErr);
+            }
           }
         }
       } else if (cmd.type === 'DRAFT_MESSAGE') {
@@ -262,11 +313,15 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
       setTimeout(() => {
         setState('idle');
         setCommand(null);
+        setConversation([]);
       }, 1000);
     } catch (e) {
       console.error('Execution Error:', e);
       setState('error');
-      setTimeout(() => setState('idle'), 2000);
+      setTimeout(() => {
+        setState('idle');
+        setConversation([]);
+      }, 2000);
     }
   };
 
@@ -275,11 +330,13 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
       state,
       transcript,
       spokenReply,
+      conversation,
       command,
       startRecording,
       stopRecording,
       cancel,
-      confirmAction
+      confirmAction,
+      clearConversation
     }}>
       {children}
     </VoiceAssistantContext.Provider>

@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { Vehicle } from '@/types/database';
+import { handleServiceError } from '@/utils/errorHelper';
 
 export const getVehicles = async (driverId: string): Promise<Vehicle[]> => {
   const { data, error } = await supabase
@@ -9,7 +10,7 @@ export const getVehicles = async (driverId: string): Promise<Vehicle[]> => {
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Error fetching vehicles:', error);
+    handleServiceError('Error fetching vehicles:', error);
     return [];
   }
   return data as Vehicle[];
@@ -36,7 +37,7 @@ export const addVehicle = async (
     .single();
 
   if (error) {
-    console.error('Error adding vehicle:', error);
+    handleServiceError('Error adding vehicle:', error);
     throw error;
   }
   return data as Vehicle;
@@ -49,7 +50,7 @@ export const deleteVehicle = async (vehicleId: string): Promise<boolean> => {
     .eq('id', vehicleId);
 
   if (error) {
-    console.error('Error deleting vehicle:', error);
+    handleServiceError('Error deleting vehicle:', error);
     return false;
   }
   return true;

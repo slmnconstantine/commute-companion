@@ -1,3 +1,5 @@
+import { handleServiceError } from '@/utils/errorHelper';
+
 // Helper to base64 encode strings in standard browser/React Native environment (pure JS fallback)
 function base64Encode(str: string): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
@@ -47,22 +49,53 @@ interface CheckoutSessionResponse {
   error?: string;
 }
 
+interface PaymentMethodResponse {
+  success: boolean;
+  paymentMethodId: string;
+  isMock: boolean;
+  error?: string;
+  data?: any;
+}
+
+/**
+ * Helper to call Paymongo API endpoints using Basic Auth
+ */
+async function paymongoFetch(
+  endpoint: string,
+  method: 'GET' | 'POST',
+  attributes: Record<string, any>
+): Promise<any> {
+  const response = await fetch(`${PAYMONGO_API_URL}${endpoint}`, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Basic ${base64Encode(PAYMONGO_SECRET_KEY + ':')}`
+    },
+    body: method === 'POST' ? JSON.stringify({ data: { attributes } }) : undefined
+  });
+
+  const json = await response.json();
+
+  if (!response.ok) {
+    handleServiceError(`[Paymongo Service] API error at ${endpoint}:`, json);
+    const errMsg = json.errors?.[0]?.detail || 'API request failed';
+    throw new Error(errMsg);
+  }
+
+  return json;
+}
+
 /**
  * Generate a Paymongo checkout session url
  * 
- * @param amountInPesos Amount to pay (e.g. 150.00)
- * @param driverName Full name of the paying driver
- * @param driverEmail Optional email address of driver
+ * @param attributes Broad checkout session options (amount, billing, line_items, etc.)
  */
 export async function createCheckoutSession(
-  amountInPesos: number,
-  driverName: string,
-  driverEmail: string = 'driver@commutecompanion.com'
+  attributes: Record<string, any>
 ): Promise<CheckoutSessionResponse> {
-  
   // If the secret key is empty, automatically use mock simulation mode
   if (!PAYMONGO_SECRET_KEY) {
-    console.log('[Paymongo Service] Secret Key missing. Using simulated sandbox mode.');
+    console.log('[Paymongo Service] Secret Key missing. Using simulated sandbox mode for checkout session.');
     return {
       success: true,
       checkoutUrl: 'mock://paymongo-sandbox',
@@ -71,51 +104,7 @@ export async function createCheckoutSession(
   }
 
   try {
-    const amountInCentavos = Math.round(amountInPesos * 100);
-
-    const response = await fetch(`${PAYMONGO_API_URL}/checkout_sessions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Basic ${base64Encode(PAYMONGO_SECRET_KEY + ':')}`
-      },
-      body: JSON.stringify({
-        data: {
-          attributes: {
-            billing: {
-              name: driverName,
-              email: driverEmail
-            },
-            line_items: [
-              {
-                amount: amountInCentavos,
-                currency: 'PHP',
-                name: 'Commute Companion - Platform Fee Settlement',
-                quantity: 1
-              }
-            ],
-            payment_method_types: ['gcash', 'paymaya', 'card'],
-            description: `Payment of Platform Fees for driver: ${driverName}`,
-            success_url: 'commutecompanion://payment/success',
-            cancel_url: 'commutecompanion://payment/cancel'
-          }
-        }
-      })
-    });
-
-    const json = await response.json();
-
-    if (!response.ok) {
-      console.error('[Paymongo Service] Checkout API returned error:', json);
-      const errMsg = json.errors?.[0]?.detail || 'Failed to initialize payment gateway';
-      return {
-        success: false,
-        checkoutUrl: '',
-        isMock: false,
-        error: errMsg
-      };
-    }
-
+    const json = await paymongoFetch('/checkout_sessions', 'POST', attributes);
     const checkoutUrl = json.data?.attributes?.checkout_url;
     if (!checkoutUrl) {
       return {
@@ -133,10 +122,58 @@ export async function createCheckoutSession(
     };
 
   } catch (err: any) {
-    console.error('[Paymongo Service] Exception during checkout session creation:', err);
+    handleServiceError('[Paymongo Service] Exception during checkout session creation:', err);
     return {
       success: false,
       checkoutUrl: '',
+      isMock: false,
+      error: err.message || 'Network connectivity error'
+    };
+  }
+}
+
+/**
+ * Create a Paymongo payment method
+ * 
+ * @param attributes Broad payment method attributes (type, details, billing, etc.)
+ */
+export async function createPaymentMethod(
+  attributes: Record<string, any>
+): Promise<PaymentMethodResponse> {
+  // If the secret key is empty, automatically use mock simulation mode
+  if (!PAYMONGO_SECRET_KEY) {
+    console.log('[Paymongo Service] Secret Key missing. Using simulated sandbox mode for payment method.');
+    return {
+      success: true,
+      paymentMethodId: 'pm_mock_123456789',
+      isMock: true
+    };
+  }
+
+  try {
+    const json = await paymongoFetch('/payment_methods', 'POST', attributes);
+    const paymentMethodId = json.data?.id;
+    if (!paymentMethodId) {
+      return {
+        success: false,
+        paymentMethodId: '',
+        isMock: false,
+        error: 'No payment method ID returned from server'
+      };
+    }
+
+    return {
+      success: true,
+      paymentMethodId,
+      isMock: false,
+      data: json.data
+    };
+
+  } catch (err: any) {
+    handleServiceError('[Paymongo Service] Exception during payment method creation:', err);
+    return {
+      success: false,
+      paymentMethodId: '',
       isMock: false,
       error: err.message || 'Network connectivity error'
     };

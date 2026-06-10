@@ -86,6 +86,7 @@ export async function sendPushNotification(expoPushToken: string, title: string,
     const data = await response.json();
     console.log('Expo Push Response:', data);
   } catch (e) {
-    console.error('Error sending push notification', e);
+    const { handleServiceError } = require('@/utils/errorHelper');
+    handleServiceError('Error sending push notification', e);
   }
 }

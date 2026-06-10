@@ -3,6 +3,7 @@ import * as FileSystem from 'expo-file-system';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '@/lib/supabase';
 import { AVATAR_BUCKET, DOCUMENTS_BUCKET } from '@/lib/constants';
+import { handleServiceError } from '@/utils/errorHelper';
 
 /** Pick an image from the gallery */
 export async function pickImage(): Promise<string | null> {
@@ -51,7 +52,7 @@ export async function uploadImage(
       .getPublicUrl(data.path);
     return urlData.publicUrl;
   } catch (error) {
-    console.error('Upload error:', error);
+    handleServiceError('Upload error:', error);
     return null;
   }
 }

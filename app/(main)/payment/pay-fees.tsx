@@ -60,11 +60,26 @@ export default function PayFeesScreen() {
 
     try {
       // Create checkout session using Paymongo service
-      const res = await createCheckoutSession(
-        parsedAmount,
-        profile?.full_name || 'Driver Account',
-        'driver@commutecompanion.com'
-      );
+      const res = await createCheckoutSession({
+        amount: Math.round(parsedAmount * 100),
+        currency: 'PHP',
+        payment_method_types: ['gcash', 'paymaya', 'card'],
+        description: `Payment of Platform Fees for driver: ${profile?.full_name || 'Driver Account'}`,
+        billing: {
+          name: profile?.full_name || 'Driver Account',
+          email: 'driver@commutecompanion.com'
+        },
+        line_items: [
+          {
+            amount: Math.round(parsedAmount * 100),
+            currency: 'PHP',
+            name: 'Commute Companion - Platform Fee Settlement',
+            quantity: 1
+          }
+        ],
+        success_url: 'commutecompanion://payment/success',
+        cancel_url: 'commutecompanion://payment/cancel'
+      });
 
       if (!res.success) {
         throw new Error(res.error || 'Failed to start payment session.');

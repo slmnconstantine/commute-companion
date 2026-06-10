@@ -1,14 +1,23 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Animated, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Animated, ActivityIndicator, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import { useVoiceAssistant } from '@/context/VoiceAssistantContext';
 
 export default function VoiceAssistantSheet() {
   const { theme } = useTheme();
-  const { state, transcript, spokenReply, command, stopRecording, cancel, confirmAction } = useVoiceAssistant();
+  const { state, conversation, stopRecording, cancel, confirmAction } = useVoiceAssistant();
   
   const slideAnim = useRef(new Animated.Value(300)).current;
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    if (scrollViewRef.current && conversation.length > 0) {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  }, [conversation, state]);
 
   const isVisible = state !== 'idle' && state !== 'error';
 
@@ -55,47 +64,54 @@ export default function VoiceAssistantSheet() {
         </View>
 
         <View style={styles.content}>
-          {['transcribing', 'thinking', 'executing'].includes(state) && (
-            <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginVertical: 20 }} />
-          )}
-
-          {state === 'recording' && (
-            <Pressable 
-              onPress={stopRecording}
-              style={[styles.recordBtn, { backgroundColor: theme.colors.error }]}
-            >
-              <Ionicons name="stop" size={32} color="#fff" />
-            </Pressable>
-          )}
-
-          {transcript ? (
-            <Text style={[styles.transcript, { color: theme.colors.textMuted }]}>
-              "{transcript}"
-            </Text>
-          ) : null}
-
-          {spokenReply ? (
-            <Text style={[styles.reply, { color: theme.colors.text }]}>
-              {spokenReply}
-            </Text>
-          ) : null}
-
-          {state === 'confirming' && (
-            <View style={styles.actionRow}>
-              <Pressable 
-                style={[styles.btn, styles.btnCancel, { borderColor: theme.colors.border }]} 
-                onPress={cancel}
+          <ScrollView 
+            ref={scrollViewRef}
+            style={styles.chatScroll}
+            contentContainerStyle={styles.chatScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {conversation.map((msg) => (
+              <Text 
+                key={msg.id} 
+                style={[
+                  msg.role === 'user' ? styles.transcript : styles.reply, 
+                  { color: msg.role === 'user' ? theme.colors.textMuted : theme.colors.text }
+                ]}
               >
-                <Text style={[styles.btnText, { color: theme.colors.text }]}>Cancel</Text>
-              </Pressable>
+                {msg.role === 'user' ? `"${msg.text}"` : msg.text}
+              </Text>
+            ))}
+
+            {['transcribing', 'thinking', 'executing'].includes(state) && (
+              <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginVertical: 20 }} />
+            )}
+
+            {state === 'recording' && (
               <Pressable 
-                style={[styles.btn, styles.btnConfirm, { backgroundColor: theme.colors.primary }]} 
-                onPress={confirmAction}
+                onPress={stopRecording}
+                style={[styles.recordBtn, { backgroundColor: theme.colors.error }]}
               >
-                <Text style={[styles.btnText, { color: '#fff' }]}>Confirm</Text>
+                <Ionicons name="stop" size={32} color="#fff" />
               </Pressable>
-            </View>
-          )}
+            )}
+
+            {state === 'confirming' && (
+              <View style={styles.actionRow}>
+                <Pressable 
+                  style={[styles.btn, styles.btnCancel, { borderColor: theme.colors.border }]} 
+                  onPress={cancel}
+                >
+                  <Text style={[styles.btnText, { color: theme.colors.text }]}>Cancel</Text>
+                </Pressable>
+                <Pressable 
+                  style={[styles.btn, styles.btnConfirm, { backgroundColor: theme.colors.primary }]} 
+                  onPress={confirmAction}
+                >
+                  <Text style={[styles.btnText, { color: '#fff' }]}>Confirm</Text>
+                </Pressable>
+              </View>
+            )}
+          </ScrollView>
         </View>
       </Animated.View>
     </View>
@@ -135,6 +151,16 @@ const styles = StyleSheet.create({
   content: {
     alignItems: 'center',
     minHeight: 120,
+    width: '100%',
+  },
+  chatScroll: {
+    maxHeight: 400,
+    width: '100%',
+  },
+  chatScrollContent: {
+    alignItems: 'center',
+    paddingVertical: 10,
+    width: '100%',
   },
   recordBtn: {
     width: 72,

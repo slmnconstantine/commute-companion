@@ -1,13 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Map, Camera, RasterSource, Layer, GeoJSONSource, Marker } from '@maplibre/maplibre-react-native';
+import { Map, Camera, RasterSource, Layer, GeoJSONSource, Marker, type CameraRef } from '@maplibre/maplibre-react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { getTripById, updateTripStatus } from '@/services/trips';
-import { getTripBookings, updateBookingStatus } from '@/services/bookings';
+import { getTripBookings, updateBookingStatus, deleteBooking } from '@/services/bookings';
 import { getOrCreateChatRoom, joinChatRoom, getChatRoom } from '@/services/chatRooms';
 import { sendMessage } from '@/services/messages';
 import { decodePolyline } from '@/services/routing';
@@ -35,25 +35,52 @@ export default function TripDetailScreen() {
   const [bookings, setBookings] = useState<BookingWithCommuter[]>([]);
   const [chatRoomId, setChatRoomId] = useState<string | null>(null);
   const [processingBookingId, setProcessingBookingId] = useState<string | null>(null);
+  const [hasPromptedArrival, setHasPromptedArrival] = useState(false);
 
-  useEffect(() => {
-    loadTrip();
-  }, [id]);
+  const cameraRef = useRef<CameraRef>(null);
+
+  const userBooking = bookings.find(b => b.commuter_id === profile?.id);
+  const isConfirmedPassenger = userBooking?.status === 'accepted';
+  const isDriver = profile?.id === trip?.driver_id;
+  const isOngoingDriver = !!(isDriver && trip && trip.status === 'ongoing');
+  const isOngoingActiveUser = !!(trip && trip.status === 'ongoing' && (isDriver || isConfirmedPassenger));
+
+  // Haversine formula to calculate distance in km
+  const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371; // Radius of the earth in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const d = R * c; // Distance in km
+    return d;
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      loadTrip();
+    }, [id])
+  );
 
   const loadTrip = async () => {
     if (!id) return;
     setLoading(true);
     try {
-      const data = await getTripById(id);
+      const [data, bookingsData, chatRoom] = await Promise.all([
+        getTripById(id),
+        getTripBookings(id),
+        getChatRoom(id)
+      ]);
+
       setTrip(data);
       if (data?.route_polyline) {
         setRouteCoords(decodePolyline(data.route_polyline));
       }
       
-      const bookingsData = await getTripBookings(id);
       setBookings(bookingsData);
-      
-      const chatRoom = await getChatRoom(id);
       if (chatRoom) setChatRoomId(chatRoom.id);
     } catch (e) {
       Alert.alert('Error', 'Failed to load trip details.');
@@ -108,50 +135,168 @@ export default function TripDetailScreen() {
     };
   }, [trip?.status, profile?.id]);
 
-  const handleAcceptBooking = async (booking: BookingWithCommuter) => {
-    setProcessingBookingId(booking.id);
-    try {
-      await updateBookingStatus(booking.id, 'accepted');
-      
-      let room = await getChatRoom(id);
-      let isNewRoom = false;
-      if (!room) {
-        room = await getOrCreateChatRoom(id);
-        isNewRoom = true;
-      }
-      if (!room) throw new Error("Could not create chat room");
-      
-      setChatRoomId(room.id);
-      await joinChatRoom(room.id, booking.commuter_id);
-      
-      if (isNewRoom && profile?.id) {
-        await joinChatRoom(room.id, profile.id);
-      }
-      
-      if (profile?.id) {
-        await sendMessage(room.id, profile.id, `${booking.commuter.full_name} has joined the trip!`, true);
-      }
-      
-      setBookings(prev => prev.map(b => b.id === booking.id ? { ...b, status: 'accepted' } : b));
-      Alert.alert('Success', 'Booking accepted and added to group chat!');
-    } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to accept booking');
-      console.error(e);
-    } finally {
-      setProcessingBookingId(null);
+  // Follow driver's live location on map when trip is ongoing
+  useEffect(() => {
+    if (isOngoingActiveUser && driverLiveLocation && cameraRef.current) {
+      cameraRef.current.flyTo({
+        center: [driverLiveLocation.longitude, driverLiveLocation.latitude],
+        zoom: 15,
+        duration: 1000,
+      });
     }
+  }, [driverLiveLocation, isOngoingActiveUser]);
+
+  // Prompt driver when they arrive within 100m of the destination
+  useEffect(() => {
+    if (isOngoingDriver && driverLiveLocation && trip && !hasPromptedArrival) {
+      const distance = getDistance(
+        driverLiveLocation.latitude,
+        driverLiveLocation.longitude,
+        trip.destination_lat,
+        trip.destination_lng
+      );
+      if (distance < 0.1) {
+        setHasPromptedArrival(true);
+        Alert.alert(
+          'Destination Reached 🎉',
+          'You have arrived at your destination. Would you like to complete this trip now?',
+          [
+            { text: 'Not Yet', style: 'cancel' },
+            { text: 'Complete Trip', onPress: () => handleUpdateTripStatus('completed') }
+          ]
+        );
+      }
+    }
+  }, [driverLiveLocation, isOngoingDriver, trip, hasPromptedArrival]);
+
+  const handleAcceptBooking = async (booking: BookingWithCommuter) => {
+    Alert.alert(
+      'Accept Request',
+      `Are you sure you want to accept the request from ${booking.commuter.full_name}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Accept',
+          onPress: async () => {
+            setProcessingBookingId(booking.id);
+            try {
+              await updateBookingStatus(booking.id, 'accepted');
+              
+              let room = await getChatRoom(id);
+              let isNewRoom = false;
+              if (!room) {
+                room = await getOrCreateChatRoom(id);
+                isNewRoom = true;
+              }
+              if (!room) throw new Error("Could not create chat room");
+              
+              setChatRoomId(room.id);
+              await joinChatRoom(room.id, booking.commuter_id);
+              
+              if (isNewRoom && profile?.id) {
+                await joinChatRoom(room.id, profile.id);
+              }
+              
+              if (profile?.id) {
+                await sendMessage(room.id, profile.id, `${booking.commuter.full_name} has joined the trip!`, true);
+              }
+              
+              setBookings(prev => prev.map(b => b.id === booking.id ? { ...b, status: 'accepted' } : b));
+              Alert.alert('Success', 'Booking accepted and added to group chat!');
+            } catch (e: any) {
+              Alert.alert('Error', e.message || 'Failed to accept booking');
+              console.error(e);
+            } finally {
+              setProcessingBookingId(null);
+            }
+          }
+        }
+      ]
+    );
   };
 
-  const handleRejectBooking = async (bookingId: string) => {
-    setProcessingBookingId(bookingId);
-    try {
-      await updateBookingStatus(bookingId, 'rejected');
-      setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: 'rejected' } : b));
-    } catch (e) {
-      Alert.alert('Error', 'Failed to reject booking');
-    } finally {
-      setProcessingBookingId(null);
-    }
+  const handleRejectBooking = async (booking: BookingWithCommuter) => {
+    Alert.alert(
+      'Reject Request',
+      `Are you sure you want to reject the request from ${booking.commuter.full_name}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reject',
+          style: 'destructive',
+          onPress: async () => {
+            setProcessingBookingId(booking.id);
+            try {
+              await updateBookingStatus(booking.id, 'rejected');
+              setBookings(prev => prev.map(b => b.id === booking.id ? { ...b, status: 'rejected' } : b));
+              Alert.alert('Success', 'Booking request rejected.');
+            } catch (e) {
+              Alert.alert('Error', 'Failed to reject booking');
+            } finally {
+              setProcessingBookingId(null);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleRemovePassenger = async (booking: BookingWithCommuter) => {
+    Alert.alert(
+      'Remove Passenger',
+      `Are you sure you want to remove ${booking.commuter.full_name} from this trip?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            setProcessingBookingId(booking.id);
+            try {
+              await deleteBooking(booking.id);
+              if (chatRoomId && profile?.id) {
+                await sendMessage(chatRoomId, profile.id, `${booking.commuter.full_name} was removed from the trip by the driver.`, true);
+              }
+              setBookings(prev => prev.filter(b => b.id !== booking.id));
+              Alert.alert('Success', `${booking.commuter.full_name} has been removed from the trip.`);
+            } catch (e: any) {
+              Alert.alert('Error', e.message || 'Failed to remove passenger');
+            } finally {
+              setProcessingBookingId(null);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleLeaveTrip = async (bookingId: string) => {
+    Alert.alert(
+      'Leave Trip',
+      'Are you sure you want to remove yourself from this trip?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Leave',
+          style: 'destructive',
+          onPress: async () => {
+            setProcessingBookingId(bookingId);
+            try {
+              await deleteBooking(bookingId);
+              if (chatRoomId && profile?.id) {
+                await sendMessage(chatRoomId, profile.id, `${profile.full_name} has left the trip.`, true);
+              }
+              setBookings(prev => prev.filter(b => b.id !== bookingId));
+              Alert.alert('Success', 'You have left the trip.');
+            } catch (e: any) {
+              Alert.alert('Error', e.message || 'Failed to leave trip');
+            } finally {
+              setProcessingBookingId(null);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const handleUpdateTripStatus = async (newStatus: 'ongoing' | 'completed') => {
@@ -164,19 +309,42 @@ export default function TripDetailScreen() {
     }
   };
 
+  const handleDeleteTrip = () => {
+    if (!trip) return;
+    Alert.alert(
+      'Delete Ride 🗑️',
+      'Are you sure you want to delete this open ride? This will remove the ride and cancel any bookings.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { deleteTrip } = require('@/services/trips');
+              const { error } = await deleteTrip(trip.id);
+              if (error) throw error;
+
+              Alert.alert('Success', 'Ride successfully deleted.');
+              router.back();
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Failed to delete ride.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   if (loading) return <LoadingSpinner size="lg" message="Loading trip..." />;
   if (!trip) return <LoadingSpinner size="lg" message="Trip not found" />;
 
-  const isDriver = profile?.id === trip.driver_id;
-  const userBooking = bookings.find(b => b.commuter_id === profile?.id);
-  const isConfirmedPassenger = userBooking?.status === 'accepted';
-  
   const showChatButton = (isDriver && chatRoomId) || (isConfirmedPassenger && chatRoomId);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       {/* Map Header */}
-      <View style={styles.mapSection}>
+      <View style={[styles.mapSection, isOngoingActiveUser && styles.mapSectionEnlarged]}>
         <Map
           style={styles.map}
           logo={false}
@@ -185,6 +353,7 @@ export default function TripDetailScreen() {
           mapStyle={{ version: 8, sources: {}, layers: [] }}
         >
           <Camera
+            ref={cameraRef}
             initialViewState={{
               center: [(trip.origin_lng + trip.destination_lng) / 2, (trip.origin_lat + trip.destination_lat) / 2],
               zoom: 10,
@@ -239,6 +408,16 @@ export default function TripDetailScreen() {
         >
           <Ionicons name="arrow-back" size={22} color={theme.colors.text} />
         </Pressable>
+
+        {/* Delete Ride button overlay */}
+        {isDriver && trip.status === 'open' && (
+          <Pressable
+            style={[styles.deleteBtn, { backgroundColor: theme.colors.surface, top: insets.top + 8 }]}
+            onPress={handleDeleteTrip}
+          >
+            <Ionicons name="trash-outline" size={22} color={theme.colors.error} />
+          </Pressable>
+        )}
       </View>
 
       {/* Content */}
@@ -326,7 +505,7 @@ export default function TripDetailScreen() {
                   <View style={{ flexDirection: 'row', gap: 8 }}>
                     <Pressable 
                       style={[styles.actionBtn, { backgroundColor: theme.colors.error + '20' }]} 
-                      onPress={() => handleRejectBooking(booking.id)}
+                      onPress={() => handleRejectBooking(booking)}
                       disabled={processingBookingId === booking.id}
                     >
                       <Ionicons name="close" size={20} color={theme.colors.error} />
@@ -339,6 +518,16 @@ export default function TripDetailScreen() {
                       <Ionicons name="checkmark" size={20} color={theme.colors.success} />
                     </Pressable>
                   </View>
+                )}
+
+                {booking.status === 'accepted' && (trip.status === 'open' || trip.status === 'full') && (
+                  <Pressable 
+                    style={[styles.actionBtn, { backgroundColor: theme.colors.error + '20' }]} 
+                    onPress={() => handleRemovePassenger(booking)}
+                    disabled={processingBookingId === booking.id}
+                  >
+                    <Ionicons name="trash-outline" size={18} color={theme.colors.error} />
+                  </Pressable>
                 )}
               </View>
             ))}
@@ -375,14 +564,24 @@ export default function TripDetailScreen() {
 
       {/* Open Trip Chat CTA (Commuter) */}
       {!isDriver && showChatButton && (
-        <View style={[styles.bottomCTA, { backgroundColor: theme.colors.surface, paddingBottom: insets.bottom + 16, borderTopColor: theme.colors.border }]}>
+        <View style={[styles.bottomCTA, { backgroundColor: theme.colors.surface, paddingBottom: insets.bottom + 16, borderTopColor: theme.colors.border, gap: 12 }]}>
           <Pressable
             style={[styles.ctaButton, { backgroundColor: theme.colors.primary, flex: 1, flexDirection: 'row', gap: 8 }]}
             onPress={() => router.push(`/(main)/chat/${chatRoomId}`)}
           >
             <Ionicons name="chatbubbles" size={20} color="#fff" />
-            <Text style={styles.ctaButtonText}>Open Trip Chat</Text>
+            <Text style={styles.ctaButtonText}>Open Chat</Text>
           </Pressable>
+          {userBooking && (trip.status === 'open' || trip.status === 'full') && (
+            <Pressable
+              style={[styles.ctaButton, { backgroundColor: theme.colors.error, flexDirection: 'row', gap: 8 }]}
+              onPress={() => handleLeaveTrip(userBooking.id)}
+              disabled={processingBookingId === userBooking.id}
+            >
+              <Ionicons name="exit-outline" size={20} color="#fff" />
+              <Text style={styles.ctaButtonText}>Leave Trip</Text>
+            </Pressable>
+          )}
         </View>
       )}
 
@@ -438,8 +637,10 @@ function StatItem({ icon, label, value, theme, highlight }: any) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   mapSection: { height: 260 },
+  mapSectionEnlarged: { height: 480 },
   map: { flex: 1 },
   backBtn: { position: 'absolute', left: 16, width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 4 },
+  deleteBtn: { position: 'absolute', right: 16, width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 4 },
   content: { flex: 1 },
   contentInner: { padding: 20, gap: 16, paddingBottom: 120 },
   statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

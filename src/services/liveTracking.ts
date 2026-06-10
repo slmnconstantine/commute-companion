@@ -69,3 +69,66 @@ export const subscribeToDriverLocation = (
     console.log(`[Tracking] Unsubscribed from trip ${tripId}`);
   };
 };
+
+export type RouteLocationPayload = {
+  userId: string;
+  fullName: string;
+  avatarUrl: string | null;
+  role: 'driver' | 'commuter';
+  latitude: number;
+  longitude: number;
+  timestamp: number;
+};
+
+/** Broadcast active user coordinates to route community */
+export const broadcastRouteLocation = (
+  channel: RealtimeChannel,
+  payload: RouteLocationPayload
+) => {
+  channel.send({
+    type: 'broadcast',
+    event: 'route-location-update',
+    payload,
+  });
+};
+
+/** Broadcast user disconnect to route community */
+export const broadcastRouteDisconnect = (
+  channel: RealtimeChannel,
+  userId: string
+) => {
+  channel.send({
+    type: 'broadcast',
+    event: 'route-user-disconnect',
+    payload: { userId },
+  });
+};
+
+/** Subscribe to route community coordinates updates and disconnects */
+export const subscribeToRouteLocations = (
+  routeHash: string,
+  onLocationUpdate: (payload: RouteLocationPayload) => void,
+  onUserDisconnect: (userId: string) => void
+): { channel: RealtimeChannel; unsubscribe: () => void } => {
+  const channel = supabase.channel(`route-${routeHash}`, {
+    config: {
+      broadcast: { ack: false },
+    },
+  });
+
+  channel
+    .on('broadcast', { event: 'route-location-update' }, (payload) => {
+      onLocationUpdate(payload.payload as RouteLocationPayload);
+    })
+    .on('broadcast', { event: 'route-user-disconnect' }, (payload) => {
+      onUserDisconnect(payload.payload.userId as string);
+    })
+    .subscribe();
+
+  return {
+    channel,
+    unsubscribe: () => {
+      supabase.removeChannel(channel);
+    },
+  };
+};

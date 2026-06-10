@@ -153,6 +153,7 @@ export default function SignInScreen() {
                   placeholderTextColor={theme.colors.textMuted}
                   secureTextEntry={!showPassword}
                   textColor={theme.colors.text}
+                  autoCapitalize="none"
                 />
               </View>
               <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>

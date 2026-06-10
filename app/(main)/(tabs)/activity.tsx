@@ -21,7 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { useNotifications } from '@/context/NotificationContext';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { getCommuterBookings } from '@/services/bookings';
 import { getDriverTrips } from '@/services/trips';
 import EmptyState from '@/components/common/EmptyState';
@@ -236,6 +236,8 @@ export default function ActivityScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [bookings, setBookings] = useState<BookingWithTrip[]>([]);
   const [driverTrips, setDriverTrips] = useState<TripWithDriver[]>([]);
+  const [driverLimit, setDriverLimit] = useState(5);
+  const [passengerLimit, setPassengerLimit] = useState(5);
   const isDriver = profile?.role === 'driver';
   const router = useRouter();
 
@@ -253,10 +255,17 @@ export default function ActivityScreen() {
     }
   }, [profile?.id]);
 
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+      refreshCounts(); // refresh badges when tab is opened
+    }, [loadData])
+  );
+
   React.useEffect(() => {
-    loadData();
-    refreshCounts(); // refresh badges when tab is opened
-  }, [loadData]);
+    setDriverLimit(5);
+    setPassengerLimit(5);
+  }, [activeSegment]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -368,50 +377,99 @@ export default function ActivityScreen() {
           />
         ) : (
           <>
-            {filteredDriverTrips.length > 0 && (
-              <View style={{ marginBottom: filteredBookings.length > 0 ? 24 : 0 }}>
-                {isDriver && <Text style={[theme.typography.caption, { color: theme.colors.textMuted, marginBottom: 12, fontFamily: 'Inter-Medium', paddingLeft: 4 }]}>AS A DRIVER</Text>}
-                {filteredDriverTrips.map((trip) => {
-                  const tripReviews = trip.bookings?.flatMap(b => b.reviews || []) || [];
-                  const avgRating = tripReviews.length > 0 ? (tripReviews.reduce((sum, r) => sum + r.rating, 0) / tripReviews.length).toFixed(1) : null;
-                  
-                  return (
-                    <View key={`driver-${trip.id}`} style={{ marginBottom: 14 }}>
-                      <TripCard trip={trip} onPress={() => router.push(`/(main)/ride/${trip.id}`)} />
-                      {trip.status === 'completed' && tripReviews.length > 0 && (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, paddingHorizontal: 4 }}>
-                          <View style={{ flexDirection: 'row', backgroundColor: `${theme.colors.accent}15`, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, alignItems: 'center' }}>
-                            <Ionicons name="star" color={theme.colors.accent} size={14} />
-                            <Text style={{ marginLeft: 6, color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 13 }}>
-                              {avgRating} <Text style={{ fontFamily: 'Inter-Regular', color: theme.colors.textMuted }}>from passengers</Text>
-                            </Text>
+            {(() => {
+              const visibleDriverTrips = filteredDriverTrips.slice(0, driverLimit);
+              const visibleBookings = filteredBookings.slice(0, passengerLimit);
+              const hasMoreDriver = filteredDriverTrips.length > driverLimit;
+              const hasMorePassenger = filteredBookings.length > passengerLimit;
+
+              return (
+                <>
+                  {filteredDriverTrips.length > 0 && (
+                    <View style={{ marginBottom: filteredBookings.length > 0 ? 24 : 0 }}>
+                      {isDriver && <Text style={[theme.typography.caption, { color: theme.colors.textMuted, marginBottom: 12, fontFamily: 'Inter-Medium', paddingLeft: 4 }]}>AS A DRIVER</Text>}
+                      {visibleDriverTrips.map((trip) => {
+                        const tripReviews = trip.bookings?.flatMap(b => b.reviews || []) || [];
+                        const avgRating = tripReviews.length > 0 ? (tripReviews.reduce((sum, r) => sum + r.rating, 0) / tripReviews.length).toFixed(1) : null;
+                        
+                        return (
+                          <View key={`driver-${trip.id}`} style={{ marginBottom: 14 }}>
+                            <TripCard trip={trip} onPress={() => router.push(`/(main)/ride/${trip.id}`)} />
+                            {trip.status === 'completed' && tripReviews.length > 0 && (
+                              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, paddingHorizontal: 4 }}>
+                                <View style={{ flexDirection: 'row', backgroundColor: `${theme.colors.accent}15`, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, alignItems: 'center' }}>
+                                  <Ionicons name="star" color={theme.colors.accent} size={14} />
+                                  <Text style={{ marginLeft: 6, color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 13 }}>
+                                    {avgRating} <Text style={{ fontFamily: 'Inter-Regular', color: theme.colors.textMuted }}>from passengers</Text>
+                                  </Text>
+                                </View>
+                              </View>
+                            )}
                           </View>
-                        </View>
+                        );
+                      })}
+                      
+                      {hasMoreDriver && (
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.showMoreBtn,
+                            {
+                              backgroundColor: theme.colors.surface,
+                              borderColor: theme.colors.border,
+                              opacity: pressed ? 0.8 : 1,
+                            }
+                          ]}
+                          onPress={() => setDriverLimit((prev) => prev + 5)}
+                        >
+                          <Text style={[styles.showMoreText, { color: theme.colors.primary, fontFamily: 'Inter-SemiBold' }]}>
+                            Show More Driver Activity
+                          </Text>
+                          <Ionicons name="chevron-down" size={16} color={theme.colors.primary} />
+                        </Pressable>
                       )}
                     </View>
-                  );
-                })}
-              </View>
-            )}
-            
-            {filteredBookings.length > 0 && (
-              <View>
-                {isDriver && <Text style={[theme.typography.caption, { color: theme.colors.textMuted, marginBottom: 12, fontFamily: 'Inter-Medium', paddingLeft: 4 }]}>AS A PASSENGER</Text>}
-                {filteredBookings.map((item) => (
-                  <ActivityCard
-                    key={`passenger-${item.id}`}
-                    booking={item}
-                    theme={theme}
-                    onPress={() => router.push(`/(main)/ride/${item.trip_id}` as any)}
-                    onReview={() => {
-                      if (item.status === 'completed' && (!item.reviews || item.reviews.length === 0)) {
-                        router.push(`/(main)/ride/review/${item.id}?driverId=${item.trip.driver_id}`);
-                      }
-                    }}
-                  />
-                ))}
-              </View>
-            )}
+                  )}
+                  
+                  {filteredBookings.length > 0 && (
+                    <View>
+                      {isDriver && <Text style={[theme.typography.caption, { color: theme.colors.textMuted, marginBottom: 12, fontFamily: 'Inter-Medium', paddingLeft: 4 }]}>AS A PASSENGER</Text>}
+                      {visibleBookings.map((item) => (
+                        <ActivityCard
+                          key={`passenger-${item.id}`}
+                          booking={item}
+                          theme={theme}
+                          onPress={() => router.push(`/(main)/ride/${item.trip_id}` as any)}
+                          onReview={() => {
+                            if (item.status === 'completed' && (!item.reviews || item.reviews.length === 0)) {
+                              router.push(`/(main)/ride/review/${item.id}?driverId=${item.trip.driver_id}`);
+                            }
+                          }}
+                        />
+                      ))}
+
+                      {hasMorePassenger && (
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.showMoreBtn,
+                            {
+                              backgroundColor: theme.colors.surface,
+                              borderColor: theme.colors.border,
+                              opacity: pressed ? 0.8 : 1,
+                            }
+                          ]}
+                          onPress={() => setPassengerLimit((prev) => prev + 5)}
+                        >
+                          <Text style={[styles.showMoreText, { color: theme.colors.primary, fontFamily: 'Inter-SemiBold' }]}>
+                            Show More Passenger Activity
+                          </Text>
+                          <Ionicons name="chevron-down" size={16} color={theme.colors.primary} />
+                        </Pressable>
+                      )}
+                    </View>
+                  )}
+                </>
+              );
+            })()}
           </>
         )}
       </ScrollView>
@@ -557,5 +615,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 12,
+  },
+  showMoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    marginHorizontal: 4,
+    marginTop: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 6,
+  },
+  showMoreText: {
+    fontSize: 14,
   },
 });
