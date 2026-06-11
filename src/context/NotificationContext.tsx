@@ -114,7 +114,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
-        shouldShowBanner: pushEnabled,
+        shouldShowAlert: false,
+        shouldShowBanner: false,
         shouldShowList: pushEnabled,
         shouldPlaySound: soundEnabled,
         shouldSetBadge: pushEnabled,

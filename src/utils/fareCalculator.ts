@@ -31,12 +31,16 @@ export function calculateFare(
   passengers: number = 1,
 ): FareBreakdown {
   const baseFare = BASE_FARE;
-  const distanceCost = Math.round(distanceKm * COST_PER_KM * 100) / 100;
-  const timeCost = Math.round(durationMin * COST_PER_MIN * 100) / 100;
+  // Fare only increases if distance exceeds 5 kilometers
+  const excessDistance = Math.max(0, distanceKm - 5);
+  const distanceCost = Math.round(excessDistance * COST_PER_KM * 100) / 100;
+  // No time cost is charged since fare only increases if distance > 5km
+  const timeCost = 0;
   const subtotal = baseFare + distanceCost + timeCost;
-  const costPerSeat = Math.round((subtotal / Math.max(passengers, 1)) * 100) / 100;
-  const platformFee = Math.round(costPerSeat * PLATFORM_FEE_RATE * 100) / 100;
-  const totalPerSeat = Math.ceil(costPerSeat + platformFee);
+  const costPerSeat = subtotal;
+  // Passenger pays no platform fee
+  const platformFee = 0;
+  const totalPerSeat = Math.ceil(costPerSeat);
 
   return { baseFare, distanceCost, timeCost, subtotal, costPerSeat, platformFee, totalPerSeat };
 }
@@ -46,12 +50,11 @@ export function formatCurrency(amount: number): string {
 }
 
 /**
- * Reverse calculate driver net payout and platform fee from the total fare.
- * Total = Net + (Net * PLATFORM_FEE_RATE)
- * Net = Total / (1 + PLATFORM_FEE_RATE)
+ * Calculate driver net payout and platform fee from the total fare collected.
+ * The driver is charged 10% of the total fares they collected as a platform fee.
  */
 export function getDriverPayout(totalFare: number): { netPayout: number; platformFee: number } {
-  const netPayout = totalFare / (1 + PLATFORM_FEE_RATE);
-  const platformFee = totalFare - netPayout;
+  const platformFee = Math.round(totalFare * 0.10 * 100) / 100;
+  const netPayout = Math.round((totalFare - platformFee) * 100) / 100;
   return { netPayout, platformFee };
 }

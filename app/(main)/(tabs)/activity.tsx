@@ -26,6 +26,7 @@ import { getCommuterBookings } from '@/services/bookings';
 import { getDriverTrips } from '@/services/trips';
 import EmptyState from '@/components/common/EmptyState';
 import TripCard from '@/components/ride/TripCard';
+import Avatar from '@/components/common/Avatar';
 import { BookingWithTrip, TripWithDriver } from '@/types/database';
 import { formatDepartureTime } from '@/utils/dateFormatter';
 
@@ -146,15 +147,12 @@ function ActivityCard({
         style={[styles.cardBottomRow, { borderTopColor: theme.colors.border }]}
       >
         <View style={styles.driverRow}>
-          <View
-            style={[styles.miniAvatar, { backgroundColor: theme.colors.primary }]}
-          >
-            <Text
-              style={{ color: theme.colors.white, fontFamily: 'Inter-SemiBold', fontSize: 10 }}
-            >
-              {booking.trip.driver?.full_name?.charAt(0) || 'D'}
-            </Text>
-          </View>
+          <Avatar
+            uri={booking.trip.driver?.avatar_url}
+            name={booking.trip.driver?.full_name || 'Driver'}
+            size="sm"
+            showBadge={booking.trip.driver?.verified_badge}
+          />
           <Text
             style={[
               theme.typography.small,
@@ -284,21 +282,32 @@ export default function ActivityScreen() {
       }
     })
     .sort((a, b) => {
-      // Custom sort: accepted/confirmed on top, pending on bottom, then by closest departure
       if (activeSegment === 'Upcoming') {
+        // Custom sort: accepted/confirmed on top, pending on bottom, then by closest departure
         if (a.status === 'accepted' && b.status !== 'accepted') return -1;
         if (a.status !== 'accepted' && b.status === 'accepted') return 1;
+        return new Date(a.trip.departure_time).getTime() - new Date(b.trip.departure_time).getTime();
+      } else {
+        // Past activity: sort by descending departure time (most recent first)
+        return new Date(b.trip.departure_time).getTime() - new Date(a.trip.departure_time).getTime();
       }
-      return new Date(a.trip.departure_time).getTime() - new Date(b.trip.departure_time).getTime();
     });
 
-  const filteredDriverTrips = driverTrips.filter((t) => {
-    if (activeSegment === 'Upcoming') {
-      return ['open', 'full', 'ongoing'].includes(t.status);
-    } else {
-      return ['completed', 'cancelled'].includes(t.status);
-    }
-  });
+  const filteredDriverTrips = driverTrips
+    .filter((t) => {
+      if (activeSegment === 'Upcoming') {
+        return ['open', 'full', 'ongoing'].includes(t.status);
+      } else {
+        return ['completed', 'cancelled'].includes(t.status);
+      }
+    })
+    .sort((a, b) => {
+      if (activeSegment === 'Upcoming') {
+        return new Date(a.departure_time).getTime() - new Date(b.departure_time).getTime();
+      } else {
+        return new Date(b.departure_time).getTime() - new Date(a.departure_time).getTime();
+      }
+    });
 
   return (
     <SafeAreaView

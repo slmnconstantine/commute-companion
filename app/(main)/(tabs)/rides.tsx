@@ -6,7 +6,7 @@
  * - "Post a Ride": Drivers can post rides; Commuters see "Become a Driver" banner
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -171,27 +171,17 @@ function TimePickerModal({
     const [, m] = selectedTime.split(':');
     return parseInt(m || '0', 10);
   });
-  const [activePicker, setActivePicker] = useState<'hour' | 'minute'>('hour');
 
   useEffect(() => {
     if (visible) {
       const [h, m] = selectedTime.split(':');
       setHour24(parseInt(h || '0', 10));
       setMinute(parseInt(m || '0', 10));
-      setActivePicker('hour');
     }
   }, [selectedTime, visible]);
 
   const isPM = hour24 >= 12;
   const hour12 = hour24 === 0 ? 12 : (hour24 > 12 ? hour24 - 12 : hour24);
-
-  const handleHourSelect = (h: number) => {
-    const newH24 = isPM ? (h === 12 ? 12 : h + 12) : (h === 12 ? 0 : h);
-    setHour24(newH24);
-    setTimeout(() => {
-      setActivePicker('minute');
-    }, 250);
-  };
 
   const handleAmPmSelect = (pm: boolean) => {
     if (pm && !isPM) setHour24(hour24 + 12);
@@ -227,200 +217,142 @@ function TimePickerModal({
             </Pressable>
           </View>
 
-          <View style={{ paddingHorizontal: 24 }}>
-            {/* Elegant Digital Time Display capsule */}
-            <View style={{
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              backgroundColor: theme.colors.inputBackground,
-              borderRadius: 24,
-              paddingHorizontal: 24,
-              paddingVertical: 16,
-              marginBottom: 24,
-              borderWidth: 1,
-              borderColor: theme.colors.border
-            }}>
-              {/* Left Side: Time Selectors (Hour : Minute) */}
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                {/* Hour display button */}
-                <Pressable
-                  onPress={() => setActivePicker('hour')}
-                  style={{
-                    paddingHorizontal: 12,
-                    paddingVertical: 4,
-                    borderRadius: 12,
-                    backgroundColor: activePicker === 'hour' ? `${theme.colors.primary}15` : 'transparent',
-                    borderWidth: 1.5,
-                    borderColor: activePicker === 'hour' ? theme.colors.primary : 'transparent',
-                  }}
-                >
-                  <Text style={{
-                    fontSize: 40,
-                    fontFamily: 'Inter-Bold',
-                    color: activePicker === 'hour' ? theme.colors.primary : theme.colors.text
-                  }}>
-                    {hour12}
-                  </Text>
-                </Pressable>
+          <View style={{
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            paddingHorizontal: 24,
+            height: 250,
+            marginBottom: 20
+          }}>
+            {/* Hour Column */}
+            <View style={{ flex: 1, alignItems: 'stretch', marginRight: 8 }}>
+              <Text style={{ fontSize: 13, fontFamily: 'Inter-SemiBold', color: theme.colors.textMuted, marginBottom: 8, textTransform: 'uppercase', textAlign: 'center' }}>Hour</Text>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                style={{ flex: 1, backgroundColor: theme.colors.inputBackground, borderRadius: 16, borderWidth: 1, borderColor: theme.colors.border }}
+                contentContainerStyle={{ paddingVertical: 10 }}
+              >
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((h) => {
+                  const active = hour12 === h;
+                  return (
+                    <Pressable
+                      key={`hour-${h}`}
+                      onPress={() => {
+                        const newH24 = isPM ? (h === 12 ? 12 : h + 12) : (h === 12 ? 0 : h);
+                        setHour24(newH24);
+                      }}
+                      style={{
+                        paddingVertical: 12,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginHorizontal: 8,
+                        marginVertical: 2,
+                        borderRadius: 10,
+                        backgroundColor: active ? theme.colors.primary : 'transparent',
+                      }}
+                    >
+                      <Text style={{
+                        color: active ? '#fff' : theme.colors.text,
+                        fontFamily: active ? 'Inter-Bold' : 'Inter-Medium',
+                        fontSize: 16,
+                      }}>
+                        {h}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
 
-                <Text style={{ fontSize: 36, fontFamily: 'Inter-Bold', color: theme.colors.textMuted, marginHorizontal: 4 }}>
-                  :
-                </Text>
+            {/* Minute Column */}
+            <View style={{ flex: 1, alignItems: 'stretch', marginRight: 8 }}>
+              <Text style={{ fontSize: 13, fontFamily: 'Inter-SemiBold', color: theme.colors.textMuted, marginBottom: 8, textTransform: 'uppercase', textAlign: 'center' }}>Minute</Text>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                style={{ flex: 1, backgroundColor: theme.colors.inputBackground, borderRadius: 16, borderWidth: 1, borderColor: theme.colors.border }}
+                contentContainerStyle={{ paddingVertical: 10 }}
+              >
+                {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map((m) => {
+                  const active = minute === m;
+                  return (
+                    <Pressable
+                      key={`min-${m}`}
+                      onPress={() => setMinute(m)}
+                      style={{
+                        paddingVertical: 12,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginHorizontal: 8,
+                        marginVertical: 2,
+                        borderRadius: 10,
+                        backgroundColor: active ? theme.colors.primary : 'transparent',
+                      }}
+                    >
+                      <Text style={{
+                        color: active ? '#fff' : theme.colors.text,
+                        fontFamily: active ? 'Inter-Bold' : 'Inter-Medium',
+                        fontSize: 16,
+                      }}>
+                        {String(m).padStart(2, '0')}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
 
-                {/* Minute display button */}
-                <Pressable
-                  onPress={() => setActivePicker('minute')}
-                  style={{
-                    paddingHorizontal: 12,
-                    paddingVertical: 4,
-                    borderRadius: 12,
-                    backgroundColor: activePicker === 'minute' ? `${theme.colors.primary}15` : 'transparent',
-                    borderWidth: 1.5,
-                    borderColor: activePicker === 'minute' ? theme.colors.primary : 'transparent',
-                  }}
-                >
-                  <Text style={{
-                    fontSize: 40,
-                    fontFamily: 'Inter-Bold',
-                    color: activePicker === 'minute' ? theme.colors.primary : theme.colors.text
-                  }}>
-                    {String(minute).padStart(2, '0')}
-                  </Text>
-                </Pressable>
-              </View>
-
-              {/* Right Side: Modern Segmented AM/PM selector */}
+            {/* AM/PM Column */}
+            <View style={{ flex: 1, alignItems: 'stretch' }}>
+              <Text style={{ fontSize: 13, fontFamily: 'Inter-SemiBold', color: theme.colors.textMuted, marginBottom: 8, textTransform: 'uppercase', textAlign: 'center' }}>AM / PM</Text>
               <View style={{
-                flexDirection: 'row',
-                backgroundColor: theme.colors.background,
-                borderRadius: 12,
-                padding: 3,
+                flex: 1,
+                backgroundColor: theme.colors.inputBackground,
+                borderRadius: 16,
                 borderWidth: 1,
-                borderColor: theme.colors.border
+                borderColor: theme.colors.border,
+                padding: 8,
+                justifyContent: 'center',
+                gap: 12
               }}>
                 <Pressable
                   onPress={() => handleAmPmSelect(false)}
                   style={{
-                    paddingVertical: 8,
-                    paddingHorizontal: 16,
-                    borderRadius: 9,
+                    paddingVertical: 16,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: 10,
                     backgroundColor: !isPM ? theme.colors.primary : 'transparent',
-                    shadowColor: !isPM ? theme.colors.primary : 'transparent',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.2,
-                    shadowRadius: 4,
-                    elevation: !isPM ? 2 : 0
                   }}
                 >
-                  <Text style={{ color: !isPM ? '#fff' : theme.colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 14 }}>AM</Text>
+                  <Text style={{
+                    color: !isPM ? '#fff' : theme.colors.text,
+                    fontFamily: !isPM ? 'Inter-Bold' : 'Inter-Medium',
+                    fontSize: 16,
+                  }}>
+                    AM
+                  </Text>
                 </Pressable>
+
                 <Pressable
                   onPress={() => handleAmPmSelect(true)}
                   style={{
-                    paddingVertical: 8,
-                    paddingHorizontal: 16,
-                    borderRadius: 9,
+                    paddingVertical: 16,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: 10,
                     backgroundColor: isPM ? theme.colors.primary : 'transparent',
-                    shadowColor: isPM ? theme.colors.primary : 'transparent',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.2,
-                    shadowRadius: 4,
-                    elevation: isPM ? 2 : 0
                   }}
                 >
-                  <Text style={{ color: isPM ? '#fff' : theme.colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 14 }}>PM</Text>
+                  <Text style={{
+                    color: isPM ? '#fff' : theme.colors.text,
+                    fontFamily: isPM ? 'Inter-Bold' : 'Inter-Medium',
+                    fontSize: 16,
+                  }}>
+                    PM
+                  </Text>
                 </Pressable>
               </View>
             </View>
-
-            {/* Dynamic Selector Area */}
-            {activePicker === 'hour' ? (
-              <View style={{ marginBottom: 16 }}>
-                {/* Hours Grid */}
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                  <Text style={{ fontFamily: 'Inter-SemiBold', fontSize: 13, color: theme.colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                    Select Hour
-                  </Text>
-                  <Text style={{ fontFamily: 'Inter-Medium', fontSize: 12, color: theme.colors.primary }}>
-                    Tapping an hour auto-switches to minutes
-                  </Text>
-                </View>
-
-                {/* 3x4 clean numeric pad layout */}
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14, justifyContent: 'center', marginBottom: 12 }}>
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(h => {
-                    const isSelected = hour12 === h;
-                    return (
-                      <Pressable
-                        key={`h-${h}`}
-                        onPress={() => handleHourSelect(h)}
-                        style={{
-                          width: '21%',
-                          aspectRatio: 1,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          borderRadius: 100,
-                          backgroundColor: isSelected ? theme.colors.primary : theme.colors.inputBackground,
-                          borderWidth: 1.5,
-                          borderColor: isSelected ? theme.colors.primary : 'transparent',
-                          shadowColor: isSelected ? theme.colors.primary : 'transparent',
-                          shadowOffset: { width: 0, height: 4 },
-                          shadowOpacity: 0.2,
-                          shadowRadius: 4,
-                          elevation: isSelected ? 3 : 0
-                        }}
-                      >
-                        <Text style={{
-                          color: isSelected ? '#fff' : theme.colors.text,
-                          fontFamily: isSelected ? 'Inter-Bold' : 'Inter-Medium',
-                          fontSize: 18
-                        }}>{h}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-            ) : (
-              <View style={{ marginBottom: 16 }}>
-                {/* Minutes Grid */}
-                <Text style={{ fontFamily: 'Inter-SemiBold', fontSize: 13, color: theme.colors.textMuted, marginBottom: 16, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  Select Minute
-                </Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, justifyContent: 'center', marginBottom: 20 }}>
-                  {[0, 15, 30, 45].map(m => {
-                    const isSelected = minute === m;
-                    return (
-                      <Pressable
-                        key={`m-${m}`}
-                        onPress={() => setMinute(m)}
-                        style={{
-                          width: '21%',
-                          aspectRatio: 1,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          borderRadius: 100,
-                          backgroundColor: isSelected ? theme.colors.primary : theme.colors.inputBackground,
-                          borderWidth: 1.5,
-                          borderColor: isSelected ? theme.colors.primary : 'transparent',
-                          shadowColor: isSelected ? theme.colors.primary : 'transparent',
-                          shadowOffset: { width: 0, height: 4 },
-                          shadowOpacity: 0.2,
-                          shadowRadius: 4,
-                          elevation: isSelected ? 3 : 0
-                        }}
-                      >
-                        <Text style={{
-                          color: isSelected ? '#fff' : theme.colors.text,
-                          fontFamily: isSelected ? 'Inter-Bold' : 'Inter-Medium',
-                          fontSize: 18
-                        }}>{String(m).padStart(2, '0')}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-            )}
           </View>
         </Pressable>
       </Pressable>
@@ -541,26 +473,47 @@ export default function RidesScreen() {
   const [reqDestination, setReqDestination] = useState<RequestLocationData | null>(null);
   const [activeRequestRoute, setActiveRequestRoute] = useState<any | null>(null);
 
+  // Filter & Sort States
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  const [filterMaxFare, setFilterMaxFare] = useState<number | null>(null);
+  const [filterStatus, setFilterStatus] = useState<'open' | 'all'>('open');
+  const [sortBy, setSortBy] = useState<'time' | 'price_asc' | 'price_desc'>('time');
+  const [customFareText, setCustomFareText] = useState('');
+
   // Load route coordinates returned from set-route
   useEffect(() => {
     if (params.from_set_route === 'true') {
       if (params.req_origin_lat && params.req_origin_lng && params.req_origin_label) {
-        setReqOrigin({
-          lat: parseFloat(params.req_origin_lat),
-          lng: parseFloat(params.req_origin_lng),
-          label: params.req_origin_label,
+        setReqOrigin((prev) => {
+          const lat = parseFloat(params.req_origin_lat!);
+          const lng = parseFloat(params.req_origin_lng!);
+          if (prev?.lat === lat && prev?.lng === lng && prev?.label === params.req_origin_label) {
+            return prev;
+          }
+          return { lat, lng, label: params.req_origin_label! };
         });
       }
       if (params.req_destination_lat && params.req_destination_lng && params.req_destination_label) {
-        setReqDestination({
-          lat: parseFloat(params.req_destination_lat),
-          lng: parseFloat(params.req_destination_lng),
-          label: params.req_destination_label,
+        setReqDestination((prev) => {
+          const lat = parseFloat(params.req_destination_lat!);
+          const lng = parseFloat(params.req_destination_lng!);
+          if (prev?.lat === lat && prev?.lng === lng && prev?.label === params.req_destination_label) {
+            return prev;
+          }
+          return { lat, lng, label: params.req_destination_label! };
         });
       }
       setShowRequestModal(true);
     }
-  }, [params]);
+  }, [
+    params.from_set_route,
+    params.req_origin_lat,
+    params.req_origin_lng,
+    params.req_origin_label,
+    params.req_destination_lat,
+    params.req_destination_lng,
+    params.req_destination_label,
+  ]);
 
   const handlePostRequestPress = () => {
     const isVerified = profile?.is_verified && profile?.verified_badge;
@@ -717,40 +670,57 @@ export default function RidesScreen() {
         if (!routesError && routesData) {
           const reqRoute = routesData.find((r: any) => isJsonLabel(r.label));
           if (reqRoute) {
-            setActiveRequestRoute(reqRoute);
+            setActiveRequestRoute((prev: any) => {
+              if (prev && prev.id === reqRoute.id && prev.is_active === reqRoute.is_active && prev.label === reqRoute.label) {
+                return prev;
+              }
+              return reqRoute;
+            });
             const details = parseRequestDetails(reqRoute.label);
             if (details) {
-              setSeatsNeeded(details.seats || 1);
+              setSeatsNeeded(prev => prev === (details.seats || 1) ? prev : (details.seats || 1));
               if (details.departure_time) {
                 const dateObj = new Date(details.departure_time);
                 const y = dateObj.getFullYear();
                 const m = String(dateObj.getMonth() + 1).padStart(2, '0');
                 const d = String(dateObj.getDate()).padStart(2, '0');
-                setRequestDate(`${y}-${m}-${d}`);
+                const formattedDate = `${y}-${m}-${d}`;
+                setRequestDate(prev => prev === formattedDate ? prev : formattedDate);
 
                 const hr = String(dateObj.getHours()).padStart(2, '0');
                 const mn = String(dateObj.getMinutes()).padStart(2, '0');
-                setRequestTime(`${hr}:${mn}`);
+                const formattedTime = `${hr}:${mn}`;
+                setRequestTime(prev => prev === formattedTime ? prev : formattedTime);
               }
             }
             // Populate coordinates if they haven't been overwritten by query parameters
             if (params.from_set_route !== 'true') {
-              setReqOrigin({
-                lat: reqRoute.origin_lat,
-                lng: reqRoute.origin_lng,
-                label: reqRoute.origin_label,
+              setReqOrigin(prev => {
+                if (prev && prev.lat === reqRoute.origin_lat && prev.lng === reqRoute.origin_lng && prev.label === reqRoute.origin_label) {
+                  return prev;
+                }
+                return {
+                  lat: reqRoute.origin_lat,
+                  lng: reqRoute.origin_lng,
+                  label: reqRoute.origin_label,
+                };
               });
-              setReqDestination({
-                lat: reqRoute.destination_lat,
-                lng: reqRoute.destination_lng,
-                label: reqRoute.destination_label,
+              setReqDestination(prev => {
+                if (prev && prev.lat === reqRoute.destination_lat && prev.lng === reqRoute.destination_lng && prev.label === reqRoute.destination_label) {
+                  return prev;
+                }
+                return {
+                  lat: reqRoute.destination_lat,
+                  lng: reqRoute.destination_lng,
+                  label: reqRoute.destination_label,
+                };
               });
             }
           } else {
-            setActiveRequestRoute(null);
+            setActiveRequestRoute((prev: any) => prev === null ? null : null);
             if (params.from_set_route !== 'true') {
-              setReqOrigin(null);
-              setReqDestination(null);
+              setReqOrigin(prev => prev === null ? null : null);
+              setReqDestination(prev => prev === null ? null : null);
             }
           }
         }
@@ -775,7 +745,37 @@ export default function RidesScreen() {
     } catch (e) {
       console.log('Error loading trips', e);
     }
-  }, [profile?.id, isDriver, params]);
+  }, [profile?.id, isDriver, params.from_set_route]);
+
+  const filteredAndSortedRides = useMemo(() => {
+    let result = [...availableRides];
+
+    // Status Filter: 'open' shows only open rides, 'all' shows open, full, and ongoing
+    if (filterStatus === 'open') {
+      result = result.filter(trip => trip.status === 'open');
+    }
+
+    // Max Fare Filter
+    if (filterMaxFare !== null) {
+      result = result.filter(trip => trip.fare_per_seat <= filterMaxFare);
+    }
+
+    // Sorting
+    result.sort((a, b) => {
+      if (sortBy === 'price_asc') {
+        return a.fare_per_seat - b.fare_per_seat;
+      }
+      if (sortBy === 'price_desc') {
+        return b.fare_per_seat - a.fare_per_seat;
+      }
+      // Default: soonest departure (time)
+      const timeA = new Date(a.departure_time).getTime();
+      const timeB = new Date(b.departure_time).getTime();
+      return timeA - timeB;
+    });
+
+    return result;
+  }, [availableRides, filterStatus, filterMaxFare, sortBy]);
 
   useFocusEffect(
     useCallback(() => {
@@ -802,8 +802,12 @@ export default function RidesScreen() {
         </Text>
         <Pressable
           style={[styles.filterBtn, { backgroundColor: theme.colors.inputBackground }]}
+          onPress={() => setShowFilterModal(true)}
         >
           <Ionicons name="options-outline" size={20} color={theme.colors.text} />
+          {(filterMaxFare !== null || filterStatus !== 'open' || sortBy !== 'time') && (
+            <View style={[styles.filterIndicator, { backgroundColor: theme.colors.primary }]} />
+          )}
         </Pressable>
       </View>
 
@@ -967,14 +971,37 @@ export default function RidesScreen() {
                 </Pressable>
               )}
 
-              <Text style={[styles.sectionSubtitle, { color: theme.colors.textMuted, fontFamily: 'Inter-Medium' }]}>
-                {availableRides.length} rides available
-              </Text>
-              {availableRides.map((trip) => (
-                <View key={trip.id} style={{ marginBottom: 14 }}>
-                  <TripCard trip={trip} onPress={() => router.push(`/(main)/ride/${trip.id}`)} />
-                </View>
-              ))}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, marginTop: 4 }}>
+                <Text style={[styles.sectionSubtitle, { color: theme.colors.textMuted, fontFamily: 'Inter-Medium', marginBottom: 0 }]}>
+                  {filteredAndSortedRides.length} ride{filteredAndSortedRides.length !== 1 ? 's' : ''} found
+                </Text>
+                {(filterMaxFare !== null || filterStatus !== 'open' || sortBy !== 'time') && (
+                  <Pressable
+                    onPress={() => {
+                      setFilterMaxFare(null);
+                      setFilterStatus('open');
+                      setSortBy('time');
+                      setCustomFareText('');
+                    }}
+                    hitSlop={12}
+                  >
+                    <Text style={{ color: theme.colors.primary, fontFamily: 'Inter-SemiBold', fontSize: 13 }}>Reset Filters</Text>
+                  </Pressable>
+                )}
+              </View>
+              {filteredAndSortedRides.length > 0 ? (
+                filteredAndSortedRides.map((trip) => (
+                  <View key={trip.id} style={{ marginBottom: 14 }}>
+                    <TripCard trip={trip} onPress={() => router.push(`/(main)/ride/${trip.id}`)} />
+                  </View>
+                ))
+              ) : (
+                <EmptyState
+                  icon="funnel-outline"
+                  title="No Matching Rides"
+                  message="Try adjusting your filters or search criteria."
+                />
+              )}
             </>
           ) : (
             <EmptyState
@@ -1357,6 +1384,261 @@ export default function RidesScreen() {
         selectedTime={requestTime}
         theme={theme}
       />
+
+      {/* ─── Ride Filters Modal ─── */}
+      <Modal
+        visible={showFilterModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowFilterModal(false)}
+      >
+        <Pressable style={pickerStyles.backdrop} onPress={() => setShowFilterModal(false)}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={[pickerStyles.timeSheet, { backgroundColor: theme.colors.surface }]}
+          >
+            <Pressable onPress={() => { }} style={{ width: '100%' }}>
+              {/* Handle bar */}
+              <View style={pickerStyles.sheetHandle}>
+                <View style={[pickerStyles.handleBar, { backgroundColor: theme.colors.border }]} />
+              </View>
+
+              {/* Title & Close */}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, marginBottom: 20 }}>
+                <Text style={{ color: theme.colors.text, fontFamily: 'Inter-Bold', fontSize: 18 }}>
+                  Filter & Sort
+                </Text>
+                <Pressable onPress={() => setShowFilterModal(false)} hitSlop={12}>
+                  <Ionicons name="close" size={24} color={theme.colors.text} />
+                </Pressable>
+              </View>
+
+              <ScrollView style={{ paddingHorizontal: 24, maxHeight: 420 }} showsVerticalScrollIndicator={false}>
+                {/* Sort By Section */}
+                <View style={{ marginBottom: 20 }}>
+                  <Text style={{ fontSize: 14, fontFamily: 'Inter-SemiBold', color: theme.colors.text, marginBottom: 10 }}>
+                    Sort By
+                  </Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                    {[
+                      { id: 'time', label: 'Soonest', icon: 'time-outline' },
+                      { id: 'price_asc', label: 'Price: Low to High', icon: 'trending-down-outline' },
+                      { id: 'price_desc', label: 'Price: High to Low', icon: 'trending-up-outline' },
+                    ].map((opt) => {
+                      const active = sortBy === opt.id;
+                      return (
+                        <Pressable
+                          key={opt.id}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 6,
+                            paddingHorizontal: 14,
+                            paddingVertical: 10,
+                            borderRadius: 12,
+                            backgroundColor: active ? `${theme.colors.primary}12` : theme.colors.inputBackground,
+                            borderWidth: 1.5,
+                            borderColor: active ? theme.colors.primary : 'transparent',
+                          }}
+                          onPress={() => setSortBy(opt.id as any)}
+                        >
+                          <Ionicons name={opt.icon as any} size={15} color={active ? theme.colors.primary : theme.colors.textMuted} />
+                          <Text style={{
+                            color: active ? theme.colors.primary : theme.colors.text,
+                            fontFamily: active ? 'Inter-SemiBold' : 'Inter-Regular',
+                            fontSize: 13,
+                          }}>
+                            {opt.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                {/* Ride Status Section */}
+                <View style={{ marginBottom: 20 }}>
+                  <Text style={{ fontSize: 14, fontFamily: 'Inter-SemiBold', color: theme.colors.text, marginBottom: 10 }}>
+                    Ride Status
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {[
+                      { id: 'open', label: 'Open Only', desc: 'Rides with available seats' },
+                      { id: 'all', label: 'All Active', desc: 'Open, full, & ongoing rides' },
+                    ].map((opt) => {
+                      const active = filterStatus === opt.id;
+                      return (
+                        <Pressable
+                          key={opt.id}
+                          style={{
+                            flex: 1,
+                            paddingHorizontal: 14,
+                            paddingVertical: 12,
+                            borderRadius: 12,
+                            backgroundColor: active ? `${theme.colors.primary}12` : theme.colors.inputBackground,
+                            borderWidth: 1.5,
+                            borderColor: active ? theme.colors.primary : 'transparent',
+                          }}
+                          onPress={() => setFilterStatus(opt.id as any)}
+                        >
+                          <Text style={{
+                            color: active ? theme.colors.primary : theme.colors.text,
+                            fontFamily: 'Inter-SemiBold',
+                            fontSize: 14,
+                            marginBottom: 2,
+                          }}>
+                            {opt.label}
+                          </Text>
+                          <Text style={{
+                            color: theme.colors.textMuted,
+                            fontFamily: 'Inter-Regular',
+                            fontSize: 11,
+                          }}>
+                            {opt.desc}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                {/* Max Fare Section */}
+                <View style={{ marginBottom: 24 }}>
+                  <Text style={{ fontSize: 14, fontFamily: 'Inter-SemiBold', color: theme.colors.text, marginBottom: 10 }}>
+                    Max Fare
+                  </Text>
+                  {/* Quick selection chips */}
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                    {[
+                      { value: null, label: 'Any' },
+                      { value: 50, label: '₱50' },
+                      { value: 100, label: '₱100' },
+                      { value: 150, label: '₱150' },
+                      { value: 200, label: '₱200' },
+                      { value: 300, label: '₱300' },
+                    ].map((chip) => {
+                      const active = filterMaxFare === chip.value;
+                      return (
+                        <Pressable
+                          key={chip.label}
+                          style={{
+                            paddingHorizontal: 14,
+                            paddingVertical: 8,
+                            borderRadius: 100,
+                            backgroundColor: active ? `${theme.colors.primary}12` : theme.colors.inputBackground,
+                            borderWidth: 1.5,
+                            borderColor: active ? theme.colors.primary : 'transparent',
+                          }}
+                          onPress={() => {
+                            setFilterMaxFare(chip.value);
+                            setCustomFareText(chip.value !== null ? String(chip.value) : '');
+                          }}
+                        >
+                          <Text style={{
+                            color: active ? theme.colors.primary : theme.colors.text,
+                            fontFamily: active ? 'Inter-SemiBold' : 'Inter-Regular',
+                            fontSize: 13,
+                          }}>
+                            {chip.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+
+                  {/* Custom Max Fare input */}
+                  <View style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: theme.colors.inputBackground,
+                    borderRadius: 12,
+                    borderWidth: 1.5,
+                    borderColor: theme.colors.border,
+                    paddingHorizontal: 12,
+                    height: 48,
+                  }}>
+                    <Text style={{ color: theme.colors.textMuted, fontSize: 16, fontFamily: 'Inter-Medium', marginRight: 6 }}>₱</Text>
+                    <TextInput
+                      style={{
+                        flex: 1,
+                        color: theme.colors.text,
+                        fontFamily: 'Inter-Regular',
+                        fontSize: 15,
+                        height: '100%',
+                      }}
+                      placeholder="Or enter custom max fare"
+                      placeholderTextColor={theme.colors.textMuted}
+                      keyboardType="numeric"
+                      value={customFareText}
+                      onChangeText={(val) => {
+                        setCustomFareText(val);
+                        const clean = val.replace(/[^0-9]/g, '');
+                        if (clean) {
+                          setFilterMaxFare(parseInt(clean, 10));
+                        } else {
+                          setFilterMaxFare(null);
+                        }
+                      }}
+                    />
+                    {customFareText !== '' && (
+                      <Pressable
+                        onPress={() => {
+                          setCustomFareText('');
+                          setFilterMaxFare(null);
+                        }}
+                        hitSlop={12}
+                      >
+                        <Ionicons name="close-circle" size={18} color={theme.colors.textMuted} />
+                      </Pressable>
+                    )}
+                  </View>
+                </View>
+              </ScrollView>
+
+              {/* Footer Actions */}
+              <View style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 24, marginTop: 8 }}>
+                <Pressable
+                  style={{
+                    flex: 1,
+                    height: 50,
+                    borderRadius: 12,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: theme.colors.inputBackground,
+                    borderWidth: 1.5,
+                    borderColor: theme.colors.border,
+                  }}
+                  onPress={() => {
+                    setFilterMaxFare(null);
+                    setFilterStatus('open');
+                    setSortBy('time');
+                    setCustomFareText('');
+                  }}
+                >
+                  <Text style={{ color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 15 }}>
+                    Reset All
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={{
+                    flex: 1,
+                    height: 50,
+                    borderRadius: 12,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: theme.colors.primary,
+                  }}
+                  onPress={() => setShowFilterModal(false)}
+                >
+                  <Text style={{ color: '#fff', fontFamily: 'Inter-Bold', fontSize: 15 }}>
+                    Apply Filters
+                  </Text>
+                </Pressable>
+              </View>
+            </Pressable>
+          </KeyboardAvoidingView>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1684,6 +1966,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1.5,
     paddingHorizontal: 12,
+  },
+  filterIndicator: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
 });
 

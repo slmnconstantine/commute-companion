@@ -11,6 +11,7 @@ import { getTripBookings, updateBookingStatus, deleteBooking } from '@/services/
 import { getOrCreateChatRoom, joinChatRoom, getChatRoom } from '@/services/chatRooms';
 import { sendMessage } from '@/services/messages';
 import { decodePolyline } from '@/services/routing';
+import { supabase } from '@/lib/supabase';
 import { formatDepartureTime } from '@/utils/dateFormatter';
 import { formatCurrency, calculateFare, getDriverPayout } from '@/utils/fareCalculator';
 import { startBroadcastingLocation, stopBroadcastingLocation, subscribeToDriverLocation } from '@/services/liveTracking';
@@ -31,7 +32,7 @@ export default function TripDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [routeCoords, setRouteCoords] = useState<{ latitude: number; longitude: number }[]>([]);
   const [driverLiveLocation, setDriverLiveLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  
+
   const [bookings, setBookings] = useState<BookingWithCommuter[]>([]);
   const [chatRoomId, setChatRoomId] = useState<string | null>(null);
   const [processingBookingId, setProcessingBookingId] = useState<string | null>(null);
@@ -44,6 +45,10 @@ export default function TripDetailScreen() {
   const isDriver = profile?.id === trip?.driver_id;
   const isOngoingDriver = !!(isDriver && trip && trip.status === 'ongoing');
   const isOngoingActiveUser = !!(trip && trip.status === 'ongoing' && (isDriver || isConfirmedPassenger));
+
+  const acceptedBookings = bookings.filter(b => b.status === 'accepted');
+  const totalCollectedFare = acceptedBookings.reduce((sum, b) => sum + (b.fare_paid || 0), 0);
+  const driverPayoutDetails = getDriverPayout(totalCollectedFare);
 
   // Haversine formula to calculate distance in km
   const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -79,7 +84,7 @@ export default function TripDetailScreen() {
       if (data?.route_polyline) {
         setRouteCoords(decodePolyline(data.route_polyline));
       }
-      
+
       setBookings(bookingsData);
       if (chatRoom) setChatRoomId(chatRoom.id);
     } catch (e) {
@@ -92,7 +97,7 @@ export default function TripDetailScreen() {
   // Handle Live Tracking
   useEffect(() => {
     if (!trip || !profile) return;
-    
+
     let locationSubscription: Location.LocationSubscription | null = null;
     let unsubscribeCommuter: (() => void) | null = null;
 
@@ -181,26 +186,36 @@ export default function TripDetailScreen() {
             setProcessingBookingId(booking.id);
             try {
               await updateBookingStatus(booking.id, 'accepted');
-              
+
+              if (trip) {
+                const seatsBooked = trip.fare_per_seat > 0 ? Math.round(booking.fare_paid / trip.fare_per_seat) : 1;
+                const newAvailableSeats = Math.max(0, trip.available_seats - seatsBooked);
+
+                await supabase
+                  .from('trips')
+                  .update({ available_seats: newAvailableSeats })
+                  .eq('id', trip.id);
+
+                setTrip(prev => prev ? { ...prev, available_seats: newAvailableSeats } : null);
+              }
+
               let room = await getChatRoom(id);
-              let isNewRoom = false;
               if (!room) {
                 room = await getOrCreateChatRoom(id);
-                isNewRoom = true;
               }
               if (!room) throw new Error("Could not create chat room");
-              
+
               setChatRoomId(room.id);
               await joinChatRoom(room.id, booking.commuter_id);
-              
-              if (isNewRoom && profile?.id) {
+
+              if (profile?.id) {
                 await joinChatRoom(room.id, profile.id);
               }
-              
+
               if (profile?.id) {
                 await sendMessage(room.id, profile.id, `${booking.commuter.full_name} has joined the trip!`, true);
               }
-              
+
               setBookings(prev => prev.map(b => b.id === booking.id ? { ...b, status: 'accepted' } : b));
               Alert.alert('Success', 'Booking accepted and added to group chat!');
             } catch (e: any) {
@@ -253,7 +268,21 @@ export default function TripDetailScreen() {
           onPress: async () => {
             setProcessingBookingId(booking.id);
             try {
+              const isAccepted = booking.status === 'accepted';
               await deleteBooking(booking.id);
+
+              if (isAccepted && trip) {
+                const seatsBooked = trip.fare_per_seat > 0 ? Math.round(booking.fare_paid / trip.fare_per_seat) : 1;
+                const newAvailableSeats = trip.available_seats + seatsBooked;
+
+                await supabase
+                  .from('trips')
+                  .update({ available_seats: newAvailableSeats })
+                  .eq('id', trip.id);
+
+                setTrip(prev => prev ? { ...prev, available_seats: newAvailableSeats } : null);
+              }
+
               if (chatRoomId && profile?.id) {
                 await sendMessage(chatRoomId, profile.id, `${booking.commuter.full_name} was removed from the trip by the driver.`, true);
               }
@@ -282,7 +311,23 @@ export default function TripDetailScreen() {
           onPress: async () => {
             setProcessingBookingId(bookingId);
             try {
+              const booking = bookings.find(b => b.id === bookingId);
+              const isAccepted = booking?.status === 'accepted';
+
               await deleteBooking(bookingId);
+
+              if (booking && isAccepted && trip) {
+                const seatsBooked = trip.fare_per_seat > 0 ? Math.round(booking.fare_paid / trip.fare_per_seat) : 1;
+                const newAvailableSeats = trip.available_seats + seatsBooked;
+
+                await supabase
+                  .from('trips')
+                  .update({ available_seats: newAvailableSeats })
+                  .eq('id', trip.id);
+
+                setTrip(prev => prev ? { ...prev, available_seats: newAvailableSeats } : null);
+              }
+
               if (chatRoomId && profile?.id) {
                 await sendMessage(chatRoomId, profile.id, `${profile.full_name} has left the trip.`, true);
               }
@@ -300,10 +345,33 @@ export default function TripDetailScreen() {
   };
 
   const handleUpdateTripStatus = async (newStatus: 'ongoing' | 'completed') => {
+    if (newStatus === 'ongoing') {
+      Alert.alert(
+        'Start Trip 🚗',
+        'Are you sure you want to start this trip and set off now?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Set Off',
+            onPress: async () => {
+              try {
+                await updateTripStatus(id as string, 'ongoing');
+                setTrip(prev => prev ? { ...prev, status: 'ongoing' } : null);
+                Alert.alert('Success', 'Trip started! Drive safely.');
+              } catch (e: any) {
+                Alert.alert('Error', e.message || 'Failed to update trip status');
+              }
+            }
+          }
+        ]
+      );
+      return;
+    }
+
     try {
       await updateTripStatus(id as string, newStatus);
       setTrip(prev => prev ? { ...prev, status: newStatus } : null);
-      Alert.alert('Success', newStatus === 'ongoing' ? 'Trip started! Drive safely.' : 'Trip completed!');
+      Alert.alert('Success', 'Trip completed!');
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Failed to update trip status');
     }
@@ -371,7 +439,7 @@ export default function TripDetailScreen() {
           <Marker id="origin" lngLat={[trip.origin_lng, trip.origin_lat]}>
             <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: '#0D9488', borderWidth: 2, borderColor: '#fff' }} />
           </Marker>
-          
+
           <Marker id="destination" lngLat={[trip.destination_lng, trip.destination_lat]}>
             <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: '#F59E0B', borderWidth: 2, borderColor: '#fff' }} />
           </Marker>
@@ -475,12 +543,12 @@ export default function TripDetailScreen() {
         <View style={styles.statsRow}>
           <StatItem icon="people" label="Seats" value={`${trip.available_seats}`} theme={theme} />
           {isDriver ? (
-            <StatItem 
-              icon="wallet" 
-              label="Net Earnings" 
-              value={formatCurrency(getDriverPayout(trip.fare_per_seat).netPayout)} 
-              theme={theme} 
-              highlight 
+            <StatItem
+              icon="wallet"
+              label="Net Earnings"
+              value={formatCurrency(driverPayoutDetails.netPayout)}
+              theme={theme}
+              highlight
             />
           ) : (
             <StatItem icon="cash" label="Per seat" value={trip.fare_per_seat === 0 ? 'FREE' : formatCurrency(trip.fare_per_seat)} theme={theme} highlight />
@@ -500,17 +568,17 @@ export default function TripDetailScreen() {
                     <Badge label={booking.status} variant={booking.status === 'accepted' ? 'accepted' : booking.status === 'pending' ? 'pending' : 'cancelled'} />
                   </View>
                 </View>
-                
+
                 {booking.status === 'pending' && (
                   <View style={{ flexDirection: 'row', gap: 8 }}>
-                    <Pressable 
-                      style={[styles.actionBtn, { backgroundColor: theme.colors.error + '20' }]} 
+                    <Pressable
+                      style={[styles.actionBtn, { backgroundColor: theme.colors.error + '20' }]}
                       onPress={() => handleRejectBooking(booking)}
                       disabled={processingBookingId === booking.id}
                     >
                       <Ionicons name="close" size={20} color={theme.colors.error} />
                     </Pressable>
-                    <Pressable 
+                    <Pressable
                       style={[styles.actionBtn, { backgroundColor: theme.colors.success + '20' }]}
                       onPress={() => handleAcceptBooking(booking)}
                       disabled={processingBookingId === booking.id}
@@ -521,8 +589,8 @@ export default function TripDetailScreen() {
                 )}
 
                 {booking.status === 'accepted' && (trip.status === 'open' || trip.status === 'full') && (
-                  <Pressable 
-                    style={[styles.actionBtn, { backgroundColor: theme.colors.error + '20' }]} 
+                  <Pressable
+                    style={[styles.actionBtn, { backgroundColor: theme.colors.error + '20' }]}
                     onPress={() => handleRemovePassenger(booking)}
                     disabled={processingBookingId === booking.id}
                   >
@@ -531,6 +599,23 @@ export default function TripDetailScreen() {
                 )}
               </View>
             ))}
+
+            {acceptedBookings.length > 0 && (
+              <View style={{ marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: theme.colors.border, gap: 8 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ color: theme.colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 14 }}>To Collect</Text>
+                  <Text style={{ color: theme.colors.text, fontFamily: 'Inter-Medium', fontSize: 14 }}>{formatCurrency(totalCollectedFare)}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ color: theme.colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 14 }}>Platform fee (10%)</Text>
+                  <Text style={{ color: theme.colors.error, fontFamily: 'Inter-Medium', fontSize: 14 }}>-{formatCurrency(driverPayoutDetails.platformFee)}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+                  <Text style={{ color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 15 }}>Net Earnings</Text>
+                  <Text style={{ color: theme.colors.success, fontFamily: 'Inter-Bold', fontSize: 15 }}>{formatCurrency(driverPayoutDetails.netPayout)}</Text>
+                </View>
+              </View>
+            )}
           </View>
         )}
       </ScrollView>
@@ -558,7 +643,7 @@ export default function TripDetailScreen() {
       {/* Already Booked / Pending State */}
       {!isDriver && userBooking && userBooking.status === 'pending' && (
         <View style={[styles.bottomCTA, { backgroundColor: theme.colors.surface, paddingBottom: insets.bottom + 16, borderTopColor: theme.colors.border, justifyContent: 'center' }]}>
-           <Text style={[{ color: theme.colors.textMuted, fontFamily: 'Inter-Medium', fontSize: 16 }]}>Booking Request Pending...</Text>
+          <Text style={[{ color: theme.colors.textMuted, fontFamily: 'Inter-Medium', fontSize: 16 }]}>Booking Request Pending...</Text>
         </View>
       )}
 
@@ -574,12 +659,25 @@ export default function TripDetailScreen() {
           </Pressable>
           {userBooking && (trip.status === 'open' || trip.status === 'full') && (
             <Pressable
-              style={[styles.ctaButton, { backgroundColor: theme.colors.error, flexDirection: 'row', gap: 8 }]}
+              style={[
+                styles.ctaButton,
+                {
+                  backgroundColor: 'transparent',
+                  borderColor: theme.colors.error + '40',
+                  borderWidth: 1,
+                  height: 44,
+                  elevation: 0,
+                  shadowOpacity: 0,
+                  paddingHorizontal: 16,
+                  flexDirection: 'row',
+                  gap: 6,
+                }
+              ]}
               onPress={() => handleLeaveTrip(userBooking.id)}
               disabled={processingBookingId === userBooking.id}
             >
-              <Ionicons name="exit-outline" size={20} color="#fff" />
-              <Text style={styles.ctaButtonText}>Leave Trip</Text>
+              <Ionicons name="exit-outline" size={16} color={theme.colors.error} />
+              <Text style={[styles.ctaButtonText, { color: theme.colors.error, fontSize: 13 }]}>Leave Trip</Text>
             </Pressable>
           )}
         </View>
@@ -588,7 +686,7 @@ export default function TripDetailScreen() {
       {/* Driver Controls */}
       {isDriver && trip.status !== 'completed' && trip.status !== 'cancelled' && (
         <View style={[styles.bottomCTA, { backgroundColor: theme.colors.surface, paddingBottom: insets.bottom + 16, borderTopColor: theme.colors.border, flexDirection: 'column', gap: 12, alignItems: 'stretch' }]}>
-          
+
           {(trip.status === 'open' || trip.status === 'full') && (
             <Pressable
               style={[styles.ctaButton, { backgroundColor: theme.colors.success, flexDirection: 'row', gap: 8 }]}
