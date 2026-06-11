@@ -9,6 +9,7 @@ import { sendMessage } from '@/services/messages';
 import { getOrCreateChatRoom, joinChatRoom, getChatRoom } from '@/services/chatRooms';
 import { createPost, deleteAllUserPosts } from '@/services/hub';
 import { getTripBookings, updateBookingStatus } from '@/services/bookings';
+import { getTripById } from '@/services/trips';
 
 type AssistantState = 'idle' | 'recording' | 'transcribing' | 'thinking' | 'confirming' | 'executing' | 'speaking' | 'error';
 
@@ -261,17 +262,31 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
             
             await updateBookingStatus(targetBooking.id, 'accepted');
             
+            // Update available seats in database
+            try {
+              const trip = await getTripById(tripId);
+              if (trip) {
+                const seatsBooked = trip.fare_per_seat > 0 ? Math.round(targetBooking.fare_paid / trip.fare_per_seat) : 1;
+                const newAvailableSeats = Math.max(0, trip.available_seats - seatsBooked);
+                
+                await supabase
+                  .from('trips')
+                  .update({ available_seats: newAvailableSeats })
+                  .eq('id', trip.id);
+              }
+            } catch (seatErr) {
+              console.error('Error updating available seats via voice accept:', seatErr);
+            }
+            
             // Create/fetch chat room and join members
             try {
               let room = await getChatRoom(tripId);
-              let isNewRoom = false;
               if (!room) {
                 room = await getOrCreateChatRoom(tripId);
-                isNewRoom = true;
               }
               if (room) {
                 await joinChatRoom(room.id, targetBooking.commuter_id);
-                if (isNewRoom && profile?.id) {
+                if (profile?.id) {
                   await joinChatRoom(room.id, profile.id);
                 }
                 if (profile?.id) {

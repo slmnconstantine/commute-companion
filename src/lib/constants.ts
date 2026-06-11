@@ -12,12 +12,12 @@ export const APP_TAGLINE = 'Your Dynamic Ride-Sharing Platform';
 // Fare calculation
 // ---------------------------------------------------------------------------
 
-/** 30 base fare */
-export const BASE_FARE = 30;
+/** 15 base fare */
+export const BASE_FARE = 15;
 /** 8 per kilometre */
 export const COST_PER_KM = 8;
-/** 2 per minute */
-export const COST_PER_MIN = 2;
+/** 0 per minute */
+export const COST_PER_MIN = 0;
 /** 10 percent platform fee */
 export const PLATFORM_FEE_RATE = 0.10;
 

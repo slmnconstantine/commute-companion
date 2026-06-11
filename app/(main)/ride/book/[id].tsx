@@ -13,6 +13,16 @@ import { formatDepartureTime } from '@/utils/dateFormatter';
 import { TripWithDriver } from '@/types/database';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
 
+function isJsonLabel(label: string | null) {
+  if (!label) return false;
+  try {
+    const parsed = JSON.parse(label);
+    return !!(parsed && typeof parsed === 'object');
+  } catch (e) {
+    return false;
+  }
+}
+
 export default function BookRideScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -36,7 +46,7 @@ export default function BookRideScreen() {
     setBooking(true);
     try {
       const fareEst = trip.fare_per_seat * seats;
-      const platformFee = Math.ceil(fareEst * 0.10);
+      const driverPlatformFee = Math.round(fareEst * 0.10 * 100) / 100;
       const { error } = await createBooking({
         trip_id: trip.id,
         commuter_id: profile.id,
@@ -46,7 +56,7 @@ export default function BookRideScreen() {
         dropoff_lng: trip.destination_lng,
         status: 'pending',
         fare_paid: fareEst,
-        platform_fee: platformFee,
+        platform_fee: driverPlatformFee,
       });
       if (error) throw error;
 
@@ -58,12 +68,22 @@ export default function BookRideScreen() {
         const dLng = trip.destination_lng.toFixed(2);
         const routeHash = `${oLat},${oLng}_${dLat},${dLng}`;
 
-        await supabase
+        const { data: routesData } = await supabase
           .from('routes')
-          .update({ is_active: false })
+          .select('id, label')
           .eq('user_id', profile.id)
           .eq('route_hash', routeHash)
           .eq('is_active', true);
+
+        if (routesData) {
+          const requestRoute = routesData.find(r => isJsonLabel(r.label));
+          if (requestRoute) {
+            await supabase
+              .from('routes')
+              .update({ is_active: false })
+              .eq('id', requestRoute.id);
+          }
+        }
       } catch (deactivateErr) {
         console.warn('Failed to deactivate matching active request:', deactivateErr);
       }
@@ -82,7 +102,7 @@ export default function BookRideScreen() {
   if (!trip) return <LoadingSpinner size="lg" message="Trip not found" />;
 
   const totalFare = trip.fare_per_seat * seats;
-  const platformFee = Math.ceil(totalFare * 0.10);
+  const platformFee = 0; // Passengers pay no platform fee
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
