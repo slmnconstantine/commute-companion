@@ -131,6 +131,49 @@ export default function SetRouteScreen() {
     }
   }, [origin, destination]);
 
+  // Geocode text-only prefilled labels on mount
+  useEffect(() => {
+    const geocodePrefill = async () => {
+      let resolvedOrigin = origin;
+      let resolvedDest = destination;
+      let updated = false;
+
+      if (!origin && params.origin_label && !params.origin_lat) {
+        try {
+          const results = await searchPlaces(params.origin_label);
+          if (results.length > 0) {
+            const first = results[0];
+            resolvedOrigin = { lat: first.lat, lng: first.lng, label: first.displayName };
+            setOrigin(resolvedOrigin);
+            updated = true;
+          }
+        } catch (e) {
+          console.error('Error geocoding prefill origin:', e);
+        }
+      }
+
+      if (!destination && params.destination_label && !params.destination_lat) {
+        try {
+          const results = await searchPlaces(params.destination_label);
+          if (results.length > 0) {
+            const first = results[0];
+            resolvedDest = { lat: first.lat, lng: first.lng, label: first.displayName };
+            setDestination(resolvedDest);
+            updated = true;
+          }
+        } catch (e) {
+          console.error('Error geocoding prefill destination:', e);
+        }
+      }
+
+      if (updated && resolvedOrigin && resolvedDest) {
+        calculateRouteIfReady(resolvedOrigin, resolvedDest);
+      }
+    };
+
+    geocodePrefill();
+  }, [params.origin_label, params.destination_label]);
+
   const handleSelectPlace = async (place: GeocodingResult) => {
     const loc: LocationData = { lat: place.lat, lng: place.lng, label: place.displayName };
     const newOrigin = searchMode === 'origin' ? loc : origin;

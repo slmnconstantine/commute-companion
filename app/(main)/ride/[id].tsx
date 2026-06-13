@@ -7,7 +7,7 @@ import { Map, Camera, RasterSource, Layer, GeoJSONSource, Marker, type CameraRef
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { getTripById, updateTripStatus } from '@/services/trips';
-import { getTripBookings, updateBookingStatus, deleteBooking } from '@/services/bookings';
+import { getTripBookings, updateBookingStatus, deleteBooking, confirmCommuterArrival, confirmDriverArrival } from '@/services/bookings';
 import { getOrCreateChatRoom, joinChatRoom, getChatRoom } from '@/services/chatRooms';
 import { sendMessage } from '@/services/messages';
 import { decodePolyline } from '@/services/routing';
@@ -344,6 +344,26 @@ export default function TripDetailScreen() {
     );
   };
 
+  const handleCommuterArrival = async (bookingId: string) => {
+    try {
+      await confirmCommuterArrival(bookingId);
+      Alert.alert('Arrived! 🎉', 'You have confirmed your arrival. Waiting for the driver to confirm.');
+      await loadTrip();
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to confirm arrival');
+    }
+  };
+
+  const handleDriverArrival = async (bookingId: string) => {
+    try {
+      await confirmDriverArrival(bookingId);
+      Alert.alert('Arrival Confirmed! 🏁', 'You have confirmed drop-off for this passenger.');
+      await loadTrip();
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to confirm arrival');
+    }
+  };
+
   const handleUpdateTripStatus = async (newStatus: 'ongoing' | 'completed') => {
     if (newStatus === 'ongoing') {
       Alert.alert(
@@ -368,12 +388,33 @@ export default function TripDetailScreen() {
       return;
     }
 
-    try {
-      await updateTripStatus(id as string, newStatus);
-      setTrip(prev => prev ? { ...prev, status: newStatus } : null);
-      Alert.alert('Success', 'Trip completed!');
-    } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to update trip status');
+    if (newStatus === 'completed') {
+      Alert.alert(
+        'Complete Trip 🏁',
+        'Are you sure you want to complete this trip? This will confirm drop-offs for all passengers.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Complete',
+            onPress: async () => {
+              try {
+                // Bulk driver confirm unconfirmed accepted bookings
+                const unconfirmed = bookings.filter(b => b.status === 'accepted' && !b.driver_confirmed);
+                for (const b of unconfirmed) {
+                  await confirmDriverArrival(b.id);
+                }
+
+                await updateTripStatus(id as string, 'completed');
+                setTrip(prev => prev ? { ...prev, status: 'completed' } : null);
+                Alert.alert('Trip Completed!', 'The trip has been completed successfully.');
+                await loadTrip();
+              } catch (e: any) {
+                Alert.alert('Error', e.message || 'Failed to update trip status');
+              }
+            }
+          }
+        ]
+      );
     }
   };
 
@@ -597,6 +638,25 @@ export default function TripDetailScreen() {
                     <Ionicons name="trash-outline" size={18} color={theme.colors.error} />
                   </Pressable>
                 )}
+
+                {booking.status === 'accepted' && trip.status === 'ongoing' && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    {!booking.driver_confirmed ? (
+                      <Pressable
+                        style={[styles.actionBtn, { backgroundColor: theme.colors.success + '20', width: 'auto', paddingHorizontal: 12 }]}
+                        onPress={() => handleDriverArrival(booking.id)}
+                        disabled={processingBookingId === booking.id}
+                      >
+                        <Text style={{ color: theme.colors.success, fontSize: 12, fontFamily: 'Inter-SemiBold' }}>Confirm Arrival</Text>
+                      </Pressable>
+                    ) : (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Ionicons name="checkmark-circle" size={16} color={theme.colors.success} />
+                        <Text style={{ color: theme.colors.success, fontSize: 12, fontFamily: 'Inter-Medium' }}>Arrived</Text>
+                      </View>
+                    )}
+                  </View>
+                )}
               </View>
             ))}
 
@@ -648,7 +708,7 @@ export default function TripDetailScreen() {
       )}
 
       {/* Open Trip Chat CTA (Commuter) */}
-      {!isDriver && showChatButton && (
+      {!isDriver && showChatButton && trip.status !== 'ongoing' && (
         <View style={[styles.bottomCTA, { backgroundColor: theme.colors.surface, paddingBottom: insets.bottom + 16, borderTopColor: theme.colors.border, gap: 12 }]}>
           <Pressable
             style={[styles.ctaButton, { backgroundColor: theme.colors.primary, flex: 1, flexDirection: 'row', gap: 8 }]}
@@ -678,6 +738,35 @@ export default function TripDetailScreen() {
             >
               <Ionicons name="exit-outline" size={16} color={theme.colors.error} />
               <Text style={[styles.ctaButtonText, { color: theme.colors.error, fontSize: 13 }]}>Leave Trip</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+
+      {/* Ongoing Trip Commuter Handshake CTA */}
+      {!isDriver && userBooking && userBooking.status === 'accepted' && trip.status === 'ongoing' && (
+        <View style={[styles.bottomCTA, { backgroundColor: theme.colors.surface, paddingBottom: insets.bottom + 16, borderTopColor: theme.colors.border, flexDirection: 'column', gap: 12, alignItems: 'stretch' }]}>
+          {!userBooking.commuter_confirmed ? (
+            <Pressable
+              style={[styles.ctaButton, { backgroundColor: theme.colors.success, flexDirection: 'row', gap: 8 }]}
+              onPress={() => handleCommuterArrival(userBooking.id)}
+            >
+              <Ionicons name="checkmark-circle" size={20} color="#fff" />
+              <Text style={styles.ctaButtonText}>Confirm Arrival</Text>
+            </Pressable>
+          ) : (
+            <View style={[styles.ctaButton, { backgroundColor: theme.colors.border, flexDirection: 'row', gap: 8, opacity: 0.8, elevation: 0, shadowOpacity: 0 }]}>
+              <Ionicons name="time" size={20} color={theme.colors.textMuted} />
+              <Text style={[styles.ctaButtonText, { color: theme.colors.textMuted }]}>Waiting for Driver Confirmation...</Text>
+            </View>
+          )}
+          {chatRoomId && (
+            <Pressable
+              style={[styles.ctaButton, { backgroundColor: theme.colors.primary, flexDirection: 'row', gap: 8 }]}
+              onPress={() => router.push(`/(main)/chat/${chatRoomId}`)}
+            >
+              <Ionicons name="chatbubbles" size={20} color="#fff" />
+              <Text style={styles.ctaButtonText}>Open Trip Chat</Text>
             </Pressable>
           )}
         </View>

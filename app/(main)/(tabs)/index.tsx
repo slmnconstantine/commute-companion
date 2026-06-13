@@ -122,7 +122,7 @@ export default function HomeScreen() {
 
     checkActiveOngoingTrip();
 
-    let channel = supabase.channel('ongoing-trip-home');
+    let channel = supabase.channel(`ongoing-trip-home-${userId}-${Date.now()}`);
 
     if (isUserDriver) {
       channel = channel.on(

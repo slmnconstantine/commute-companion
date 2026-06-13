@@ -8,7 +8,7 @@ const corsHeaders = {
 
 // Define the Assistant Command structure
 interface AssistantCommand {
-  type: 'SEARCH_RIDES' | 'SUMMARIZE_ACTIVITY' | 'DRAFT_MESSAGE' | 'DRAFT_COMMUNITY_POST' | 'DELETE_POSTS' | 'PREPARE_BOOKING' | 'ACCEPT_BOOKING' | 'PREPARE_RIDE_POST' | 'NAVIGATE' | 'CLARIFY' | 'NOOP';
+  type: 'SEARCH_RIDES' | 'SUMMARIZE_ACTIVITY' | 'DRAFT_MESSAGE' | 'DRAFT_COMMUNITY_POST' | 'DELETE_POSTS' | 'PREPARE_BOOKING' | 'ACCEPT_BOOKING' | 'PREPARE_RIDE_POST' | 'NAVIGATE' | 'CLARIFY' | 'NOOP' | 'SET_ROUTE';
   params: Record<string, any>;
   spokenReply: string;
   requiresConfirmation: boolean;
@@ -26,55 +26,80 @@ serve(async (req: Request) => {
       throw new Error('GROQ_API_KEY is not set');
     }
 
-    const { audioBase64, context } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const { action, audioBase64, transcript: clientTranscript, context } = body;
 
-    if (!audioBase64) {
-      throw new Error('Missing audioBase64 payload');
+    // Determine the route:
+    // 1. Explicit transcribe action, or audioBase64 without context/transcript (transcribe only)
+    // 2. Explicit parse action, or transcript with context (NLU only)
+    // 3. Legacy: audioBase64 + context (does both transcription and NLU)
+    const runTranscribe = action === 'transcribe' || (audioBase64 && !clientTranscript && !context) || (!action && audioBase64 && context);
+    const runParse = action === 'parse' || (clientTranscript && context) || (!action && audioBase64 && context);
+
+    let activeTranscript = clientTranscript || '';
+
+    if (runTranscribe) {
+      if (!audioBase64) {
+        throw new Error('Missing audioBase64 payload for transcription');
+      }
+
+      // Convert base64 to File for Groq Whisper API
+      const byteCharacters = atob(audioBase64);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'audio/m4a' });
+      const formData = new FormData();
+      formData.append('file', blob, 'audio.m4a');
+      formData.append('model', Deno.env.get('AI_TRANSCRIBE_MODEL') || 'whisper-large-v3');
+      formData.append('language', 'en'); // 'en' handles Taglish reasonably well
+
+      // Transcribe Audio using Groq
+      const transcribeRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${GROQ_API_KEY}`
+        },
+        body: formData
+      });
+
+      if (!transcribeRes.ok) {
+        const errorText = await transcribeRes.text();
+        console.error('Groq Transcription Error:', errorText);
+        throw new Error(`Groq Transcription Error: ${transcribeRes.status}`);
+      }
+
+      const transcriptionData = await transcribeRes.json();
+      activeTranscript = transcriptionData.text;
+      console.log('Transcribed Text:', activeTranscript);
+
+      // If we only wanted transcription, return it now
+      if (!runParse) {
+        return new Response(JSON.stringify({ transcript: activeTranscript }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
-    // 1. Convert base64 to File for OpenAI Whisper API
-    const byteCharacters = atob(audioBase64);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-      byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-    const byteArray = new Uint8Array(byteNumbers);
-    const blob = new Blob([byteArray], { type: 'audio/m4a' });
-    const formData = new FormData();
-    formData.append('file', blob, 'audio.m4a');
-    formData.append('model', Deno.env.get('AI_TRANSCRIBE_MODEL') || 'whisper-large-v3');
-    formData.append('language', 'en'); // 'en' handles Taglish reasonably well
+    if (runParse) {
+      if (!activeTranscript || activeTranscript.trim().length === 0) {
+        return new Response(JSON.stringify({
+          type: 'NOOP',
+          params: {},
+          spokenReply: 'I didn\'t catch that. Could you repeat?',
+          requiresConfirmation: false,
+          transcript: ''
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
 
-    // 2. Transcribe Audio using Groq
-    const transcribeRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${GROQ_API_KEY}`
-      },
-      body: formData
-    });
+      if (!context) {
+        throw new Error('Missing context payload for intent parsing');
+      }
 
-    if (!transcribeRes.ok) {
-      const errorText = await transcribeRes.text();
-      console.error('Groq Transcription Error:', errorText);
-      throw new Error(`Groq Transcription Error: ${transcribeRes.status}`);
-    }
-
-    const { text: transcript } = await transcribeRes.json();
-    console.log('Transcript:', transcript);
-
-    if (!transcript || transcript.trim().length === 0) {
-      return new Response(JSON.stringify({
-        type: 'NOOP',
-        params: {},
-        spokenReply: 'I didn\'t catch that. Could you repeat?',
-        requiresConfirmation: false,
-        transcript: ''
-      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-
-    // 3. Intent Parsing with GPT-4o-mini
-    const systemPrompt = `
+      // Intent Parsing with Groq Llama/NLU
+      const systemPrompt = `
 You are the voice assistant for 'Commute Companion', an app for carpooling and route sharing in the Philippines.
 Users will speak to you in English or Taglish.
 Map their request to one of the following commands:
@@ -89,6 +114,7 @@ Map their request to one of the following commands:
 9. DELETE_POSTS: user wants to delete their own updates/posts from the community hub.
 10. PREPARE_RIDE_POST: user (driver) wants to post/create a new ride. Extracts: 'time' (HH:MM format), 'date' (YYYY-MM-DD format), 'origin' (pickup location, e.g. "BGC"), 'destination' (drop-off location, e.g. "Makati"). If date is "today" or "tomorrow", convert it to actual date based on current context. If any are not specified, leave empty.
 11. ACCEPT_BOOKING: user (driver) wants to accept a pending booking request for their ride. Extracts: commuter_name (if specified).
+12. SET_ROUTE: user wants to set, change, or update their route. Extracts: origin, destination.
 
 App Context:
 User Role: ${context.role}
@@ -100,7 +126,7 @@ Selected Chat Room ID: ${context.selectedChatRoomId || 'None'}
 
 Return ONLY a JSON object matching this TypeScript interface exactly:
 {
-  "type": "SEARCH_RIDES" | "SUMMARIZE_ACTIVITY" | "DRAFT_MESSAGE" | "DRAFT_COMMUNITY_POST" | "DELETE_POSTS" | "PREPARE_BOOKING" | "ACCEPT_BOOKING" | "PREPARE_RIDE_POST" | "NAVIGATE" | "CLARIFY" | "NOOP",
+  "type": "SEARCH_RIDES" | "SUMMARIZE_ACTIVITY" | "DRAFT_MESSAGE" | "DRAFT_COMMUNITY_POST" | "DELETE_POSTS" | "PREPARE_BOOKING" | "ACCEPT_BOOKING" | "PREPARE_RIDE_POST" | "NAVIGATE" | "CLARIFY" | "NOOP" | "SET_ROUTE",
   "params": { ...any extracted parameters... },
   "spokenReply": "A concise, conversational response (1-2 sentences max) to read aloud to the user.",
   "requiresConfirmation": boolean
@@ -114,43 +140,46 @@ For spokenReply:
 - If confirming an action, ask for confirmation (e.g. "Do you want me to post this message?").
 - If navigating or searching, say "Sure, looking for rides to BGC."
 - Always keep it short.
-    `;
+      `;
 
-    const chatRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${GROQ_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: Deno.env.get('AI_INTENT_MODEL') || 'llama-3.1-8b-instant',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `User said: "${transcript}"` }
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.1
-      })
-    });
+      const chatRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${GROQ_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: Deno.env.get('AI_INTENT_MODEL') || 'llama-3.1-8b-instant',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `User said: "${activeTranscript}"` }
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.1
+        })
+      });
 
-    if (!chatRes.ok) {
-      throw new Error(`Groq Chat Error: ${chatRes.status}`);
+      if (!chatRes.ok) {
+        throw new Error(`Groq Chat Error: ${chatRes.status}`);
+      }
+
+      const chatData = await chatRes.json();
+      const commandRaw = JSON.parse(chatData.choices[0].message.content);
+      
+      const finalResponse: AssistantCommand = {
+        type: commandRaw.type || 'NOOP',
+        params: commandRaw.params || {},
+        spokenReply: commandRaw.spokenReply || 'Sorry, something went wrong.',
+        requiresConfirmation: !!commandRaw.requiresConfirmation,
+        transcript: activeTranscript
+      };
+
+      return new Response(JSON.stringify(finalResponse), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    const chatData = await chatRes.json();
-    const commandRaw = JSON.parse(chatData.choices[0].message.content);
-    
-    const finalResponse: AssistantCommand = {
-      type: commandRaw.type || 'NOOP',
-      params: commandRaw.params || {},
-      spokenReply: commandRaw.spokenReply || 'Sorry, something went wrong.',
-      requiresConfirmation: !!commandRaw.requiresConfirmation,
-      transcript
-    };
-
-    return new Response(JSON.stringify(finalResponse), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    throw new Error('Could not determine action for voice assistant');
   } catch (error: any) {
     console.error('Voice Assistant Error:', error);
     return new Response(JSON.stringify({ error: error.message }), {

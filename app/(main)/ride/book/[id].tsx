@@ -9,6 +9,7 @@ import { getTripById } from '@/services/trips';
 import { createBooking } from '@/services/bookings';
 import { supabase } from '@/lib/supabase';
 import { formatCurrency, calculateFare } from '@/utils/fareCalculator';
+import { PLATFORM_FEE_RATE } from '@/lib/constants';
 import { formatDepartureTime } from '@/utils/dateFormatter';
 import { TripWithDriver } from '@/types/database';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
@@ -46,7 +47,11 @@ export default function BookRideScreen() {
     setBooking(true);
     try {
       const fareEst = trip.fare_per_seat * seats;
-      const driverPlatformFee = Math.round(fareEst * 0.10 * 100) / 100;
+      const commuterPlatformFee = Math.round(fareEst * PLATFORM_FEE_RATE * 100) / 100;
+      const driverPlatformFee = Math.round(fareEst * PLATFORM_FEE_RATE * 100) / 100;
+      const totalBookingPrice = fareEst + commuterPlatformFee;
+      const combinedPlatformFee = commuterPlatformFee + driverPlatformFee;
+
       const { error } = await createBooking({
         trip_id: trip.id,
         commuter_id: profile.id,
@@ -55,8 +60,10 @@ export default function BookRideScreen() {
         dropoff_lat: trip.destination_lat,
         dropoff_lng: trip.destination_lng,
         status: 'pending',
-        fare_paid: fareEst,
-        platform_fee: driverPlatformFee,
+        fare_paid: totalBookingPrice,
+        platform_fee: combinedPlatformFee,
+        driver_confirmed: false,
+        commuter_confirmed: false,
       });
       if (error) throw error;
 
@@ -102,7 +109,7 @@ export default function BookRideScreen() {
   if (!trip) return <LoadingSpinner size="lg" message="Trip not found" />;
 
   const totalFare = trip.fare_per_seat * seats;
-  const platformFee = 0; // Passengers pay no platform fee
+  const platformFee = Math.round(totalFare * PLATFORM_FEE_RATE * 100) / 100;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
