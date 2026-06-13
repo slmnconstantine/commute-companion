@@ -65,6 +65,8 @@ export interface Booking {
   status: 'pending' | 'accepted' | 'rejected' | 'completed';
   fare_paid: number;
   platform_fee: number;
+  driver_confirmed: boolean;
+  commuter_confirmed: boolean;
   created_at: string;
 }
 

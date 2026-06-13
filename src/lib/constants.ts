@@ -17,7 +17,7 @@ export const BASE_FARE = 15;
 /** 8 per kilometre */
 export const COST_PER_KM = 8;
 /** 0 per minute */
-export const COST_PER_MIN = 0;
+export const COST_PER_MIN = 2;
 /** 10 percent platform fee */
 export const PLATFORM_FEE_RATE = 0.10;
 

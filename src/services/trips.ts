@@ -48,7 +48,35 @@ export async function getTripById(id: string): Promise<TripWithDriver | null> {
     .select(`*, driver:profiles!driver_id(*), vehicle:vehicles!vehicle_id(*)`)
     .eq('id', id)
     .single();
-  if (error) return null;
+    
+  if (error || !data) return null;
+
+  // 24-hour self-healing check
+  if (data.status === 'ongoing') {
+    const departureTime = new Date(data.departure_time);
+    const diffMs = Date.now() - departureTime.getTime();
+    if (diffMs >= 24 * 60 * 60 * 1000) {
+      console.log(`[Self-Healing] Trip ${id} has been ongoing for >24 hours. Auto-completing...`);
+      // Update the trip status to completed
+      await updateTripStatus(id, 'completed');
+      
+      // Update all accepted bookings to completed
+      await supabase
+        .from('bookings')
+        .update({ status: 'completed', driver_confirmed: true, commuter_confirmed: true })
+        .eq('trip_id', id)
+        .eq('status', 'accepted');
+        
+      // Refetch the completed trip
+      const { data: refreshed } = await supabase
+        .from('trips')
+        .select(`*, driver:profiles!driver_id(*), vehicle:vehicles!vehicle_id(*)`)
+        .eq('id', id)
+        .single();
+      if (refreshed) return refreshed as TripWithDriver;
+    }
+  }
+
   return data as TripWithDriver;
 }
 
@@ -66,12 +94,12 @@ export async function updateTripStatus(id: string, status: string): Promise<{ er
   if (!error) {
     if (status === 'completed') {
       try {
-        // Fetch accepted bookings for this trip to sum their platform fees
+        // Fetch accepted/completed bookings for this trip to sum their platform fees
         const { data: bookings } = await supabase
           .from('bookings')
           .select('platform_fee')
           .eq('trip_id', id)
-          .eq('status', 'accepted');
+          .in('status', ['accepted', 'completed']);
 
         const totalFee = (bookings || []).reduce((sum, b) => sum + (b.platform_fee || 0), 0);
 

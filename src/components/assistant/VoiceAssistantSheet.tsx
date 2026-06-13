@@ -1,13 +1,14 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Animated, ActivityIndicator, ScrollView } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, Pressable, Animated, ActivityIndicator, ScrollView, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import { useVoiceAssistant } from '@/context/VoiceAssistantContext';
 
 export default function VoiceAssistantSheet() {
   const { theme } = useTheme();
-  const { state, conversation, stopRecording, cancel, confirmAction } = useVoiceAssistant();
+  const { state, conversation, stopRecording, cancel, confirmAction, processTextInput } = useVoiceAssistant();
   
+  const [inputValue, setInputValue] = useState('');
   const slideAnim = useRef(new Animated.Value(300)).current;
   const scrollViewRef = useRef<ScrollView>(null);
 
@@ -54,7 +55,7 @@ export default function VoiceAssistantSheet() {
             {state === 'transcribing' && 'Transcribing...'}
             {state === 'thinking' && 'Thinking...'}
             {state === 'speaking' && 'Assistant'}
-            {state === 'confirming' && 'Confirmation'}
+            {state === 'confirming' && 'Confirmation Required'}
             {state === 'executing' && 'Executing...'}
             {state === 'error' && 'Error'}
           </Text>
@@ -96,22 +97,46 @@ export default function VoiceAssistantSheet() {
             )}
 
             {state === 'confirming' && (
-              <View style={styles.actionRow}>
-                <Pressable 
-                  style={[styles.btn, styles.btnCancel, { borderColor: theme.colors.border }]} 
-                  onPress={cancel}
-                >
-                  <Text style={[styles.btnText, { color: theme.colors.text }]}>Cancel</Text>
-                </Pressable>
-                <Pressable 
-                  style={[styles.btn, styles.btnConfirm, { backgroundColor: theme.colors.primary }]} 
-                  onPress={confirmAction}
-                >
-                  <Text style={[styles.btnText, { color: '#fff' }]}>Confirm</Text>
-                </Pressable>
+              <View style={{ alignItems: 'center', width: '100%', gap: 12, marginVertical: 10 }}>
+                <Text style={[styles.listeningSubtext, { color: theme.colors.primary }]}>
+                  🎙️ Listening for "yes" or "no"...
+                </Text>
+                <View style={styles.actionRow}>
+                  <Pressable 
+                    style={[styles.btn, styles.btnCancel, { borderColor: theme.colors.border }]} 
+                    onPress={cancel}
+                  >
+                    <Text style={[styles.btnText, { color: theme.colors.text }]}>Cancel</Text>
+                  </Pressable>
+                  <Pressable 
+                    style={[styles.btn, styles.btnConfirm, { backgroundColor: theme.colors.primary }]} 
+                    onPress={confirmAction}
+                  >
+                    <Text style={[styles.btnText, { color: '#fff' }]}>Confirm</Text>
+                  </Pressable>
+                </View>
               </View>
             )}
           </ScrollView>
+
+          {/* Text input fallback */}
+          {['recording', 'speaking', 'confirming', 'thinking', 'error'].includes(state) && (
+            <View style={[styles.inputContainer, { borderTopColor: theme.colors.border }]}>
+              <TextInput
+                value={inputValue}
+                onChangeText={setInputValue}
+                placeholder="Type a command..."
+                placeholderTextColor={theme.colors.textMuted}
+                style={[styles.textInput, { color: theme.colors.text, backgroundColor: `${theme.colors.border}40` }]}
+                onSubmitEditing={() => {
+                  if (inputValue.trim()) {
+                    processTextInput(inputValue.trim());
+                    setInputValue('');
+                  }
+                }}
+              />
+            </View>
+          )}
         </View>
       </Animated.View>
     </View>
@@ -154,7 +179,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   chatScroll: {
-    maxHeight: 400,
+    maxHeight: 300,
     width: '100%',
   },
   chatScrollContent: {
@@ -183,10 +208,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 20,
   },
+  listeningSubtext: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 13,
+    marginBottom: 4,
+  },
   actionRow: {
     flexDirection: 'row',
     gap: 16,
-    marginTop: 10,
+    width: '100%',
   },
   btn: {
     flex: 1,
@@ -201,5 +231,19 @@ const styles = StyleSheet.create({
   btnText: {
     fontFamily: 'Inter-Bold',
     fontSize: 16,
+  },
+  inputContainer: {
+    width: '100%',
+    paddingTop: 16,
+    marginTop: 8,
+    borderTopWidth: 1,
+  },
+  textInput: {
+    width: '100%',
+    height: 48,
+    borderRadius: 24,
+    paddingHorizontal: 18,
+    fontFamily: 'Inter-Medium',
+    fontSize: 15,
   },
 });
