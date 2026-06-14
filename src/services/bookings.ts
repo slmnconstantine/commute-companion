@@ -1,9 +1,29 @@
 import { supabase } from '@/lib/supabase';
 import { Booking, BookingWithTrip, BookingWithCommuter } from '@/types/database';
 import { sendPushNotification } from './pushNotifications';
+import { updateTripStatus } from './trips';
 
 /** Create a booking request */
 export async function createBooking(bookingData: Omit<Booking, 'id' | 'created_at'>): Promise<{ data: Booking | null; error: Error | null }> {
+  // Check seat availability
+  const { data: trip } = await supabase.from('trips').select('available_seats').eq('id', bookingData.trip_id).single();
+  if (!trip || trip.available_seats <= 0) {
+    return { data: null, error: new Error('Trip is full or unavailable') };
+  }
+
+  // Prevent duplicate bookings
+  const { data: existingBooking } = await supabase
+    .from('bookings')
+    .select('id')
+    .eq('trip_id', bookingData.trip_id)
+    .eq('commuter_id', bookingData.commuter_id)
+    .in('status', ['pending', 'accepted'])
+    .maybeSingle();
+
+  if (existingBooking) {
+    return { data: null, error: new Error('You already have an active booking for this trip.') };
+  }
+
   const { data, error } = await supabase
     .from('bookings')
     .insert(bookingData)
@@ -35,20 +55,6 @@ export async function getCommuterBookings(commuterId: string): Promise<BookingWi
 
   // Self-healing: if a trip was completed/cancelled but the booking got stuck in pending/accepted
   return bookings.map(b => {
-    if (b.trip && b.trip.status === 'ongoing') {
-      const departureTime = new Date(b.trip.departure_time);
-      const diffMs = Date.now() - departureTime.getTime();
-      if (diffMs >= 24 * 60 * 60 * 1000) {
-        const { updateTripStatus } = require('./trips');
-        updateTripStatus(b.trip_id, 'completed').then();
-        supabase.from('bookings').update({ status: 'completed', driver_confirmed: true, commuter_confirmed: true }).eq('id', b.id).then();
-        
-        b.trip.status = 'completed';
-        b.status = 'completed';
-        b.driver_confirmed = true;
-        b.commuter_confirmed = true;
-      }
-    }
     if (b.trip && (b.trip.status === 'completed' || b.trip.status === 'cancelled')) {
       if (b.status === 'pending' || b.status === 'accepted') {
         const newStatus = b.trip.status === 'cancelled' ? 'rejected' : 'completed';
@@ -197,7 +203,6 @@ export async function checkAndCompleteTrip(tripId: string): Promise<void> {
 
   if (allCompleted) {
     try {
-      const { updateTripStatus } = require('./trips');
       await updateTripStatus(tripId, 'completed');
     } catch (err) {
       console.error('Failed to auto-complete trip:', err);

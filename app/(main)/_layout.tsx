@@ -1,6 +1,6 @@
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
-import { Redirect } from 'expo-router';
+import React, { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { NotificationProvider } from '@/context/NotificationContext';
@@ -8,17 +8,20 @@ import { NotificationProvider } from '@/context/NotificationContext';
 export default function MainLayout() {
   const { session, isLoading } = useAuth();
   const { theme } = useTheme();
+  const router = useRouter();
 
-  if (isLoading) {
+  useEffect(() => {
+    if (!isLoading && !session) {
+      router.replace('/(auth)/welcome');
+    }
+  }, [session, isLoading, router]);
+
+  if (isLoading || !session) {
     return (
       <View style={[styles.loading, { backgroundColor: theme.colors.background }]}>
         <ActivityIndicator size="large" color={theme.colors.primary} />
       </View>
     );
-  }
-
-  if (!session) {
-    return <Redirect href="/(auth)/welcome" />;
   }
 
   return (

@@ -16,15 +16,58 @@ import { formatDepartureTime } from '@/utils/dateFormatter';
 import { formatCurrency } from '@/utils/fareCalculator';
 import Avatar from '@/components/common/Avatar';
 import Badge from '@/components/common/Badge';
+import Skeleton from '@/components/common/Skeleton';
 
 interface TripCardProps {
-  trip: TripWithDriver;
+  trip?: TripWithDriver;
   onPress?: () => void;
+  loading?: boolean;
 }
 
-export default function TripCard({ trip, onPress }: TripCardProps) {
+export default function TripCard({ trip, onPress, loading = false }: TripCardProps) {
   const { theme } = useTheme();
   const { profile } = useAuth();
+
+  if (loading || !trip) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+        <View style={styles.driverRow}>
+          <Skeleton width={32} height={32} borderRadius={16} />
+          <View style={styles.driverInfo}>
+            <Skeleton width={120} height={16} style={{ marginBottom: 6 }} />
+            <Skeleton width={80} height={12} />
+          </View>
+          <View style={styles.badgeRow}>
+            <Skeleton width={60} height={24} borderRadius={12} />
+          </View>
+        </View>
+
+        <View style={styles.routeContainer}>
+          <View style={styles.routeDots}>
+            <View style={[styles.originDot, { backgroundColor: theme.colors.border }]} />
+            <View style={[styles.routeLine, { backgroundColor: theme.colors.border }]} />
+            <View style={[styles.destDot, { backgroundColor: theme.colors.border }]} />
+          </View>
+          <View style={styles.routeLabels}>
+            <Skeleton width="80%" height={16} />
+            <Skeleton width="60%" height={16} />
+          </View>
+        </View>
+
+        <View style={[styles.infoRow, { borderTopColor: theme.colors.border }]}>
+          <View style={styles.infoItem}>
+            <Skeleton width={60} height={14} />
+          </View>
+          <View style={styles.infoItem}>
+            <Skeleton width={50} height={14} />
+          </View>
+          <View style={styles.infoItem}>
+            <Skeleton width={70} height={20} />
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   const isMyPostedRide = profile?.id === trip.driver_id;
   const pendingRequestsCount = isMyPostedRide && trip.bookings
@@ -33,6 +76,8 @@ export default function TripCard({ trip, onPress }: TripCardProps) {
 
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Trip from ${trip.origin_label} to ${trip.destination_label}. Driven by ${trip.driver?.full_name}. Fare is ${trip.fare_per_seat === 0 ? 'free' : formatCurrency(trip.fare_per_seat)}.`}
       style={({ pressed }) => [
         styles.container,
         {

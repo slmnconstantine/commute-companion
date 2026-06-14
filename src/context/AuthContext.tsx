@@ -43,23 +43,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
       if (!error && data) {
         setProfile(data as Profile);
-        
-        // Register for push notifications
-        const token = await registerForPushNotificationsAsync();
-        if (token && data.push_token !== token) {
-          const { error: updateError } = await updateProfileService(userId, { push_token: token });
-          if (updateError) {
-            console.error('[PUSH] Failed to save push token to Supabase:', updateError);
-          } else {
-            console.log('[PUSH] Successfully saved push token to Supabase profile!');
-            setProfile((prev) => (prev ? { ...prev, push_token: token } : (data as Profile)));
-          }
-        }
       }
     } catch (e) {
       console.error('Error fetching profile:', e);
     }
   }, []);
+
+  // Handle Push Token Registration decoupled from fetchProfile
+  useEffect(() => {
+    if (!profile?.id) return;
+
+    let isMounted = true;
+    const registerPush = async () => {
+      try {
+        const token = await registerForPushNotificationsAsync();
+        // Only update if the token is new or changed
+        if (token && profile.push_token !== token && isMounted) {
+          const { error: updateError } = await updateProfileService(profile.id, { push_token: token });
+          if (updateError) {
+            console.error('[PUSH] Failed to save push token to Supabase:', updateError);
+          } else {
+            console.log('[PUSH] Successfully saved push token to Supabase profile!');
+            setProfile((prev) => (prev ? { ...prev, push_token: token } : prev));
+          }
+        }
+      } catch (err) {
+        console.error('[PUSH] Error during push registration:', err);
+      }
+    };
+
+    registerPush();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [profile?.id]); // Only re-run if a new user logs in
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {

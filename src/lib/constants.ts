@@ -16,7 +16,7 @@ export const APP_TAGLINE = 'Your Dynamic Ride-Sharing Platform';
 export const BASE_FARE = 15;
 /** 8 per kilometre */
 export const COST_PER_KM = 8;
-/** 0 per minute */
+/** ₱2 per minute */
 export const COST_PER_MIN = 2;
 /** 10 percent platform fee */
 export const PLATFORM_FEE_RATE = 0.10;
@@ -53,4 +53,4 @@ export const DEFAULT_PAGE_SIZE = 20;
 // ---------------------------------------------------------------------------
 
 export const TRIP_STATUSES = ['open', 'full', 'ongoing', 'completed', 'cancelled'] as const;
-export const BOOKING_STATUSES = ['pending', 'confirmed', 'rejected', 'cancelled', 'completed'] as const;
+export const BOOKING_STATUSES = ['pending', 'accepted', 'rejected', 'completed'] as const;

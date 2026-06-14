@@ -28,7 +28,7 @@ import { useAuth } from '@/context/AuthContext';
 import EmptyState from '@/components/common/EmptyState';
 import { getPosts, toggleLike, createPost, getComments, createComment, deletePost, updatePost } from '@/services/hub';
 import { HubPostWithAuthor, PostCommentWithAuthor } from '@/types/database';
-import HubPostCard, { STATUS_CONFIG } from '@/components/hub/HubPostCard';
+import HubPostCard, { STATUS_CONFIG } from '@/components/community/HubPostCard';
 
 // ── Route Banner ──────────────────────────────────────────────────────────────
 
@@ -309,7 +309,6 @@ export default function CommunityScreen() {
                 <HubPostCard
                   key={post.id}
                   post={post}
-                  theme={theme}
                   currentUserId={profile?.id}
                   onLike={handleLike}
                   onCommentClick={(p) => {

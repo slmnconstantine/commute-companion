@@ -20,6 +20,8 @@ import Avatar from '@/components/common/Avatar';
 import Badge from '@/components/common/Badge';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
 import { TripWithDriver, BookingWithCommuter } from '@/types/database';
+import DriverBookingsList from '@/components/ride/DriverBookingsList';
+import TripBottomActions from '@/components/ride/TripBottomActions';
 
 export default function TripDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -31,7 +33,14 @@ export default function TripDetailScreen() {
   const [trip, setTrip] = useState<TripWithDriver | null>(null);
   const [loading, setLoading] = useState(true);
   const [routeCoords, setRouteCoords] = useState<{ latitude: number; longitude: number }[]>([]);
-  const [driverLiveLocation, setDriverLiveLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [driverLiveLocation, setDriverLiveLocation] = useState<{ latitude: number; longitude: number; timestamp: number } | null>(null);
+  const [now, setNow] = useState(Date.now());
+
+  // Interval to re-evaluate staleness
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   const [bookings, setBookings] = useState<BookingWithCommuter[]>([]);
   const [chatRoomId, setChatRoomId] = useState<string | null>(null);
@@ -45,6 +54,9 @@ export default function TripDetailScreen() {
   const isDriver = profile?.id === trip?.driver_id;
   const isOngoingDriver = !!(isDriver && trip && trip.status === 'ongoing');
   const isOngoingActiveUser = !!(trip && trip.status === 'ongoing' && (isDriver || isConfirmedPassenger));
+
+  // A driver is stale if we haven't received a location update in the last 30 seconds
+  const isDriverStale = driverLiveLocation ? (now - driverLiveLocation.timestamp > 30000) : false;
 
   const acceptedBookings = bookings.filter(b => b.status === 'accepted');
   const totalCollectedFare = acceptedBookings.reduce((sum, b) => sum + (b.fare_paid || 0), 0);
@@ -114,7 +126,7 @@ export default function TripDetailScreen() {
         locationSubscription = await Location.watchPositionAsync(
           { accuracy: Location.Accuracy.High, distanceInterval: 10 },
           (loc) => {
-            setDriverLiveLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+            setDriverLiveLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude, timestamp: loc.timestamp });
             startBroadcastingLocation(trip.id, profile.id, {
               latitude: loc.coords.latitude,
               longitude: loc.coords.longitude,
@@ -126,7 +138,7 @@ export default function TripDetailScreen() {
         );
       } else if (!isDriver && trip.status === 'ongoing') {
         unsubscribeCommuter = subscribeToDriverLocation(trip.id, (loc) => {
-          setDriverLiveLocation({ latitude: loc.latitude, longitude: loc.longitude });
+          setDriverLiveLocation({ latitude: loc.latitude, longitude: loc.longitude, timestamp: loc.timestamp });
         });
       }
     };
@@ -480,15 +492,14 @@ export default function TripDetailScreen() {
           <Marker id="origin" lngLat={[trip.origin_lng, trip.origin_lat]}>
             <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: '#0D9488', borderWidth: 2, borderColor: '#fff' }} />
           </Marker>
-
           <Marker id="destination" lngLat={[trip.destination_lng, trip.destination_lat]}>
             <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: '#F59E0B', borderWidth: 2, borderColor: '#fff' }} />
           </Marker>
 
           {driverLiveLocation && (
             <Marker id="driverLive" lngLat={[driverLiveLocation.longitude, driverLiveLocation.latitude]}>
-              <View style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}>
-                <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: theme.colors.primary, borderWidth: 3, borderColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5 }} />
+              <View style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', opacity: isDriverStale ? 0.4 : 1 }}>
+                <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: isDriverStale ? '#9CA3AF' : theme.colors.primary, borderWidth: 3, borderColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5 }} />
               </View>
             </Marker>
           )}
@@ -597,216 +608,36 @@ export default function TripDetailScreen() {
         </View>
 
         {/* Bookings Section (Driver Only) */}
-        {isDriver && bookings.length > 0 && (
-          <View style={[styles.driverCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, flexDirection: 'column', alignItems: 'stretch' }]}>
-            <Text style={[{ color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 16, marginBottom: 8 }]}>Booking Requests</Text>
-            {bookings.map(booking => (
-              <View key={booking.id} style={[styles.bookingItem, { borderBottomColor: theme.colors.border }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                  <Avatar uri={booking.commuter?.avatar_url} name={booking.commuter?.full_name || ''} size="sm" />
-                  <View style={{ marginLeft: 10, flex: 1, alignItems: 'flex-start' }}>
-                    <Text style={{ color: theme.colors.text, fontFamily: 'Inter-Medium', marginBottom: 4 }} numberOfLines={1}>{booking.commuter?.full_name}</Text>
-                    <Badge label={booking.status} variant={booking.status === 'accepted' ? 'accepted' : booking.status === 'pending' ? 'pending' : 'cancelled'} />
-                  </View>
-                </View>
-
-                {booking.status === 'pending' && (
-                  <View style={{ flexDirection: 'row', gap: 8 }}>
-                    <Pressable
-                      style={[styles.actionBtn, { backgroundColor: theme.colors.error + '20' }]}
-                      onPress={() => handleRejectBooking(booking)}
-                      disabled={processingBookingId === booking.id}
-                    >
-                      <Ionicons name="close" size={20} color={theme.colors.error} />
-                    </Pressable>
-                    <Pressable
-                      style={[styles.actionBtn, { backgroundColor: theme.colors.success + '20' }]}
-                      onPress={() => handleAcceptBooking(booking)}
-                      disabled={processingBookingId === booking.id}
-                    >
-                      <Ionicons name="checkmark" size={20} color={theme.colors.success} />
-                    </Pressable>
-                  </View>
-                )}
-
-                {booking.status === 'accepted' && (trip.status === 'open' || trip.status === 'full') && (
-                  <Pressable
-                    style={[styles.actionBtn, { backgroundColor: theme.colors.error + '20' }]}
-                    onPress={() => handleRemovePassenger(booking)}
-                    disabled={processingBookingId === booking.id}
-                  >
-                    <Ionicons name="trash-outline" size={18} color={theme.colors.error} />
-                  </Pressable>
-                )}
-
-                {booking.status === 'accepted' && trip.status === 'ongoing' && (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    {!booking.driver_confirmed ? (
-                      <Pressable
-                        style={[styles.actionBtn, { backgroundColor: theme.colors.success + '20', width: 'auto', paddingHorizontal: 12 }]}
-                        onPress={() => handleDriverArrival(booking.id)}
-                        disabled={processingBookingId === booking.id}
-                      >
-                        <Text style={{ color: theme.colors.success, fontSize: 12, fontFamily: 'Inter-SemiBold' }}>Confirm Arrival</Text>
-                      </Pressable>
-                    ) : (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                        <Ionicons name="checkmark-circle" size={16} color={theme.colors.success} />
-                        <Text style={{ color: theme.colors.success, fontSize: 12, fontFamily: 'Inter-Medium' }}>Arrived</Text>
-                      </View>
-                    )}
-                  </View>
-                )}
-              </View>
-            ))}
-
-            {acceptedBookings.length > 0 && (
-              <View style={{ marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: theme.colors.border, gap: 8 }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text style={{ color: theme.colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 14 }}>To Collect</Text>
-                  <Text style={{ color: theme.colors.text, fontFamily: 'Inter-Medium', fontSize: 14 }}>{formatCurrency(totalCollectedFare)}</Text>
-                </View>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text style={{ color: theme.colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 14 }}>Platform fee (10%)</Text>
-                  <Text style={{ color: theme.colors.error, fontFamily: 'Inter-Medium', fontSize: 14 }}>-{formatCurrency(driverPayoutDetails.platformFee)}</Text>
-                </View>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
-                  <Text style={{ color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 15 }}>Net Earnings</Text>
-                  <Text style={{ color: theme.colors.success, fontFamily: 'Inter-Bold', fontSize: 15 }}>{formatCurrency(driverPayoutDetails.netPayout)}</Text>
-                </View>
-              </View>
-            )}
-          </View>
-        )}
+        <DriverBookingsList
+          bookings={bookings}
+          trip={trip}
+          theme={theme}
+          processingBookingId={processingBookingId}
+          acceptedBookings={acceptedBookings}
+          driverPayoutDetails={driverPayoutDetails}
+          handleAcceptBooking={handleAcceptBooking}
+          handleRejectBooking={handleRejectBooking}
+          handleRemovePassenger={handleRemovePassenger}
+          handleDriverArrival={handleDriverArrival}
+        />
       </ScrollView>
 
       {/* Bottom CTA */}
-      {!isDriver && trip.status === 'open' && !userBooking && (
-        <View style={[styles.bottomCTA, { backgroundColor: theme.colors.surface, paddingBottom: insets.bottom + 16, borderTopColor: theme.colors.border }]}>
-          <View style={styles.ctaInfo}>
-            <Text style={[styles.ctaPrice, { color: trip.fare_per_seat === 0 ? theme.colors.success : theme.colors.primary, fontFamily: 'Inter-Bold' }]}>
-              {trip.fare_per_seat === 0 ? 'FREE' : formatCurrency(trip.fare_per_seat)}
-            </Text>
-            {trip.fare_per_seat > 0 && (
-              <Text style={[styles.ctaPerSeat, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>per seat</Text>
-            )}
-          </View>
-          <Pressable
-            style={[styles.ctaButton, { backgroundColor: theme.colors.primary }]}
-            onPress={() => router.push(`/(main)/ride/book/${id}`)}
-          >
-            <Text style={styles.ctaButtonText}>Book Seat</Text>
-          </Pressable>
-        </View>
-      )}
-
-      {/* Already Booked / Pending State */}
-      {!isDriver && userBooking && userBooking.status === 'pending' && (
-        <View style={[styles.bottomCTA, { backgroundColor: theme.colors.surface, paddingBottom: insets.bottom + 16, borderTopColor: theme.colors.border, justifyContent: 'center' }]}>
-          <Text style={[{ color: theme.colors.textMuted, fontFamily: 'Inter-Medium', fontSize: 16 }]}>Booking Request Pending...</Text>
-        </View>
-      )}
-
-      {/* Open Trip Chat CTA (Commuter) */}
-      {!isDriver && showChatButton && trip.status !== 'ongoing' && (
-        <View style={[styles.bottomCTA, { backgroundColor: theme.colors.surface, paddingBottom: insets.bottom + 16, borderTopColor: theme.colors.border, gap: 12 }]}>
-          <Pressable
-            style={[styles.ctaButton, { backgroundColor: theme.colors.primary, flex: 1, flexDirection: 'row', gap: 8 }]}
-            onPress={() => router.push(`/(main)/chat/${chatRoomId}`)}
-          >
-            <Ionicons name="chatbubbles" size={20} color="#fff" />
-            <Text style={styles.ctaButtonText}>Open Chat</Text>
-          </Pressable>
-          {userBooking && (trip.status === 'open' || trip.status === 'full') && (
-            <Pressable
-              style={[
-                styles.ctaButton,
-                {
-                  backgroundColor: 'transparent',
-                  borderColor: theme.colors.error + '40',
-                  borderWidth: 1,
-                  height: 44,
-                  elevation: 0,
-                  shadowOpacity: 0,
-                  paddingHorizontal: 16,
-                  flexDirection: 'row',
-                  gap: 6,
-                }
-              ]}
-              onPress={() => handleLeaveTrip(userBooking.id)}
-              disabled={processingBookingId === userBooking.id}
-            >
-              <Ionicons name="exit-outline" size={16} color={theme.colors.error} />
-              <Text style={[styles.ctaButtonText, { color: theme.colors.error, fontSize: 13 }]}>Leave Trip</Text>
-            </Pressable>
-          )}
-        </View>
-      )}
-
-      {/* Ongoing Trip Commuter Handshake CTA */}
-      {!isDriver && userBooking && userBooking.status === 'accepted' && trip.status === 'ongoing' && (
-        <View style={[styles.bottomCTA, { backgroundColor: theme.colors.surface, paddingBottom: insets.bottom + 16, borderTopColor: theme.colors.border, flexDirection: 'column', gap: 12, alignItems: 'stretch' }]}>
-          {!userBooking.commuter_confirmed ? (
-            <Pressable
-              style={[styles.ctaButton, { backgroundColor: theme.colors.success, flexDirection: 'row', gap: 8 }]}
-              onPress={() => handleCommuterArrival(userBooking.id)}
-            >
-              <Ionicons name="checkmark-circle" size={20} color="#fff" />
-              <Text style={styles.ctaButtonText}>Confirm Arrival</Text>
-            </Pressable>
-          ) : (
-            <View style={[styles.ctaButton, { backgroundColor: theme.colors.border, flexDirection: 'row', gap: 8, opacity: 0.8, elevation: 0, shadowOpacity: 0 }]}>
-              <Ionicons name="time" size={20} color={theme.colors.textMuted} />
-              <Text style={[styles.ctaButtonText, { color: theme.colors.textMuted }]}>Waiting for Driver Confirmation...</Text>
-            </View>
-          )}
-          {chatRoomId && (
-            <Pressable
-              style={[styles.ctaButton, { backgroundColor: theme.colors.primary, flexDirection: 'row', gap: 8 }]}
-              onPress={() => router.push(`/(main)/chat/${chatRoomId}`)}
-            >
-              <Ionicons name="chatbubbles" size={20} color="#fff" />
-              <Text style={styles.ctaButtonText}>Open Trip Chat</Text>
-            </Pressable>
-          )}
-        </View>
-      )}
-
-      {/* Driver Controls */}
-      {isDriver && trip.status !== 'completed' && trip.status !== 'cancelled' && (
-        <View style={[styles.bottomCTA, { backgroundColor: theme.colors.surface, paddingBottom: insets.bottom + 16, borderTopColor: theme.colors.border, flexDirection: 'column', gap: 12, alignItems: 'stretch' }]}>
-
-          {(trip.status === 'open' || trip.status === 'full') && (
-            <Pressable
-              style={[styles.ctaButton, { backgroundColor: theme.colors.success, flexDirection: 'row', gap: 8 }]}
-              onPress={() => handleUpdateTripStatus('ongoing')}
-            >
-              <Ionicons name="car" size={20} color="#fff" />
-              <Text style={styles.ctaButtonText}>Set Off (Start Trip)</Text>
-            </Pressable>
-          )}
-
-          {trip.status === 'ongoing' && (
-            <Pressable
-              style={[styles.ctaButton, { backgroundColor: theme.colors.primary, flexDirection: 'row', gap: 8 }]}
-              onPress={() => handleUpdateTripStatus('completed')}
-            >
-              <Ionicons name="checkmark-circle" size={20} color="#fff" />
-              <Text style={styles.ctaButtonText}>Complete Trip</Text>
-            </Pressable>
-          )}
-
-          {showChatButton && (
-            <Pressable
-              style={[styles.ctaButton, { backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.primary, flexDirection: 'row', gap: 8 }]}
-              onPress={() => router.push(`/(main)/chat/${chatRoomId}`)}
-            >
-              <Ionicons name="chatbubbles" size={20} color={theme.colors.primary} />
-              <Text style={[styles.ctaButtonText, { color: theme.colors.primary }]}>Open Trip Chat</Text>
-            </Pressable>
-          )}
-        </View>
-      )}
+      <TripBottomActions
+        trip={trip}
+        theme={theme}
+        insets={insets}
+        isDriver={isDriver}
+        userBooking={userBooking}
+        showChatButton={!!showChatButton}
+        chatRoomId={chatRoomId}
+        processingBookingId={processingBookingId}
+        handleLeaveTrip={handleLeaveTrip}
+        handleCommuterArrival={handleCommuterArrival}
+        handleUpdateTripStatus={handleUpdateTripStatus}
+        router={router}
+        id={id}
+      />
     </View>
   );
 }

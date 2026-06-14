@@ -35,23 +35,44 @@ const queryClient = new QueryClient({
   },
 });
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 function RootLayoutNav() {
   const { session, isLoading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const navigationState = useRootNavigationState();
+  const [hasSkippedVerification, setHasSkippedVerification] = React.useState(false);
+
+  // Check if user previously chose "Skip for now" on this device
+  useEffect(() => {
+    AsyncStorage.getItem('@skipped_verification').then(val => {
+      if (val === 'true') setHasSkippedVerification(true);
+    });
+  }, []);
 
   useEffect(() => {
     if (isLoading || !navigationState?.key) return;
 
     const inAuthGroup = segments[0] === '(auth)';
+    const isVerifyEmail = inAuthGroup && segments[1] === 'verify-email';
 
     if (!session && !inAuthGroup) {
       router.replace('/(auth)/welcome');
     } else if (session && inAuthGroup) {
-      router.replace('/(main)/(tabs)');
+      // Soft Gate logic
+      if (!session.user.email_confirmed_at && !hasSkippedVerification && !isVerifyEmail) {
+        router.replace('/(auth)/verify-email');
+      } else if (session.user.email_confirmed_at || hasSkippedVerification) {
+        if (isVerifyEmail) {
+          // If they verified or skipped while on verify-email screen, push to main
+          router.replace('/(main)/(tabs)');
+        } else {
+          router.replace('/(main)/(tabs)');
+        }
+      }
     }
-  }, [session, isLoading, segments, navigationState?.key]);
+  }, [session, isLoading, segments, navigationState?.key, hasSkippedVerification]);
 
   return (
     <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>

@@ -15,15 +15,29 @@ import { Profile, Vehicle } from '@/types/database';
 import Avatar from '@/components/common/Avatar';
 import StarRating from '@/components/common/StarRating';
 
+import Skeleton from '@/components/common/Skeleton';
+
 interface DriverInfoCardProps {
-  /** Driver's profile */
-  driver: Profile;
-  /** Driver's active vehicle (optional) */
-  vehicle?: Vehicle | null;
+  driver?: Pick<Profile, 'full_name' | 'avatar_url' | 'verified_badge' | 'rating_avg' | 'total_ratings'>;
+  vehicle?: Pick<Vehicle, 'model' | 'plate_number' | 'color' | 'type' | 'capacity'>;
+  loading?: boolean;
 }
 
-export default function DriverInfoCard({ driver, vehicle }: DriverInfoCardProps) {
+export default function DriverInfoCard({ driver, vehicle, loading = false }: DriverInfoCardProps) {
   const { theme } = useTheme();
+
+  if (loading || !driver) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, flexDirection: 'row', alignItems: 'center' }]}>
+        <Skeleton width={56} height={56} borderRadius={28} />
+        <View style={{ marginLeft: 16 }}>
+          <Skeleton width={140} height={18} style={{ marginBottom: 6 }} />
+          <Skeleton width={100} height={14} style={{ marginBottom: 6 }} />
+          <Skeleton width={120} height={14} />
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View

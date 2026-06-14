@@ -3,15 +3,7 @@ import { HubPostWithAuthor, PostCommentWithAuthor } from '@/types/database';
 import { sendPushNotification } from './pushNotifications';
 import { handleServiceError } from '@/utils/errorHelper';
 
-function isJsonLabel(label: string | null) {
-  if (!label) return false;
-  try {
-    const parsed = JSON.parse(label);
-    return !!(parsed && typeof parsed === 'object');
-  } catch (e) {
-    return false;
-  }
-}
+import { isJsonLabel } from '@/utils/routeHash';
 
 export const getPosts = async (routeHash: string, currentUserId: string): Promise<HubPostWithAuthor[]> => {
   // Fetch posts with author info and counts for likes/comments
@@ -174,25 +166,31 @@ export const createPost = async (
   const authorProfile = Array.isArray(data.author) ? data.author[0] : data.author;
   
   // Notify other users tracking this route (only commute routes, ignoring temporary ride request routes)
-  const { data: routesData, error: routesError } = await supabase.from('routes').select('user_id, label').eq('route_hash', routeHash).eq('is_active', true);
-  console.log("Found routes for push:", routesData, "Error:", routesError);
-  
+  const { data: routesData } = await supabase
+    .from('user_routes')
+    .select('user_id, label')
+    .eq('route_hash', routeHash);
+
   if (routesData && routesData.length > 0) {
     const userIds = Array.from(new Set(
       routesData
-        .filter(r => !isJsonLabel(r.label))
+        .filter(r => {
+          try {
+            JSON.parse(r.label);
+            return false;
+          } catch {
+            return true;
+          }
+        })
         .map(r => r.user_id)
     )).filter(id => id !== userId);
-    console.log("Filtered userIds for push:", userIds);
     
     if (userIds.length > 0) {
-      const { data: profilesData, error: profilesError } = await supabase.from('profiles').select('push_token').in('id', userIds);
-      console.log("Fetched profiles for push:", profilesData, "Error:", profilesError);
+      const { data: profilesData } = await supabase.from('profiles').select('push_token').in('id', userIds);
       
       if (profilesData) {
         profilesData.forEach(p => {
           if (p.push_token) {
-            console.log("Sending push to:", p.push_token);
             sendPushNotification(p.push_token, `Community Update: ${statusTag}`, `${authorProfile.full_name} posted an update on your route.`, { type: 'hub_post', routeHash });
           }
         });
@@ -241,11 +239,14 @@ export const updatePost = async (postId: string, userId: string, statusTag: stri
   } as HubPostWithAuthor;
 };
 
-export const deleteAllUserPosts = async (userId: string, routeHash: string): Promise<boolean> => {
-  const { error } = await supabase
-    .from('hub_posts')
-    .delete()
-    .match({ author_id: userId, route_hash: routeHash });
+export const deleteAllUserPosts = async (userId: string, routeHash?: string): Promise<boolean> => {
+  let query = supabase.from('hub_posts').delete().eq('author_id', userId);
+  
+  if (routeHash) {
+    query = query.eq('route_hash', routeHash);
+  }
+
+  const { error } = await query;
 
   if (error) {
     handleServiceError('Error deleting all user posts:', error);

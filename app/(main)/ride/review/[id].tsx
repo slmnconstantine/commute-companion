@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
-import { submitReviewAndUpdateProfile } from '@/services/reviews';
+import { submitReview } from '@/services/reviews';
 
 export default function ReviewScreen() {
   const { id, driverId } = useLocalSearchParams<{ id: string; driverId: string }>();
@@ -24,7 +24,7 @@ export default function ReviewScreen() {
     if (!profile || !id) return;
     setLoading(true);
     try {
-      const { error } = await submitReviewAndUpdateProfile({
+      const { error } = await submitReview({
         booking_id: id,
         reviewer_id: profile.id,
         reviewee_id: driverId || '', // Passed from Activity tab

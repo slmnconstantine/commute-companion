@@ -74,9 +74,17 @@ export default function HomeScreen() {
   const [activeOngoingTrip, setActiveOngoingTrip] = React.useState<any>(null);
   const [routeVisible, setRouteVisible] = React.useState(false);
   const [routeMembers, setRouteMembers] = React.useState<Record<string, RouteLocationPayload>>({});
-  const [driverLiveLocation, setDriverLiveLocation] = React.useState<{ latitude: number; longitude: number } | null>(null);
+  const [driverLiveLocation, setDriverLiveLocation] = React.useState<{ latitude: number; longitude: number; timestamp: number } | null>(null);
+  const [now, setNow] = React.useState(Date.now());
+
+  React.useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   const routeChannelRef = React.useRef<any>(null);
+
+  const isDriverStale = driverLiveLocation ? (now - driverLiveLocation.timestamp > 30000) : false;
 
   // Check and subscribe to active ongoing trips for real-time banner display
   React.useEffect(() => {
@@ -198,8 +206,8 @@ export default function HomeScreen() {
       return;
     }
 
-    const unsubscribe = subscribeToDriverLocation(activeOngoingTrip.id, (loc: { latitude: number; longitude: number }) => {
-      setDriverLiveLocation({ latitude: loc.latitude, longitude: loc.longitude });
+    const unsubscribe = subscribeToDriverLocation(activeOngoingTrip.id, (loc: any) => {
+      setDriverLiveLocation({ latitude: loc.latitude, longitude: loc.longitude, timestamp: loc.timestamp });
     });
 
     return () => {
@@ -484,8 +492,8 @@ export default function HomeScreen() {
         {/* Driver live location marker for commuter */}
         {driverLiveLocation && (
           <Marker id="driver-location" lngLat={[driverLiveLocation.longitude, driverLiveLocation.latitude]}>
-            <View style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}>
-              <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: theme.colors.primary, borderWidth: 3, borderColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5 }} />
+            <View style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', opacity: isDriverStale ? 0.4 : 1 }}>
+              <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: isDriverStale ? '#9CA3AF' : theme.colors.primary, borderWidth: 3, borderColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5 }} />
             </View>
           </Marker>
         )}

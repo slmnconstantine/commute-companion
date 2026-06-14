@@ -5,6 +5,8 @@
  * Joined / extended variants are provided for common query patterns.
  */
 
+import { BOOKING_STATUSES, TRIP_STATUSES } from '../lib/constants';
+
 // ---------------------------------------------------------------------------
 // Core tables
 // ---------------------------------------------------------------------------
@@ -50,7 +52,7 @@ export interface Trip {
   departure_time: string;
   available_seats: number;
   fare_per_seat: number;
-  status: 'open' | 'full' | 'ongoing' | 'completed' | 'cancelled';
+  status: typeof TRIP_STATUSES[number];
   created_at: string;
 }
 
@@ -62,9 +64,10 @@ export interface Booking {
   pickup_lng: number;
   dropoff_lat: number;
   dropoff_lng: number;
-  status: 'pending' | 'accepted' | 'rejected' | 'completed';
+  status: typeof BOOKING_STATUSES[number];
   fare_paid: number;
   platform_fee: number;
+  seats_booked: number;
   driver_confirmed: boolean;
   commuter_confirmed: boolean;
   created_at: string;
@@ -151,28 +154,7 @@ export interface Community {
   created_at: string;
 }
 
-export interface Route {
-  id: string;
-  user_id: string;
-  label: string | null;
-  origin_lat: number;
-  origin_lng: number;
-  origin_label: string;
-  destination_lat: number;
-  destination_lng: number;
-  destination_label: string;
-  route_hash: string | null;
-  is_active: boolean;
-  created_at: string;
-}
 
-export interface Community {
-  id: string;
-  route_hash: string;
-  name: string | null;
-  member_count: number;
-  created_at: string;
-}
 
 
 // ---------------------------------------------------------------------------

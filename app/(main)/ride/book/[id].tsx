@@ -62,6 +62,7 @@ export default function BookRideScreen() {
         status: 'pending',
         fare_paid: totalBookingPrice,
         platform_fee: combinedPlatformFee,
+        seats_booked: seats,
         driver_confirmed: false,
         commuter_confirmed: false,
       });

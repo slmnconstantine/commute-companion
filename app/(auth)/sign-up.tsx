@@ -10,19 +10,32 @@ import {
   Pressable,
   Animated,
   Alert,
+  StatusBar,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTheme } from '@/context/ThemeContext';
+import { Map, Camera, type CameraRef } from '@maplibre/maplibre-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { isValidEmail, isValidPassword, isNotEmpty } from '@/utils/validators';
+
+// Premium Dark Theme Colors
+const COLORS = {
+  primary: '#0D9488',
+  primaryGlow: 'rgba(13, 148, 136, 0.4)',
+  surface: 'rgba(0, 0, 0, 0.45)',
+  surfaceBorder: 'rgba(255, 255, 255, 0.1)',
+  text: '#FFFFFF',
+  textMuted: 'rgba(255, 255, 255, 0.6)',
+  background: '#000000',
+  error: '#EF4444',
+};
 
 export default function SignUpScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { theme } = useTheme();
   const { signUp } = useAuth();
+  const cameraRef = useRef<CameraRef>(null);
 
   const [loading, setLoading] = useState(false);
 
@@ -88,9 +101,39 @@ export default function SignUpScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+
+      {/* MapLibre Animated Background */}
+      <View style={StyleSheet.absoluteFill}>
+        <Map
+          style={styles.map}
+          mapStyle="https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json"
+          logo={false}
+          attribution={false}
+          compass={false}
+          zoomEnabled={false}
+          scrollEnabled={false}
+          pitchEnabled={false}
+          rotateEnabled={false}
+        >
+          <Camera
+            ref={cameraRef}
+            initialViewState={{
+              center: [123.891, 10.315], // Cebu City
+              zoom: 13,
+              pitch: 65,
+              heading: 0,
+            }}
+          />
+        </Map>
+        
+        {/* Deep Gradient Overlay */}
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)' }]} />
+      </View>
+
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 16 }]}
         keyboardShouldPersistTaps="handled"
@@ -98,24 +141,21 @@ export default function SignUpScreen() {
       >
         {/* Back Button */}
         <Pressable
-          style={styles.backButton}
+          style={[styles.backButton, { marginTop: 8 }]}
           onPress={() => router.back()}
         >
-          <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
+          <View style={styles.backButtonBackground} />
+          <Ionicons name="arrow-back" size={22} color={COLORS.text} />
         </Pressable>
 
         {/* Header */}
         <View style={styles.header}>
-          <Text style={[styles.title, { color: theme.colors.text, fontFamily: 'Inter-Bold' }]}>
-            Create account
-          </Text>
-          <Text style={[styles.subtitle, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
-            Fill in your details to get started as a commuter
-          </Text>
+          <Text style={styles.title}>Create account</Text>
+          <Text style={styles.subtitle}>Fill in your details to get started as a commuter</Text>
         </View>
 
-        {/* Form */}
-        <View style={styles.form}>
+        {/* Form Container */}
+        <View style={styles.glassCard}>
           <InputField
             label="Full Name"
             value={fullName}
@@ -126,7 +166,6 @@ export default function SignUpScreen() {
             placeholder="Juan Dela Cruz"
             icon="person-outline"
             error={errors.fullName}
-            theme={theme}
           />
           <InputField
             label="Username"
@@ -139,7 +178,6 @@ export default function SignUpScreen() {
             icon="at-outline"
             autoCapitalize="none"
             error={errors.username}
-            theme={theme}
           />
           <InputField
             label="Email"
@@ -153,7 +191,6 @@ export default function SignUpScreen() {
             keyboardType="email-address"
             autoCapitalize="none"
             error={errors.email}
-            theme={theme}
           />
           <InputField
             label="Password"
@@ -168,7 +205,6 @@ export default function SignUpScreen() {
             rightIcon={showPassword ? 'eye-off-outline' : 'eye-outline'}
             onRightIconPress={() => setShowPassword(!showPassword)}
             error={errors.password}
-            theme={theme}
           />
           <InputField
             label="Confirm Password"
@@ -181,42 +217,42 @@ export default function SignUpScreen() {
             icon="lock-closed-outline"
             secureTextEntry={!showPassword}
             error={errors.confirmPassword}
-            theme={theme}
           />
-        </View>
 
-        {/* Commuter role info */}
-        <View style={[styles.roleInfo, { backgroundColor: `${theme.colors.primary}10`, borderColor: `${theme.colors.primary}30` }]}>
-          <Ionicons name="information-circle" size={20} color={theme.colors.primary} />
-          <Text style={[styles.roleInfoText, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
-            You'll start as a <Text style={{ fontFamily: 'Inter-SemiBold', color: theme.colors.primary }}>Commuter</Text>. You can upgrade to a Driver anytime from your profile.
-          </Text>
-        </View>
+          {/* Commuter role info */}
+          <View style={styles.roleInfo}>
+            <Ionicons name="information-circle" size={20} color={COLORS.primary} style={{ marginTop: 1 }} />
+            <Text style={styles.roleInfoText}>
+              You'll start as a <Text style={{ fontFamily: 'Inter-SemiBold', color: COLORS.primary }}>Commuter</Text>. You can upgrade to a Driver anytime from your profile.
+            </Text>
+          </View>
 
-        {/* Action Button */}
-        <View style={styles.actionContainer}>
-          <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
-            <Pressable
-              style={[styles.actionButton, { backgroundColor: theme.colors.primary, opacity: loading ? 0.7 : 1 }]}
-              onPress={handleSignUp}
-              onPressIn={onPressIn}
-              onPressOut={onPressOut}
-              disabled={loading}
-            >
-              <Text style={styles.actionButtonText}>
-                {loading ? 'Creating Account...' : 'Create Account'}
-              </Text>
-            </Pressable>
-          </Animated.View>
+          {/* Action Button */}
+          <View style={styles.actionContainer}>
+            <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
+              <Pressable
+                style={[styles.actionButton, { opacity: loading ? 0.7 : 1 }]}
+                onPress={handleSignUp}
+                onPressIn={onPressIn}
+                onPressOut={onPressOut}
+                disabled={loading}
+              >
+                <View style={[StyleSheet.absoluteFill, styles.buttonPrimaryGlow]} />
+                <Text style={styles.actionButtonText}>
+                  {loading ? 'Creating Account...' : 'Create Account'}
+                </Text>
+              </Pressable>
+            </Animated.View>
+          </View>
         </View>
 
         {/* Sign In Link */}
         <View style={[styles.footer, { paddingBottom: insets.bottom + 24 }]}>
-          <Text style={[styles.footerText, { color: theme.colors.textMuted }]}>
+          <Text style={styles.footerText}>
             Already have an account?{' '}
           </Text>
           <Pressable onPress={() => router.replace('/(auth)/sign-in')}>
-            <Text style={[styles.footerLink, { color: theme.colors.primary }]}>Sign In</Text>
+            <Text style={styles.footerLink}>Sign In</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -237,106 +273,165 @@ function InputField({
   rightIcon,
   onRightIconPress,
   error,
-  theme,
 }: any) {
   return (
     <View style={styles.inputGroup}>
-      <Text style={[styles.label, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]}>
+      <Text style={styles.label}>
         {label}
       </Text>
       <View
         style={[
           styles.inputContainer,
           {
-            backgroundColor: theme.colors.surface,
-            borderColor: error ? theme.colors.error : theme.colors.border,
+            borderColor: error ? COLORS.error : COLORS.surfaceBorder,
           },
         ]}
       >
-        <Ionicons name={icon} size={20} color={theme.colors.textMuted} style={{ marginLeft: 12 }} />
+        <Ionicons name={icon} size={20} color={COLORS.textMuted} style={{ marginLeft: 12 }} />
         <TextInput
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
-          placeholderTextColor={theme.colors.textMuted}
+          placeholderTextColor={COLORS.textMuted}
           keyboardType={keyboardType}
           autoCapitalize={autoCapitalize}
           secureTextEntry={secureTextEntry}
-          style={[styles.textInput, { color: theme.colors.text, fontFamily: 'Inter-Regular' }]}
+          style={[styles.textInput, { color: COLORS.text }]}
         />
         {rightIcon && (
           <Pressable onPress={onRightIconPress} style={{ padding: 12 }}>
-            <Ionicons name={rightIcon} size={20} color={theme.colors.textMuted} />
+            <Ionicons name={rightIcon} size={20} color={COLORS.textMuted} />
           </Pressable>
         )}
       </View>
       {error ? (
-        <Text style={[styles.errorText, { color: theme.colors.error }]}>{error}</Text>
+        <Text style={styles.errorText}>{error}</Text>
       ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scrollContent: { flexGrow: 1, paddingHorizontal: 24 },
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  map: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+  },
   backButton: {
     width: 44,
     height: 44,
-    borderRadius: 12,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+    position: 'relative',
   },
-  header: { marginTop: 24, marginBottom: 32 },
-  title: { fontSize: 32, letterSpacing: -0.5, lineHeight: 40 },
-  subtitle: { fontSize: 16, marginTop: 8, lineHeight: 24 },
-  form: { gap: 16 },
-  inputGroup: { gap: 6 },
-  label: { fontSize: 14, marginLeft: 4 },
+  backButtonBackground: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 14,
+  },
+  header: {
+    marginTop: 24,
+    marginBottom: 28,
+  },
+  title: {
+    fontSize: 32,
+    letterSpacing: -0.5,
+    lineHeight: 40,
+    color: COLORS.text,
+    fontFamily: 'Inter-Bold',
+  },
+  subtitle: {
+    fontSize: 16,
+    marginTop: 8,
+    lineHeight: 24,
+    color: COLORS.textMuted,
+    fontFamily: 'Inter-Regular',
+  },
+  glassCard: {
+    borderRadius: 24,
+    padding: 24,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.surfaceBorder,
+    gap: 16,
+  },
+  inputGroup: {
+    gap: 8,
+  },
+  label: {
+    fontSize: 14,
+    marginLeft: 4,
+    color: COLORS.text,
+    fontFamily: 'Inter-Medium',
+  },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 52,
-    borderRadius: 14,
+    height: 54,
+    borderRadius: 16,
     borderWidth: 1.5,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
   },
   textInput: {
     flex: 1,
-    height: 52,
+    height: 54,
     paddingHorizontal: 12,
-    fontSize: 16,
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
   },
   errorText: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
     marginLeft: 4,
+    color: COLORS.error,
   },
   roleInfo: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
-    marginTop: 20,
+    marginTop: 8,
     padding: 16,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
+    backgroundColor: 'rgba(13, 148, 136, 0.08)',
+    borderColor: 'rgba(13, 148, 136, 0.2)',
   },
   roleInfoText: {
     flex: 1,
     fontSize: 13,
     lineHeight: 19,
+    color: COLORS.textMuted,
+    fontFamily: 'Inter-Regular',
   },
-  actionContainer: { marginTop: 24 },
+  actionContainer: {
+    marginTop: 12,
+  },
   actionButton: {
     height: 56,
     borderRadius: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#0D9488',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: COLORS.primary,
+  },
+  buttonPrimaryGlow: {
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 15,
+    elevation: 10,
   },
   actionButtonText: {
     color: '#FFFFFF',
@@ -348,8 +443,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 'auto',
-    paddingTop: 24,
+    paddingTop: 32,
   },
-  footerText: { fontSize: 14, fontFamily: 'Inter-Regular' },
-  footerLink: { fontSize: 14, fontFamily: 'Inter-SemiBold' },
+  footerText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: COLORS.textMuted,
+  },
+  footerLink: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: COLORS.primary,
+  },
 });

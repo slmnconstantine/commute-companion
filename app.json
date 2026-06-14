@@ -72,7 +72,8 @@
         }
       ],
       "expo-splash-screen",
-      "expo-audio"
+      "expo-audio",
+      "expo-asset"
     ],
     "extra": {
       "router": {},

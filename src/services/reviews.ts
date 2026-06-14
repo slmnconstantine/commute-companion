@@ -34,15 +34,6 @@ async function notifyReviewee(reviewData: Omit<Review, 'id' | 'created_at'>) {
 
 /** Submit a review */
 export async function submitReview(reviewData: Omit<Review, 'id' | 'created_at'>): Promise<{ error: Error | null }> {
-  const { error } = await supabase.from('reviews').insert(reviewData);
-  if (!error) {
-    notifyReviewee(reviewData);
-  }
-  return { error: error as Error | null };
-}
-
-/** Submit a review and update the driver's average rating in their profile */
-export async function submitReviewAndUpdateProfile(reviewData: Omit<Review, 'id' | 'created_at'>): Promise<{ error: Error | null }> {
   try {
     // Insert the review. A Postgres trigger will automatically update the profile's average rating.
     const { error: insertError } = await supabase.from('reviews').insert(reviewData);
