@@ -2,10 +2,10 @@ import React, { createContext, useContext, useEffect, useState, useRef } from 'r
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import * as Notifications from 'expo-notifications';
-import { Alert, Animated, StyleSheet, Pressable, View, Text } from 'react-native';
+import { Alert, Animated } from 'react-native';
 import { router } from 'expo-router';
-import { useTheme } from '@/context/ThemeContext';
-import { Ionicons } from '@expo/vector-icons';
+import NotificationBanner from '@/components/notifications/NotificationBanner';
+import NotificationPopup from '@/components/notifications/NotificationPopup';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface NotificationContextType {
@@ -31,7 +31,6 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const { profile } = useAuth();
-  const { theme } = useTheme();
   const [driverPendingCount, setDriverPendingCount] = useState(0);
   const [commuterUpcomingCount, setCommuterUpcomingCount] = useState(0);
 
@@ -236,22 +235,53 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
     if (!profile?.id) return;
 
-    // Listen to real-time changes on the bookings table
-    const channelName = `bookings_changes_${profile.id}_${Date.now()}`;
-    const subscription = supabase
-      .channel(channelName)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'bookings' },
-        () => {
-          // When any booking changes, re-fetch counts
-          refreshCounts();
+    let subscription: any = null;
+
+    const setupSubscription = async () => {
+      let filterString = '';
+
+      if (profile.role === 'commuter') {
+        filterString = `commuter_id=eq.${profile.id}`;
+      } else if (profile.role === 'driver') {
+        const { data: trips } = await supabase
+          .from('trips')
+          .select('id')
+          .eq('driver_id', profile.id)
+          .in('status', ['scheduled', 'in_progress']);
+
+        if (trips && trips.length > 0) {
+          const tripIds = trips.map(t => t.id);
+          filterString = `trip_id=in.(${tripIds.join(',')})`;
+        } else {
+          // If no active trips, don't subscribe to bookings at all to save traffic
+          return;
         }
-      )
-      .subscribe();
+      }
+
+      const channelName = `bookings_changes_${profile.id}_${Date.now()}`;
+      subscription = supabase
+        .channel(channelName)
+        .on(
+          'postgres_changes',
+          { 
+            event: '*', 
+            schema: 'public', 
+            table: 'bookings',
+            ...(filterString ? { filter: filterString } : {})
+          },
+          () => {
+            refreshCounts();
+          }
+        )
+        .subscribe();
+    };
+
+    setupSubscription();
 
     return () => {
-      supabase.removeChannel(subscription);
+      if (subscription) {
+        supabase.removeChannel(subscription);
+      }
     };
   }, [profile?.id, profile?.role]);
 
@@ -342,163 +372,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       }}
     >
       {children}
-      {activeNotification && (
-        <Animated.View
-          style={[
-            styles.bannerContainer,
-            {
-              transform: [{ translateY: slideAnim }],
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.border,
-              shadowColor: theme.colors.shadow,
-            },
-          ]}
-        >
-          <Pressable onPress={handleBannerPress}>
-            <View style={styles.bannerRow}>
-              <View style={[styles.iconBox, { backgroundColor: `${theme.colors.primary}15` }]}>
-                <Ionicons
-                  name={
-                    activeNotification.data?.type === 'chat'
-                      ? 'chatbubbles'
-                      : activeNotification.data?.type === 'ride_matched'
-                      ? 'car-sport'
-                      : 'notifications'
-                  }
-                  size={20}
-                  color={theme.colors.primary}
-                />
-              </View>
-              <View style={styles.textContainer}>
-                <Text
-                  style={[
-                    theme.typography.body,
-                    { color: theme.colors.text, fontFamily: 'Inter-SemiBold' },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {activeNotification.title}
-                </Text>
-                <Text
-                  style={[
-                    theme.typography.small,
-                    { color: theme.colors.textMuted },
-                  ]}
-                  numberOfLines={2}
-                >
-                  {activeNotification.body}
-                </Text>
-              </View>
-            </View>
-          </Pressable>
-          <View style={[styles.btnRow, { borderTopColor: theme.colors.border }]}>
-            <Pressable
-              style={[styles.bannerBtn, { backgroundColor: `${theme.colors.textMuted}15` }]}
-              onPress={handleDismiss}
-            >
-              <Text style={[styles.bannerBtnText, { color: theme.colors.textMuted, fontFamily: 'Inter-Medium' }]}>
-                Dismiss
-              </Text>
-            </Pressable>
-            {activeNotification.data?.chatRoomId && (
-              <Pressable
-                style={[styles.bannerBtn, { backgroundColor: theme.colors.primary }]}
-                onPress={() => {
-                  router.push(`/(main)/chat/${activeNotification.data.chatRoomId}` as any);
-                  handleDismiss();
-                }}
-              >
-                <Text style={[styles.bannerBtnText, { color: theme.colors.white, fontFamily: 'Inter-SemiBold' }]}>
-                  Open Chat
-                </Text>
-              </Pressable>
-            )}
-            {activeNotification.data?.tripId && !activeNotification.data?.chatRoomId && (
-              <Pressable
-                style={[styles.bannerBtn, { backgroundColor: theme.colors.primary }]}
-                onPress={() => {
-                  router.push(`/(main)/ride/${activeNotification.data.tripId}` as any);
-                  handleDismiss();
-                }}
-              >
-                <Text style={[styles.bannerBtnText, { color: theme.colors.white, fontFamily: 'Inter-SemiBold' }]}>
-                  View Details
-                </Text>
-              </Pressable>
-            )}
-          </View>
-        </Animated.View>
-      )}
-      {centerPopupNotification && (
-        <View style={styles.popupOverlay}>
-          <Animated.View
-            style={[
-              styles.popupCard,
-              {
-                transform: [{ scale: popupScaleAnim }],
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.border,
-                shadowColor: theme.colors.shadow,
-              },
-            ]}
-          >
-            <View style={[styles.popupIconContainer, { backgroundColor: `${theme.colors.primary}15` }]}>
-              <Ionicons name="car-sport-outline" size={32} color={theme.colors.primary} />
-            </View>
-            <Text
-              style={[
-                theme.typography.heading,
-                styles.popupTitle,
-                { color: theme.colors.text, fontFamily: 'Inter-SemiBold' },
-              ]}
-            >
-              {centerPopupNotification.title}
-            </Text>
-            <Text
-              style={[
-                theme.typography.body,
-                styles.popupBody,
-                { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' },
-              ]}
-            >
-              {centerPopupNotification.body}
-            </Text>
-            <View style={styles.popupBtnRow}>
-              <Pressable
-                style={[styles.popupBtn, { backgroundColor: `${theme.colors.textMuted}15` }]}
-                onPress={handleDismissPopup}
-              >
-                <Text
-                  style={[
-                    styles.popupBtnText,
-                    { color: theme.colors.textMuted, fontFamily: 'Inter-Medium' },
-                  ]}
-                >
-                  Dismiss
-                </Text>
-              </Pressable>
-              {centerPopupNotification.tripId && (
-                <Pressable
-                  style={[styles.popupBtn, { backgroundColor: theme.colors.primary }]}
-                  onPress={() => {
-                    router.push(`/(main)/ride/${centerPopupNotification.tripId}` as any);
-                    handleDismissPopup();
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.popupBtnText,
-                      { color: theme.colors.white, fontFamily: 'Inter-SemiBold' },
-                    ]}
-                  >
-                    Check Details
-                  </Text>
-                </Pressable>
-              )}
-            </View>
-          </Animated.View>
-        </View>
-      )}
+      <NotificationBanner 
+        activeNotification={activeNotification}
+        slideAnim={slideAnim}
+        handleDismiss={handleDismiss}
+      />
+      <NotificationPopup 
+        centerPopupNotification={centerPopupNotification}
+        popupScaleAnim={popupScaleAnim}
+        handleDismissPopup={handleDismissPopup}
+      />
     </NotificationContext.Provider>
   );
 }
@@ -510,105 +393,3 @@ export function useNotifications() {
   }
   return context;
 }
-
-const styles = StyleSheet.create({
-  bannerContainer: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    zIndex: 9999,
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 16,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 10,
-  },
-  bannerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  iconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  textContainer: {
-    flex: 1,
-    gap: 2,
-  },
-  btnRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 8,
-    marginTop: 12,
-    borderTopWidth: 1,
-    paddingTop: 10,
-  },
-  bannerBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-  },
-  bannerBtnText: {
-    fontSize: 12,
-  },
-  popupOverlay: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10000,
-    padding: 24,
-  },
-  popupCard: {
-    width: '100%',
-    maxWidth: 320,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    padding: 24,
-    alignItems: 'center',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 15,
-  },
-  popupIconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  popupTitle: {
-    fontSize: 18,
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  popupBody: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 24,
-  },
-  popupBtnRow: {
-    flexDirection: 'row',
-    gap: 12,
-    width: '100%',
-  },
-  popupBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  popupBtnText: {
-    fontSize: 14,
-  },
-});

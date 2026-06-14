@@ -6,6 +6,11 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Rate limiting config (in-memory per isolate)
+const rateLimits = new Map<string, { count: number, resetAt: number }>();
+const RATE_LIMIT_MAX_REQUESTS = 10;
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+
 // Define the Assistant Command structure
 interface AssistantCommand {
   type: 'SEARCH_RIDES' | 'SUMMARIZE_ACTIVITY' | 'DRAFT_MESSAGE' | 'DRAFT_COMMUNITY_POST' | 'DELETE_POSTS' | 'PREPARE_BOOKING' | 'ACCEPT_BOOKING' | 'PREPARE_RIDE_POST' | 'NAVIGATE' | 'CLARIFY' | 'NOOP' | 'SET_ROUTE';
@@ -21,6 +26,42 @@ serve(async (req: Request) => {
   }
 
   try {
+    // Authenticate the request
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      throw new Error('Missing Authorization header');
+    }
+
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Rate Limiting Check
+    const now = Date.now();
+    let limitRecord = rateLimits.get(user.id);
+    if (!limitRecord || limitRecord.resetAt < now) {
+      limitRecord = { count: 0, resetAt: now + RATE_LIMIT_WINDOW_MS };
+    }
+    limitRecord.count++;
+    rateLimits.set(user.id, limitRecord);
+
+    if (limitRecord.count > RATE_LIMIT_MAX_REQUESTS) {
+      return new Response(JSON.stringify({ error: 'Too Many Requests', message: 'You have exceeded the voice command rate limit. Please try again in a minute.' }), {
+        status: 429,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': Math.ceil((limitRecord.resetAt - now) / 1000).toString() },
+      });
+    }
+
     const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY');
     if (!GROQ_API_KEY) {
       throw new Error('GROQ_API_KEY is not set');
@@ -164,8 +205,16 @@ For spokenReply:
       }
 
       const chatData = await chatRes.json();
-      const commandRaw = JSON.parse(chatData.choices[0].message.content);
-      
+      let commandRaw: any = {};
+      try {
+        commandRaw = JSON.parse(chatData.choices[0].message.content);
+      } catch (err) {
+        console.warn('Failed to parse Groq LLM response as JSON:', err);
+        commandRaw = {
+          type: 'NOOP',
+          spokenReply: 'Sorry, my brain got a little scrambled. Could you repeat that?'
+        };
+      }
       const finalResponse: AssistantCommand = {
         type: commandRaw.type || 'NOOP',
         params: commandRaw.params || {},

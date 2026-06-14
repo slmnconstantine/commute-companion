@@ -1,5 +1,3 @@
-import { ACTIVE_PRESET } from './colors';
-
 /**
  * Spacing & border-radius tokens for Commute Companion
  *
@@ -24,15 +22,7 @@ const emeraldBorderRadius = {
   full: 9999,
 } as const;
 
-const nordicBorderRadius = {
-  sm: 10,
-  md: 16,
-  lg: 20,
-  xl: 28,
-  full: 9999,
-} as const;
-
-const glassBorderRadius = {
+const glassEmeraldBorderRadius = {
   sm: 8,
   md: 14,
   lg: 20,
@@ -40,18 +30,21 @@ const glassBorderRadius = {
   full: 9999,
 } as const;
 
-const brutalistBorderRadius = {
-  sm: 4,
-  md: 8,
-  lg: 12,
-  xl: 16,
-  full: 9999,
+const extractaBorderRadius = {
+  sm: 1, // control: 1px
+  md: 2, // card: 2px
+  lg: 2,
+  xl: 2,
+  full: 9999, // pill: 9999px
 } as const;
 
-export const borderRadius = 
-  (ACTIVE_PRESET as string) === 'brutalist' ? brutalistBorderRadius :
-  (ACTIVE_PRESET as string) === 'glass' ? glassBorderRadius :
-  (ACTIVE_PRESET as string) === 'nordic' ? nordicBorderRadius : emeraldBorderRadius;
+export function getBorderRadius(preset: string) {
+  if (preset === 'extracta-system-terminal-DESIGN') return extractaBorderRadius;
+  if (preset === 'glass_emerald') return glassEmeraldBorderRadius;
+  return emeraldBorderRadius;
+}
+
+export const borderRadius = emeraldBorderRadius; // Default fallback
 
 export type Spacing = typeof spacing;
-export type BorderRadius = typeof borderRadius;
+export type BorderRadius = ReturnType<typeof getBorderRadius>;

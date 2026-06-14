@@ -37,7 +37,7 @@ export function calculateFare(
   // Calculate time cost based on durationMin * COST_PER_MIN
   const timeCost = Math.round(durationMin * COST_PER_MIN * 100) / 100;
   const subtotal = baseFare + distanceCost + timeCost;
-  const costPerSeat = subtotal;
+  const costPerSeat = subtotal / Math.max(1, passengers);
   // Calculate platform fee using PLATFORM_FEE_RATE
   const platformFee = Math.round(costPerSeat * PLATFORM_FEE_RATE * 100) / 100;
   const totalPerSeat = Math.ceil(costPerSeat + platformFee);

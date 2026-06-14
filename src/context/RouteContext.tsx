@@ -10,6 +10,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { Route } from '@/types/database';
+import { generateRouteHash, isJsonLabel } from '@/utils/routeHash';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -53,25 +54,7 @@ const RouteContext = createContext<RouteContextType>({
   isLoading: true,
 });
 
-// Simple hash generator for route matching
-function generateRouteHash(originLat: number, originLng: number, destLat: number, destLng: number) {
-  // A simple geohash-like approximation (rounding to ~1km precision)
-  const oLat = originLat.toFixed(2);
-  const oLng = originLng.toFixed(2);
-  const dLat = destLat.toFixed(2);
-  const dLng = destLng.toFixed(2);
-  return `${oLat},${oLng}_${dLat},${dLng}`;
-}
-
-function isJsonLabel(label: string | null) {
-  if (!label) return false;
-  try {
-    const parsed = JSON.parse(label);
-    return !!(parsed && typeof parsed === 'object');
-  } catch (e) {
-    return false;
-  }
-}
+// ---------------------------------------------------------------------------
 
 export function RouteProvider({ children }: { children: React.ReactNode }) {
   const { profile } = useAuth();

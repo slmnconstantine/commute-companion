@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase';
 import { Trip, TripWithDriver } from '@/types/database';
 import { sendPushNotification } from './pushNotifications';
 import { handleServiceError } from '@/utils/errorHelper';
+import { generateRouteHash, isJsonLabel } from '@/utils/routeHash';
 
 /** Create a new trip */
 export async function createTrip(tripData: Omit<Trip, 'id' | 'created_at'>): Promise<{ data: Trip | null; error: Error | null }> {
@@ -51,32 +52,6 @@ export async function getTripById(id: string): Promise<TripWithDriver | null> {
     
   if (error || !data) return null;
 
-  // 24-hour self-healing check
-  if (data.status === 'ongoing') {
-    const departureTime = new Date(data.departure_time);
-    const diffMs = Date.now() - departureTime.getTime();
-    if (diffMs >= 24 * 60 * 60 * 1000) {
-      console.log(`[Self-Healing] Trip ${id} has been ongoing for >24 hours. Auto-completing...`);
-      // Update the trip status to completed
-      await updateTripStatus(id, 'completed');
-      
-      // Update all accepted bookings to completed
-      await supabase
-        .from('bookings')
-        .update({ status: 'completed', driver_confirmed: true, commuter_confirmed: true })
-        .eq('trip_id', id)
-        .eq('status', 'accepted');
-        
-      // Refetch the completed trip
-      const { data: refreshed } = await supabase
-        .from('trips')
-        .select(`*, driver:profiles!driver_id(*), vehicle:vehicles!vehicle_id(*)`)
-        .eq('id', id)
-        .single();
-      if (refreshed) return refreshed as TripWithDriver;
-    }
-  }
-
   return data as TripWithDriver;
 }
 
@@ -112,21 +87,11 @@ export async function updateTripStatus(id: string, status: string): Promise<{ er
             .single();
 
           if (trip?.driver_id) {
-            // Fetch the driver's current profile to update balance
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('platform_fee_balance')
-              .eq('id', trip.driver_id)
-              .single();
-
-            const currentBalance = (profile?.platform_fee_balance as number) || 0;
-            const newBalance = currentBalance + totalFee;
-
-            // Update the balance in Supabase profiles table
-            await supabase
-              .from('profiles')
-              .update({ platform_fee_balance: newBalance })
-              .eq('id', trip.driver_id);
+            // Call the RPC to atomically increment the balance
+            await supabase.rpc('increment_platform_fee', {
+              driver_uuid: trip.driver_id,
+              amount: totalFee
+            });
           }
         }
       } catch (feeError) {
@@ -199,6 +164,7 @@ export async function searchNearbyTrips(
     .lte('origin_lat', lat + latDelta)
     .gte('origin_lng', lng - lngDelta)
     .lte('origin_lng', lng + lngDelta)
+    .gte('departure_time', new Date().toISOString())
     .in('status', ['open', 'full', 'ongoing'])
     .order('departure_time', { ascending: true });
 
@@ -209,24 +175,6 @@ export async function searchNearbyTrips(
 /** Get driver's trips */
 export async function getDriverTrips(driverId: string): Promise<TripWithDriver[]> {
   return getTrips({ driverId });
-}
-
-function generateRouteHash(originLat: number, originLng: number, destLat: number, destLng: number) {
-  const oLat = originLat.toFixed(2);
-  const oLng = originLng.toFixed(2);
-  const dLat = destLat.toFixed(2);
-  const dLng = destLng.toFixed(2);
-  return `${oLat},${oLng}_${dLat},${dLng}`;
-}
-
-function isJsonLabel(label: string | null) {
-  if (!label) return false;
-  try {
-    const parsed = JSON.parse(label);
-    return !!(parsed && typeof parsed === 'object');
-  } catch (e) {
-    return false;
-  }
 }
 
 /** Find and notify commuters whose ride requests match the route of the newly created trip */
@@ -285,6 +233,34 @@ export async function notifyMatchingCommuters(trip: Trip): Promise<void> {
 
 /** Delete a trip and cancel all bookings related to it */
 export async function deleteTrip(id: string): Promise<{ error: Error | null }> {
+  // Fetch accepted/pending bookings before deletion to notify commuters
+  const { data: bookingsData } = await supabase
+    .from('bookings')
+    .select('commuter_id, commuter:profiles!commuter_id(push_token)')
+    .eq('trip_id', id)
+    .in('status', ['accepted', 'pending']);
+
+  if (bookingsData && bookingsData.length > 0) {
+    const { data: tripData } = await supabase
+      .from('trips')
+      .select('driver:profiles!driver_id(full_name)')
+      .eq('id', id)
+      .single();
+    const driverName = (tripData?.driver as any)?.full_name || 'Your driver';
+    
+    bookingsData.forEach((b: any) => {
+      const token = b.commuter?.push_token;
+      if (token) {
+        sendPushNotification(
+          token,
+          'Trip Cancelled ❌',
+          `We're sorry, your scheduled ride with ${driverName} was cancelled and deleted.`,
+          { type: 'trip_update', tripId: id, status: 'deleted' }
+        );
+      }
+    });
+  }
+
   // First, delete bookings related to this trip
   const { error: bookingsError } = await supabase
     .from('bookings')

@@ -9,19 +9,32 @@ import {
   Pressable,
   Animated,
   Alert,
+  StatusBar,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTheme } from '@/context/ThemeContext';
+import { Map, Camera, type CameraRef } from '@maplibre/maplibre-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { isValidEmail } from '@/utils/validators';
+
+// Premium Dark Theme Colors
+const COLORS = {
+  primary: '#0D9488',
+  primaryGlow: 'rgba(13, 148, 136, 0.4)',
+  surface: 'rgba(0, 0, 0, 0.45)',
+  surfaceBorder: 'rgba(255, 255, 255, 0.1)',
+  text: '#FFFFFF',
+  textMuted: 'rgba(255, 255, 255, 0.6)',
+  background: '#000000',
+  error: '#EF4444',
+};
 
 export default function SignInScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { theme } = useTheme();
   const { signIn } = useAuth();
+  const cameraRef = useRef<CameraRef>(null);
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -69,45 +82,73 @@ export default function SignInScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+
+      {/* MapLibre Animated Background */}
+      <View style={StyleSheet.absoluteFill}>
+        <Map
+          style={styles.map}
+          mapStyle="https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json"
+          logo={false}
+          attribution={false}
+          compass={false}
+          zoomEnabled={false}
+          scrollEnabled={false}
+          pitchEnabled={false}
+          rotateEnabled={false}
+        >
+          <Camera
+            ref={cameraRef}
+            initialViewState={{
+              center: [123.891, 10.315], // Cebu City
+              zoom: 13,
+              pitch: 65,
+              heading: 0,
+            }}
+          />
+        </Map>
+        
+        {/* Deep Gradient Overlay */}
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)' }]} />
+      </View>
+
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 16 }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         {/* Back Button */}
-        <Pressable style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
+        <Pressable 
+          style={[styles.backButton, { marginTop: 8 }]} 
+          onPress={() => router.back()}
+        >
+          <View style={styles.backButtonBackground} />
+          <Ionicons name="arrow-back" size={22} color={COLORS.text} />
         </Pressable>
 
         {/* Header */}
         <View style={styles.header}>
-          <Text style={[styles.title, { color: theme.colors.text, fontFamily: 'Inter-Bold' }]}>
-            Welcome back
-          </Text>
-          <Text style={[styles.subtitle, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
-            Sign in to continue your journey
-          </Text>
+          <Text style={styles.title}>Welcome back</Text>
+          <Text style={styles.subtitle}>Sign in to continue your journey</Text>
         </View>
 
-        {/* Form */}
-        <View style={styles.form}>
+        {/* Form Container (Glassmorphic) */}
+        <View style={styles.glassCard}>
+          {/* Identifier Input */}
           <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]}>
-              Email or Username
-            </Text>
+            <Text style={styles.label}>Email or Username</Text>
             <View
               style={[
                 styles.inputContainer,
                 {
-                  backgroundColor: theme.colors.surface,
-                  borderColor: errors.identifier ? theme.colors.error : theme.colors.border,
+                  borderColor: errors.identifier ? COLORS.error : COLORS.surfaceBorder,
                 },
               ]}
             >
-              <Ionicons name="person-outline" size={20} color={theme.colors.textMuted} style={styles.inputIcon} />
+              <Ionicons name="person-outline" size={20} color={COLORS.textMuted} style={styles.inputIcon} />
               <View style={styles.inputWrapper}>
                 <TextInputField
                   value={identifier}
@@ -116,32 +157,29 @@ export default function SignInScreen() {
                     if (errors.identifier) setErrors((e) => ({ ...e, identifier: undefined }));
                   }}
                   placeholder="Enter your email or username"
-                  placeholderTextColor={theme.colors.textMuted}
+                  placeholderTextColor={COLORS.textMuted}
                   autoCapitalize="none"
-                  textColor={theme.colors.text}
+                  textColor={COLORS.text}
                 />
               </View>
             </View>
             {errors.identifier && (
-              <Text style={[styles.errorText, { color: theme.colors.error }]}>{errors.identifier}</Text>
+              <Text style={styles.errorText}>{errors.identifier}</Text>
             )}
           </View>
 
           {/* Password Input */}
           <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]}>
-              Password
-            </Text>
+            <Text style={styles.label}>Password</Text>
             <View
               style={[
                 styles.inputContainer,
                 {
-                  backgroundColor: theme.colors.surface,
-                  borderColor: errors.password ? theme.colors.error : theme.colors.border,
+                  borderColor: errors.password ? COLORS.error : COLORS.surfaceBorder,
                 },
               ]}
             >
-              <Ionicons name="lock-closed-outline" size={20} color={theme.colors.textMuted} style={styles.inputIcon} />
+              <Ionicons name="lock-closed-outline" size={20} color={COLORS.textMuted} style={styles.inputIcon} />
               <View style={styles.inputWrapper}>
                 <TextInputField
                   value={password}
@@ -150,9 +188,9 @@ export default function SignInScreen() {
                     if (errors.password) setErrors((e) => ({ ...e, password: undefined }));
                   }}
                   placeholder="Enter your password"
-                  placeholderTextColor={theme.colors.textMuted}
+                  placeholderTextColor={COLORS.textMuted}
                   secureTextEntry={!showPassword}
-                  textColor={theme.colors.text}
+                  textColor={COLORS.text}
                   autoCapitalize="none"
                 />
               </View>
@@ -160,20 +198,18 @@ export default function SignInScreen() {
                 <Ionicons
                   name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                   size={20}
-                  color={theme.colors.textMuted}
+                  color={COLORS.textMuted}
                 />
               </Pressable>
             </View>
             {errors.password && (
-              <Text style={[styles.errorText, { color: theme.colors.error }]}>{errors.password}</Text>
+              <Text style={styles.errorText}>{errors.password}</Text>
             )}
           </View>
 
           {/* Forgot Password */}
           <Pressable onPress={() => router.push('/(auth)/forgot-password')}>
-            <Text style={[styles.forgotText, { color: theme.colors.primary }]}>
-              Forgot Password?
-            </Text>
+            <Text style={styles.forgotText}>Forgot Password?</Text>
           </Pressable>
 
           {/* Sign In Button */}
@@ -181,13 +217,14 @@ export default function SignInScreen() {
             <Pressable
               style={[
                 styles.signInButton,
-                { backgroundColor: theme.colors.primary, opacity: loading ? 0.7 : 1 },
+                { opacity: loading ? 0.7 : 1 },
               ]}
               onPress={handleSignIn}
               onPressIn={onPressIn}
               onPressOut={onPressOut}
               disabled={loading}
             >
+              <View style={[StyleSheet.absoluteFill, styles.buttonPrimaryGlow]} />
               {loading ? (
                 <View style={styles.loadingDots}>
                   <View style={[styles.dot, { backgroundColor: '#fff' }]} />
@@ -203,11 +240,11 @@ export default function SignInScreen() {
 
         {/* Sign Up Link */}
         <View style={[styles.footer, { paddingBottom: insets.bottom + 24 }]}>
-          <Text style={[styles.footerText, { color: theme.colors.textMuted }]}>
+          <Text style={styles.footerText}>
             Don't have an account?{' '}
           </Text>
           <Pressable onPress={() => router.replace('/(auth)/sign-up')}>
-            <Text style={[styles.footerLink, { color: theme.colors.primary }]}>Sign Up</Text>
+            <Text style={styles.footerLink}>Sign Up</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -236,13 +273,17 @@ function TextInputField({
       keyboardType={keyboardType}
       autoCapitalize={autoCapitalize}
       secureTextEntry={secureTextEntry}
-      style={[styles.textInput, { color: textColor, fontFamily: 'Inter-Regular' }]}
+      style={[styles.textInput, { color: textColor }]}
     />
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  map: {
     flex: 1,
   },
   scrollContent: {
@@ -252,41 +293,62 @@ const styles = StyleSheet.create({
   backButton: {
     width: 44,
     height: 44,
-    borderRadius: 12,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  backButtonBackground: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 14,
   },
   header: {
-    marginTop: 32,
-    marginBottom: 40,
+    marginTop: 24,
+    marginBottom: 28,
   },
   title: {
     fontSize: 32,
     letterSpacing: -0.5,
     lineHeight: 40,
+    color: COLORS.text,
+    fontFamily: 'Inter-Bold',
   },
   subtitle: {
     fontSize: 16,
     marginTop: 8,
     lineHeight: 24,
+    color: COLORS.textMuted,
+    fontFamily: 'Inter-Regular',
   },
-  form: {
+  glassCard: {
+    borderRadius: 24,
+    padding: 24,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.surfaceBorder,
     gap: 20,
   },
   inputGroup: {
-    gap: 6,
+    gap: 8,
   },
   label: {
     fontSize: 14,
     marginLeft: 4,
+    color: COLORS.text,
+    fontFamily: 'Inter-Medium',
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 52,
-    borderRadius: 14,
+    height: 54,
+    borderRadius: 16,
     borderWidth: 1.5,
     paddingHorizontal: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
   },
   inputIcon: {
     marginLeft: 12,
@@ -296,9 +358,10 @@ const styles = StyleSheet.create({
   },
   textInput: {
     flex: 1,
-    height: 52,
+    height: 54,
     paddingHorizontal: 12,
-    fontSize: 16,
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
   },
   eyeButton: {
     padding: 12,
@@ -307,22 +370,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter-Regular',
     marginLeft: 4,
+    color: COLORS.error,
   },
   forgotText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
     textAlign: 'right',
+    color: COLORS.primary,
   },
   signInButton: {
     height: 56,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#0D9488',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: COLORS.primary,
+  },
+  buttonPrimaryGlow: {
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 15,
+    elevation: 10,
   },
   signInButtonText: {
     color: '#FFFFFF',
@@ -343,14 +413,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 'auto',
-    paddingTop: 24,
+    paddingTop: 32,
   },
   footerText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
+    color: COLORS.textMuted,
   },
   footerLink: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
+    color: COLORS.primary,
   },
 });

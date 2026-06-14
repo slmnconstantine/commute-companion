@@ -15,10 +15,12 @@ import { formatFullDate } from '@/utils/dateFormatter';
 import Avatar from '@/components/common/Avatar';
 import Badge from '@/components/common/Badge';
 import StarRating from '@/components/common/StarRating';
+import Skeleton from '@/components/common/Skeleton';
 
 interface ProfileHeaderProps {
   /** The user's profile */
-  profile: Profile;
+  profile?: Profile;
+  loading?: boolean;
 }
 
 /** Convert a hex colour to rgba with given alpha */
@@ -30,8 +32,25 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-export default function ProfileHeader({ profile }: ProfileHeaderProps) {
+export default function ProfileHeader({ profile, loading = false }: ProfileHeaderProps) {
   const { theme } = useTheme();
+
+  if (loading || !profile) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.surface }]}>
+        <Skeleton width={80} height={80} borderRadius={40} style={styles.avatar} />
+        <Skeleton width={160} height={24} style={{ marginBottom: 8, marginTop: 16 }} />
+        <Skeleton width={100} height={16} style={{ marginBottom: 16 }} />
+        <View style={styles.statsRow}>
+          <Skeleton width={60} height={40} />
+          <View style={[styles.statDivider, { backgroundColor: theme.colors.border }]} />
+          <Skeleton width={60} height={40} />
+          <View style={[styles.statDivider, { backgroundColor: theme.colors.border }]} />
+          <Skeleton width={60} height={40} />
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>

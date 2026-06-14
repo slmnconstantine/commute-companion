@@ -6,409 +6,324 @@ import {
   Animated,
   Dimensions,
   StatusBar,
+  Pressable,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTheme } from '@/context/ThemeContext';
+import { Map, Camera, type CameraRef } from '@maplibre/maplibre-react-native';
 import { APP_NAME, APP_TAGLINE } from '@/lib/constants';
 
 const { width, height } = Dimensions.get('window');
 
+// Premium Dark Theme Colors
+const COLORS = {
+  primary: '#0D9488',
+  primaryGlow: 'rgba(13, 148, 136, 0.4)',
+  surface: 'rgba(20, 20, 20, 0.65)',
+  surfaceBorder: 'rgba(255, 255, 255, 0.12)',
+  text: '#FFFFFF',
+  textMuted: 'rgba(255, 255, 255, 0.7)',
+  background: '#000000',
+};
+
 export default function WelcomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { theme } = useTheme();
+  const cameraRef = useRef<CameraRef>(null);
 
-  // Animations
-  const logoScale = useRef(new Animated.Value(0)).current;
-  const logoOpacity = useRef(new Animated.Value(0)).current;
-  const titleTranslateY = useRef(new Animated.Value(30)).current;
-  const titleOpacity = useRef(new Animated.Value(0)).current;
-  const taglineTranslateY = useRef(new Animated.Value(20)).current;
-  const taglineOpacity = useRef(new Animated.Value(0)).current;
-  const buttonsTranslateY = useRef(new Animated.Value(40)).current;
-  const buttonsOpacity = useRef(new Animated.Value(0)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  // Entrance Animations
+  const contentOpacity = useRef(new Animated.Value(0)).current;
+  const contentTranslateY = useRef(new Animated.Value(40)).current;
 
   useEffect(() => {
-    // Staggered entrance animations
-    Animated.sequence([
-      Animated.parallel([
-        Animated.spring(logoScale, {
-          toValue: 1,
-          tension: 50,
-          friction: 7,
-          useNativeDriver: true,
-        }),
-        Animated.timing(logoOpacity, {
-          toValue: 1,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-      ]),
-      Animated.parallel([
-        Animated.timing(titleTranslateY, {
-          toValue: 0,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-        Animated.timing(titleOpacity, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-      ]),
-      Animated.parallel([
-        Animated.timing(taglineTranslateY, {
-          toValue: 0,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-        Animated.timing(taglineOpacity, {
-          toValue: 1,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-      ]),
-      Animated.parallel([
-        Animated.timing(buttonsTranslateY, {
-          toValue: 0,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-        Animated.timing(buttonsOpacity, {
-          toValue: 1,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-      ]),
+    // Reveal content smoothly
+    Animated.parallel([
+      Animated.timing(contentOpacity, {
+        toValue: 1,
+        duration: 1000,
+        delay: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(contentTranslateY, {
+        toValue: 0,
+        duration: 1000,
+        delay: 300,
+        useNativeDriver: true,
+      }),
     ]).start();
 
-    // Continuous pulse animation for the logo ring
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.15,
-          duration: 2000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 2000,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
+    // Smooth entrance happens above. Map is static for stability.
   }, []);
+
+  const handleGetStarted = () => {
+    router.push('/(auth)/sign-up');
+  };
+
+  const handleSignIn = () => {
+    router.push('/(auth)/sign-in');
+  };
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-      <LinearGradient
-        colors={['#0F766E', '#0D9488', '#14B8A6']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.gradient}
+
+      {/* MapLibre Animated Background */}
+      <View style={StyleSheet.absoluteFill}>
+        <Map
+          style={styles.map}
+          mapStyle="https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json"
+          logo={false}
+          attribution={false}
+          compass={false}
+          zoomEnabled={false}
+          scrollEnabled={false}
+          pitchEnabled={false}
+          rotateEnabled={false}
+        >
+          <Camera
+            ref={cameraRef}
+            initialViewState={{
+              center: [123.891, 10.315], // Cebu City
+              zoom: 13,
+              pitch: 65,
+              heading: 0,
+            }}
+          />
+        </Map>
+        
+        {/* Deep Gradient Overlay to ensure text readability */}
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]} />
+      </View>
+
+      {/* Animated Content Wrapper */}
+      <Animated.View 
+        style={[
+          styles.contentWrapper, 
+          { 
+            paddingTop: insets.top + 60,
+            paddingBottom: insets.bottom + 30,
+            opacity: contentOpacity,
+            transform: [{ translateY: contentTranslateY }]
+          }
+        ]}
       >
-        {/* Decorative circles */}
-        <View style={[styles.decorCircle, styles.circle1]} />
-        <View style={[styles.decorCircle, styles.circle2]} />
-        <View style={[styles.decorCircle, styles.circle3]} />
-
-        {/* Logo Section */}
-        <View style={[styles.content, { paddingTop: insets.top + 60 }]}>
-          <View style={styles.logoContainer}>
-            <Animated.View
-              style={[
-                styles.logoRing,
-                {
-                  transform: [{ scale: pulseAnim }],
-                  opacity: logoOpacity,
-                },
-              ]}
-            />
-            <Animated.View
-              style={[
-                styles.logoCircle,
-                {
-                  transform: [{ scale: logoScale }],
-                  opacity: logoOpacity,
-                },
-              ]}
-            >
-              <Ionicons name="car-sport" size={48} color="#0D9488" />
-            </Animated.View>
+        {/* Header / Logo */}
+        <View style={styles.header}>
+          <View style={styles.logoGlassWrapper}>
+            <View style={styles.logoGlass}>
+              <Ionicons name="car-sport" size={42} color={COLORS.primary} />
+            </View>
           </View>
-
-          {/* App Name */}
-          <Animated.Text
-            style={[
-              styles.appName,
-              {
-                transform: [{ translateY: titleTranslateY }],
-                opacity: titleOpacity,
-              },
-            ]}
-          >
-            {APP_NAME}
-          </Animated.Text>
-
-          {/* Tagline */}
-          <Animated.Text
-            style={[
-              styles.tagline,
-              {
-                transform: [{ translateY: taglineTranslateY }],
-                opacity: taglineOpacity,
-              },
-            ]}
-          >
-            {APP_TAGLINE}
-          </Animated.Text>
-
-          {/* Features */}
-          <Animated.View
-            style={[
-              styles.features,
-              {
-                transform: [{ translateY: taglineTranslateY }],
-                opacity: taglineOpacity,
-              },
-            ]}
-          >
-            <FeatureItem icon="location" text="Smart Route Matching" />
-            <FeatureItem icon="people" text="Community Carpooling" />
-            <FeatureItem icon="shield-checkmark" text="Verified Drivers" />
-          </Animated.View>
+          <Text style={styles.appName}>{APP_NAME}</Text>
+          <Text style={styles.tagline}>{APP_TAGLINE}</Text>
         </View>
 
-        {/* Buttons */}
-        <Animated.View
-          style={[
-            styles.buttonContainer,
-            {
-              paddingBottom: insets.bottom + 40,
-              transform: [{ translateY: buttonsTranslateY }],
-              opacity: buttonsOpacity,
-            },
-          ]}
-        >
-          <Animated.View>
-            <PressableButton
-              title="Get Started"
-              onPress={() => router.push('/(auth)/sign-up')}
-              variant="filled"
-            />
-          </Animated.View>
-          <View style={styles.buttonGap} />
-          <PressableButton
-            title="I already have an account"
-            onPress={() => router.push('/(auth)/sign-in')}
-            variant="outline"
+        <View style={styles.spacer} />
+
+        {/* Feature List (Glassmorphism Card) */}
+        <View style={styles.glassCard}>
+          <FeatureItem icon="location" title="Smart Route Matching" subtitle="Find the best routes along your commute instantly." />
+          <View style={styles.divider} />
+          <FeatureItem icon="people" title="Community Carpooling" subtitle="Connect with peers and save on daily travel costs." />
+          <View style={styles.divider} />
+          <FeatureItem icon="shield-checkmark" title="Verified Drivers" subtitle="Secure, trusted platform with identity verification." />
+        </View>
+
+        {/* Action Buttons */}
+        <View style={styles.buttonContainer}>
+          <PressableButton 
+            title="Get Started" 
+            onPress={handleGetStarted} 
+            variant="primary" 
           />
-        </Animated.View>
-      </LinearGradient>
+          <PressableButton 
+            title="I already have an account" 
+            onPress={handleSignIn} 
+            variant="glass" 
+          />
+        </View>
+      </Animated.View>
     </View>
   );
 }
 
-function FeatureItem({ icon, text }: { icon: string; text: string }) {
+// ─── Subcomponents ───
+
+function FeatureItem({ icon, title, subtitle }: { icon: string; title: string; subtitle: string }) {
   return (
     <View style={styles.featureItem}>
-      <View style={styles.featureIcon}>
-        <Ionicons name={icon as any} size={18} color="#0D9488" />
+      <View style={styles.featureIconWrapper}>
+        <Ionicons name={icon as any} size={22} color={COLORS.primary} />
       </View>
-      <Text style={styles.featureText}>{text}</Text>
+      <View style={styles.featureTextContainer}>
+        <Text style={styles.featureTitle}>{title}</Text>
+        <Text style={styles.featureSubtitle}>{subtitle}</Text>
+      </View>
     </View>
   );
 }
 
-function PressableButton({
-  title,
-  onPress,
-  variant,
-}: {
-  title: string;
-  onPress: () => void;
-  variant: 'filled' | 'outline';
-}) {
+function PressableButton({ title, onPress, variant }: { title: string; onPress: () => void; variant: 'primary' | 'glass' }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
-  const onPressIn = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 0.97,
-      useNativeDriver: true,
-    }).start();
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, { toValue: 0.96, useNativeDriver: true }).start();
+  };
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, { toValue: 1, friction: 5, useNativeDriver: true }).start();
   };
 
-  const onPressOut = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      friction: 5,
-      useNativeDriver: true,
-    }).start();
-  };
+  const isPrimary = variant === 'primary';
 
   return (
-    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-      <View
+    <Animated.View style={{ transform: [{ scale: scaleAnim }], width: '100%', marginBottom: 16 }}>
+      <Pressable
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        onPress={onPress}
         style={[
-          styles.button,
-          variant === 'filled' ? styles.buttonFilled : styles.buttonOutline,
+          styles.buttonBase,
+          isPrimary ? styles.buttonPrimary : styles.buttonGlass,
         ]}
-        onTouchStart={onPressIn}
-        onTouchEnd={() => {
-          onPressOut();
-          onPress();
-        }}
       >
-        <Text
-          style={[
-            styles.buttonText,
-            variant === 'filled' ? styles.buttonTextFilled : styles.buttonTextOutline,
-          ]}
-        >
+        {/* Glow effect for primary button */}
+        {isPrimary && (
+          <View style={[StyleSheet.absoluteFill, styles.buttonPrimaryGlow]} />
+        )}
+        
+        {/* Blur background for glass button */}
+        {!isPrimary && (
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.05)' }]} />
+        )}
+
+        <Text style={[styles.buttonText, isPrimary ? styles.buttonTextPrimary : styles.buttonTextGlass]}>
           {title}
         </Text>
-      </View>
+      </Pressable>
     </Animated.View>
   );
 }
 
+// ─── Styles ───
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: COLORS.background,
   },
-  gradient: {
+  map: {
     flex: 1,
+  },
+  contentWrapper: {
+    flex: 1,
+    paddingHorizontal: 24,
+    justifyContent: 'space-between',
+  },
+  header: {
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  logoGlassWrapper: {
+    borderRadius: 28,
     overflow: 'hidden',
+    marginBottom: 24,
   },
-  decorCircle: {
-    position: 'absolute',
-    borderRadius: 999,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-  },
-  circle1: {
-    width: 300,
-    height: 300,
-    top: -80,
-    right: -80,
-  },
-  circle2: {
-    width: 200,
-    height: 200,
-    bottom: 120,
-    left: -60,
-  },
-  circle3: {
-    width: 150,
-    height: 150,
-    top: height * 0.4,
-    right: -30,
-  },
-  content: {
-    flex: 1,
+  logoGlass: {
+    width: 80,
+    height: 80,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 32,
-  },
-  logoContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 32,
-  },
-  logoRing: {
-    position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  logoCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 24,
-    elevation: 12,
+    backgroundColor: 'rgba(0,0,0,0.3)',
   },
   appName: {
-    fontSize: 32,
+    fontSize: 34,
     fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    color: COLORS.text,
     textAlign: 'center',
     letterSpacing: -0.5,
+    marginBottom: 8,
   },
   tagline: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: COLORS.textMuted,
     textAlign: 'center',
-    marginTop: 8,
   },
-  features: {
-    marginTop: 40,
-    gap: 16,
+  spacer: {
+    flex: 1,
+  },
+  glassCard: {
+    borderRadius: 24,
+    padding: 24,
+    marginBottom: 40,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    marginVertical: 16,
   },
   featureItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
   },
-  featureIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+  featureIconWrapper: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(13, 148, 136, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 16,
   },
-  featureText: {
+  featureTextContainer: {
+    flex: 1,
+  },
+  featureTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#FFFFFF',
+    fontFamily: 'Inter-SemiBold',
+    color: COLORS.text,
+    marginBottom: 4,
+  },
+  featureSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: COLORS.textMuted,
   },
   buttonContainer: {
-    paddingHorizontal: 24,
+    width: '100%',
   },
-  buttonGap: {
-    height: 12,
-  },
-  button: {
+  buttonBase: {
     height: 56,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+    position: 'relative',
   },
-  buttonFilled: {
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 6,
+  buttonPrimary: {
+    backgroundColor: COLORS.primary,
   },
-  buttonOutline: {
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.4)',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  buttonPrimaryGlow: {
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 15,
+    elevation: 10,
+  },
+  buttonGlass: {
+    backgroundColor: 'rgba(0,0,0,0.4)',
   },
   buttonText: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
+    zIndex: 1,
   },
-  buttonTextFilled: {
-    color: '#0D9488',
+  buttonTextPrimary: {
+    color: '#FFFFFF',
   },
-  buttonTextOutline: {
+  buttonTextGlass: {
     color: '#FFFFFF',
   },
 });

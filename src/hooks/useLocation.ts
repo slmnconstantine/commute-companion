@@ -5,7 +5,7 @@
  * reverse-geocoding them into a readable address. Falls back to the
  * default Manila coordinates defined in constants.
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import * as Location from 'expo-location';
 import { DEFAULT_LATITUDE, DEFAULT_LONGITUDE } from '@/lib/constants';
 
@@ -23,53 +23,97 @@ export function useLocation() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const fetchLocation = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setError('Location permission denied');
+        setLoading(false);
+        return;
+      }
+
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      setLocation({
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
+      });
+
+      try {
+        const [addr] = await Location.reverseGeocodeAsync({
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+        });
+        if (addr) {
+          setAddress(
+            [addr.street, addr.district, addr.city].filter(Boolean).join(', ')
+          );
+        }
+      } catch {
+        // Non-critical
+      }
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
+    fetchLocation();
+  }, [fetchLocation]);
+
+  return { location, address, loading, error, setLocation, refreshLocation: fetchLocation };
+}
+
+export function useLocationWatcher(onLocationUpdate: (loc: LocationCoords) => void, enabled = true) {
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let sub: Location.LocationSubscription | null = null;
     let isMounted = true;
+
+    if (!enabled) return;
+
     (async () => {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {
-          setError('Location permission denied');
-          setLoading(false);
+          if (isMounted) setError('Location permission denied');
           return;
         }
 
-        const loc = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
-
-        if (isMounted) {
-          setLocation({
-            latitude: loc.coords.latitude,
-            longitude: loc.coords.longitude,
-          });
-
-          // Reverse geocode for a human-readable address
-          try {
-            const [addr] = await Location.reverseGeocodeAsync({
-              latitude: loc.coords.latitude,
-              longitude: loc.coords.longitude,
-            });
-            if (addr && isMounted) {
-              setAddress(
-                [addr.street, addr.district, addr.city].filter(Boolean).join(', ')
-              );
+        sub = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.High,
+            timeInterval: 5000,
+            distanceInterval: 10,
+          },
+          (loc) => {
+            if (isMounted) {
+              onLocationUpdate({
+                latitude: loc.coords.latitude,
+                longitude: loc.coords.longitude,
+              });
             }
-          } catch {
-            // Reverse geocode failed non-critical
           }
-        }
+        );
       } catch (e: any) {
         if (isMounted) setError(e.message);
-      } finally {
-        if (isMounted) setLoading(false);
       }
     })();
 
     return () => {
       isMounted = false;
+      if (sub) {
+        sub.remove();
+      }
     };
-  }, []);
+  }, [enabled, onLocationUpdate]);
 
-  return { location, address, loading, error, setLocation };
+  return { error };
 }

@@ -5,8 +5,8 @@
  * `lightTheme` and `darkTheme` objects consumed by ThemeContext.
  */
 
-export { lightColors, darkColors } from './colors';
-export type { Colors } from './colors';
+export { getLightColors, getDarkColors } from './colors';
+export type { Colors, ThemePreset } from './colors';
 
 export { typography } from './typography';
 export type { Typography } from './typography';
@@ -14,9 +14,9 @@ export type { Typography } from './typography';
 export { spacing, borderRadius } from './spacing';
 export type { Spacing, BorderRadius } from './spacing';
 
-import { lightColors, darkColors, type Colors } from './colors';
+import { getLightColors, getDarkColors, type Colors, type ThemePreset } from './colors';
 import { typography, type Typography } from './typography';
-import { spacing, borderRadius, type Spacing, type BorderRadius } from './spacing';
+import { spacing, getBorderRadius, type Spacing, type BorderRadius } from './spacing';
 
 /** Shape of the full theme object available via `useTheme()` */
 export interface Theme {
@@ -26,16 +26,11 @@ export interface Theme {
   borderRadius: BorderRadius;
 }
 
-export const lightTheme: Theme = {
-  colors: lightColors,
-  typography,
-  spacing,
-  borderRadius,
-};
-
-export const darkTheme: Theme = {
-  colors: darkColors,
-  typography,
-  spacing,
-  borderRadius,
-};
+export function getTheme(mode: 'light' | 'dark', preset: ThemePreset = 'glass_emerald'): Theme {
+  return {
+    colors: mode === 'light' ? getLightColors(preset) : getDarkColors(preset),
+    typography,
+    spacing,
+    borderRadius: getBorderRadius(preset),
+  };
+}
