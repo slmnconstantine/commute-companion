@@ -85,7 +85,8 @@ serve(async (req: Request) => {
       }
 
       // Convert base64 to File for Groq Whisper API
-      const byteCharacters = atob(audioBase64);
+      const base64Data = audioBase64.replace(/^data:[^;]+;base64,/, "");
+      const byteCharacters = atob(base64Data);
       const byteNumbers = new Array(byteCharacters.length);
       for (let i = 0; i < byteCharacters.length; i++) {
         byteNumbers[i] = byteCharacters.charCodeAt(i);
