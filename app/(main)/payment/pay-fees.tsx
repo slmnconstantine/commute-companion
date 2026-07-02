@@ -19,6 +19,7 @@ import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { createCheckoutSession } from '@/services/paymongo';
 import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
 
 type PaymentMethod = 'gcash' | 'maya' | 'card';
 
@@ -77,8 +78,9 @@ export default function PayFeesScreen() {
             quantity: 1
           }
         ],
-        success_url: 'commutecompanion://payment/success',
-        cancel_url: 'commutecompanion://payment/cancel'
+        reference_number: profile?.id, // Sent to PayMongo to identify user in webhook
+        success_url: 'commute-companion://payment/success',
+        cancel_url: 'commute-companion://payment/cancel'
       });
 
       if (!res.success) {
@@ -104,11 +106,9 @@ export default function PayFeesScreen() {
             { 
               text: 'Proceed', 
               onPress: async () => {
-                const canOpen = await Linking.canOpenURL(res.checkoutUrl);
-                if (canOpen) {
-                  await Linking.openURL(res.checkoutUrl);
-                  
-                  // In a live app we would check payment status via webhook or polling.
+                const result = await WebBrowser.openBrowserAsync(res.checkoutUrl);
+                
+                // In a live app we would check payment status via webhook or polling.
                   // For demo, we will simulate the completion after user returns
                   Alert.alert(
                     'Did you complete the payment?',
@@ -123,9 +123,6 @@ export default function PayFeesScreen() {
                       { text: 'No, Cancel', style: 'cancel' }
                     ]
                   );
-                } else {
-                  Alert.alert('Error', 'Unable to open checkout URL.');
-                }
               }
             }
           ]

@@ -40,6 +40,10 @@ import TimePickerModal from '@/components/ride/TimePickerModal';
 import BecomeDriverBanner from '@/components/ride/BecomeDriverBanner';
 import TripFiltersModal from '@/components/ride/TripFiltersModal';
 import CommuterRequestModal from '@/components/ride/CommuterRequestModal';
+import ActiveRouteCard from '@/components/ride/ActiveRouteCard';
+import ActiveRequestCard from '@/components/ride/ActiveRequestCard';
+import CommuterRequestCard from '@/components/ride/CommuterRequestCard';
+import Skeleton from '@/components/common/Skeleton';
 
 const SEGMENTS = ['Search Rides', 'Post a Ride'] as const;
 type Segment = (typeof SEGMENTS)[number];
@@ -114,6 +118,7 @@ export default function RidesScreen() {
   const [myRides, setMyRides] = useState<TripWithDriver[]>([]);
   const [availableRides, setAvailableRides] = useState<TripWithDriver[]>([]);
   const [rideRequests, setRideRequests] = useState<CommuterRequest[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Commuter Request States
   const [showRequestModal, setShowRequestModal] = useState(false);
@@ -315,6 +320,7 @@ export default function RidesScreen() {
   };
 
   const loadData = useCallback(async () => {
+    setLoading(true);
     try {
       // Load all open rides (in a real app, this would use activeRoute to filter nearby rides via PostGIS)
       const allRides = await getTrips({ limit: 50 });
@@ -405,6 +411,8 @@ export default function RidesScreen() {
       }
     } catch (e) {
       console.log('Error loading trips', e);
+    } finally {
+      setLoading(false);
     }
   }, [profile?.id, isDriver, params.from_set_route]);
 
@@ -540,62 +548,26 @@ export default function RidesScreen() {
               {/* Active Route Summary */}
               {activeRoute ? (
                 <View style={{ marginBottom: 16 }}>
-                  <Pressable
-                    style={[
-                      styles.activeRouteCard,
-                      { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, marginBottom: 8 },
-                    ]}
+                  <ActiveRouteCard
+                    theme={theme}
+                    originLabel={activeRoute.origin_label}
+                    destinationLabel={activeRoute.destination_label}
                     onPress={() => router.push('/(main)/ride/set-route' as any)}
-                  >
-                    <View style={styles.activeRouteDots}>
-                      <View style={[styles.routeDotGreen, { backgroundColor: theme.colors.success }]} />
-                      <View style={[styles.routeLine, { backgroundColor: theme.colors.border }]} />
-                      <View style={[styles.routeDotRed, { backgroundColor: theme.colors.error }]} />
-                    </View>
-                    <View style={styles.activeRouteInfo}>
-                      <Text style={[theme.typography.small, { color: theme.colors.textMuted, fontFamily: 'Inter-Medium', marginBottom: 2 }]}>Your Commute</Text>
-                      <Text style={[theme.typography.caption, { color: theme.colors.text }]} numberOfLines={1}>
-                        {activeRoute.origin_label.split(',')[0]}
-                      </Text>
-                      <Text style={[theme.typography.caption, { color: theme.colors.text }]} numberOfLines={1}>
-                        {activeRoute.destination_label.split(',')[0]}
-                      </Text>
-                    </View>
-                    <Ionicons name="pencil" size={18} color={theme.colors.primary} />
-                  </Pressable>
+                  />
 
                   {/* Active Ride Request Details */}
                   {activeRequestRoute && (() => {
                     const reqDetails = parseRequestDetails(activeRequestRoute.label);
                     if (!reqDetails) return null;
-                    const displayTime = reqDetails.departure_time
-                      ? new Date(reqDetails.departure_time).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                      : '';
                     return (
-                      <View style={[styles.requestStatusCard, { backgroundColor: `${theme.colors.success}10`, borderColor: theme.colors.success, borderWidth: 1, borderRadius: 14, padding: 14, marginBottom: 8 }]}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <Ionicons name="checkmark-circle" size={18} color={theme.colors.success} />
-                            <Text style={{ color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 14 }}>
-                              Active Ride Request
-                            </Text>
-                          </View>
-                          <Pressable onPress={cancelRideRequest} hitSlop={12}>
-                            <Text style={{ color: theme.colors.error, fontFamily: 'Inter-SemiBold', fontSize: 13 }}>Cancel Request</Text>
-                          </Pressable>
-                        </View>
-                        <View style={{ marginTop: 8, gap: 4 }}>
-                          <Text style={{ color: theme.colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 13 }}>
-                            Route: <Text style={{ color: theme.colors.text, fontFamily: 'Inter-Medium' }}>{activeRequestRoute.origin_label.split(',')[0]} → {activeRequestRoute.destination_label.split(',')[0]}</Text>
-                          </Text>
-                          <Text style={{ color: theme.colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 13 }}>
-                            Seats Needed: <Text style={{ color: theme.colors.text, fontFamily: 'Inter-Medium' }}>{reqDetails.seats}</Text>
-                          </Text>
-                          <Text style={{ color: theme.colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 13 }}>
-                            Departure: <Text style={{ color: theme.colors.text, fontFamily: 'Inter-Medium' }}>{displayTime}</Text>
-                          </Text>
-                        </View>
-                      </View>
+                      <ActiveRequestCard
+                        theme={theme}
+                        originLabel={activeRequestRoute.origin_label}
+                        destinationLabel={activeRequestRoute.destination_label}
+                        seats={reqDetails.seats}
+                        departureTime={reqDetails.departure_time}
+                        onCancel={cancelRideRequest}
+                      />
                     );
                   })()}
 
@@ -634,7 +606,7 @@ export default function RidesScreen() {
 
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, marginTop: 4 }}>
                 <Text style={[styles.sectionSubtitle, { color: theme.colors.textMuted, fontFamily: 'Inter-Medium', marginBottom: 0 }]}>
-                  {filteredAndSortedRides.length} ride{filteredAndSortedRides.length !== 1 ? 's' : ''} found
+                  {loading ? 'Searching...' : `${filteredAndSortedRides.length} ride${filteredAndSortedRides.length !== 1 ? 's' : ''} found`}
                 </Text>
                 {(filterMaxFare !== null || filterStatus !== 'open' || sortBy !== 'time') && (
                   <Pressable
@@ -650,7 +622,13 @@ export default function RidesScreen() {
                   </Pressable>
                 )}
               </View>
-              {filteredAndSortedRides.length > 0 ? (
+              {loading ? (
+                <>
+                  <TripSkeletonCard theme={theme} />
+                  <TripSkeletonCard theme={theme} />
+                  <TripSkeletonCard theme={theme} />
+                </>
+              ) : filteredAndSortedRides.length > 0 ? (
                 filteredAndSortedRides.map((trip) => (
                   <View key={trip.id} style={{ marginBottom: 14 }}>
                     <TripCard trip={trip} onPress={() => router.push(`/(main)/ride/${trip.id}`)} />
@@ -660,7 +638,7 @@ export default function RidesScreen() {
                 <EmptyState
                   icon="funnel-outline"
                   title="No Matching Rides"
-                  message="Try adjusting your filters or search criteria."
+                  message={(filterMaxFare !== null || filterStatus !== 'open' || sortBy !== 'time') ? "Try adjusting your filters to see more results." : "Try adjusting your search criteria."}
                 />
               )}
             </>
@@ -700,7 +678,12 @@ export default function RidesScreen() {
                   My Posted Rides
                 </Text>
               </View>
-              {myRides.length > 0 ? (
+              {loading ? (
+                <>
+                  <TripSkeletonCard theme={theme} />
+                  <TripSkeletonCard theme={theme} />
+                </>
+              ) : myRides.length > 0 ? (
                 myRides.map((trip) => (
                   <View key={trip.id} style={{ marginBottom: 14 }}>
                     <TripCard trip={trip} onPress={() => router.push(`/(main)/ride/${trip.id}`)} />
@@ -718,7 +701,13 @@ export default function RidesScreen() {
                   Commuter Ride Requests
                 </Text>
               </View>
-              {rideRequests.length > 0 ? (
+              {loading ? (
+                <>
+                  <RequestSkeletonCard theme={theme} />
+                  <RequestSkeletonCard theme={theme} />
+                  <RequestSkeletonCard theme={theme} />
+                </>
+              ) : rideRequests.length > 0 ? (
                 rideRequests.map((req) => {
                   const details = parseRequestDetails(req.label);
                   const displayTime = details?.departure_time
@@ -758,49 +747,18 @@ export default function RidesScreen() {
                   };
 
                   return (
-                    <View key={req.id} style={[styles.createRideCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, marginBottom: 12, paddingVertical: 14, flexDirection: 'row', alignItems: 'center' }]}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12 }}>
-                        <Avatar
-                          uri={req.commuter?.avatar_url}
-                          name={req.commuter?.full_name || 'Commuter'}
-                          size="md"
-                          showBadge={req.commuter?.verified_badge}
-                        />
-                        <View style={styles.createRideInfo}>
-                          <Text style={[styles.createRideTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 15 }]}>
-                            {req.commuter?.full_name}
-                          </Text>
-
-                          <Text style={[styles.createRideDesc, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 12 }]} numberOfLines={1}>
-                            From: {req.origin_label.split(',')[0]}
-                          </Text>
-                          <Text style={[styles.createRideDesc, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 12 }]} numberOfLines={1}>
-                            To: {req.destination_label.split(',')[0]}
-                          </Text>
-
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4 }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                              <Ionicons name="people-outline" size={14} color={theme.colors.textMuted} />
-                              <Text style={{ fontSize: 12, color: theme.colors.textMuted, fontFamily: 'Inter-Medium' }}>
-                                {seatsNeeded} seats
-                              </Text>
-                            </View>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                              <Ionicons name="time-outline" size={14} color={theme.colors.textMuted} />
-                              <Text style={{ fontSize: 12, color: theme.colors.textMuted, fontFamily: 'Inter-Medium' }}>
-                                {displayTime}
-                              </Text>
-                            </View>
-                          </View>
-                        </View>
-                      </View>
-                      <Pressable
-                        style={{ backgroundColor: theme.colors.primary, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 }}
-                        onPress={handleOfferRide}
-                      >
-                        <Text style={{ color: '#fff', fontSize: 12, fontFamily: 'Inter-SemiBold' }}>Offer Ride</Text>
-                      </Pressable>
-                    </View>
+                    <CommuterRequestCard
+                      key={req.id}
+                      theme={theme}
+                      commuterName={req.commuter?.full_name || 'Commuter'}
+                      commuterAvatarUrl={req.commuter?.avatar_url}
+                      commuterVerified={req.commuter?.verified_badge}
+                      originLabel={req.origin_label}
+                      destinationLabel={req.destination_label}
+                      seatsNeeded={seatsNeeded}
+                      displayTime={displayTime}
+                      onOfferRide={handleOfferRide}
+                    />
                   );
                 })
               ) : (
@@ -869,6 +827,59 @@ export default function RidesScreen() {
         setCustomFareText={setCustomFareText}
       />
     </SafeAreaView>
+  );
+}
+
+// ── Skeletons ─────────────────────────────────────────────────────────────────
+
+function TripSkeletonCard({ theme }: { theme: any }) {
+  return (
+    <View style={[styles.tripCard, { backgroundColor: theme.colors.surface, shadowColor: theme.colors.shadow, padding: 16, marginBottom: 14 }]}>
+      <View style={{ flexDirection: 'row', marginBottom: 16, justifyContent: 'space-between' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Skeleton width={40} height={40} borderRadius={20} />
+          <View style={{ marginLeft: 12, gap: 6 }}>
+            <Skeleton width={100} height={14} />
+            <Skeleton width={60} height={12} />
+          </View>
+        </View>
+        <View style={{ alignItems: 'flex-end', gap: 6 }}>
+          <Skeleton width={80} height={20} />
+          <Skeleton width={50} height={12} />
+        </View>
+      </View>
+      <View style={{ flexDirection: 'row', marginBottom: 16 }}>
+        <View style={{ alignItems: 'center', marginRight: 10, width: 14 }}>
+          <Skeleton width={10} height={10} borderRadius={5} />
+          <View style={{ flex: 1, width: 2, backgroundColor: theme.colors.border, marginVertical: 4 }} />
+          <Skeleton width={10} height={10} borderRadius={5} />
+        </View>
+        <View style={{ flex: 1, gap: 12, minHeight: 44 }}>
+          <Skeleton width="80%" height={14} />
+          <Skeleton width="60%" height={14} />
+        </View>
+      </View>
+      <View style={{ flexDirection: 'row', borderTopWidth: 1, borderTopColor: theme.colors.border, paddingTop: 12 }}>
+        <Skeleton width={80} height={24} borderRadius={12} style={{ marginRight: 8 }} />
+        <Skeleton width={80} height={24} borderRadius={12} />
+      </View>
+    </View>
+  );
+}
+
+function RequestSkeletonCard({ theme }: { theme: any }) {
+  return (
+    <View style={[styles.createRideCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, marginBottom: 12, padding: 14 }]}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12 }}>
+        <Skeleton width={48} height={48} borderRadius={24} />
+        <View style={{ flex: 1, gap: 8 }}>
+          <Skeleton width={120} height={16} />
+          <Skeleton width="90%" height={12} />
+          <Skeleton width="70%" height={12} />
+        </View>
+      </View>
+      <Skeleton width={80} height={32} borderRadius={8} />
+    </View>
   );
 }
 

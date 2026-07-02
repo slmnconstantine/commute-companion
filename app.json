@@ -1,15 +1,15 @@
 {
   "expo": {
     "name": "Commute Companion",
-    "slug": "commutable-companion",
+    "slug": "commute-companion",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "scheme": "commutable-companion",
+    "scheme": "commute-companion",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.commutablecompanion.app",
+      "bundleIdentifier": "com.commutecompanion.app",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "We need your location to find nearby rides and show your position on the map.",
         "NSLocationAlwaysUsageDescription": "We need background location access to track your ride in real-time.",
@@ -25,19 +25,18 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.commutablecompanion.app",
+      "package": "com.commutecompanion.app",
       "permissions": [
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_LOCATION",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ]
     },
     "web": {
@@ -73,12 +72,13 @@
       ],
       "expo-splash-screen",
       "expo-audio",
-      "expo-asset"
+      "expo-asset",
+      "expo-web-browser"
     ],
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "59f7d74c-00dd-444e-b440-1d63b6d781e0"
+        "projectId": "28d450a8-09cb-464a-ba66-a4564eba1130"
       }
     }
   }

@@ -21,6 +21,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
+import Constants from 'expo-constants';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import Avatar from '@/components/common/Avatar';
@@ -154,20 +155,24 @@ export default function ProfileScreen() {
           label: 'Notifications',
           onPress: () => router.push('/(main)/settings/notifications' as any),
         },
+        {
+          icon: 'sparkles-outline',
+          label: 'AI Assistant',
+          onPress: () => router.push('/(main)/assistant-demo' as any),
+        },
       ],
     },
-    {
+    ...(__DEV__ ? [{
       title: 'Developer',
       items: [
         {
-          icon: 'flash-outline',
+          icon: 'flash-outline' as const,
           label: 'Override Driver Verification (Demo)',
           onPress: handleDemoOverride,
           color: theme.colors.accent,
         },
-
       ],
-    },
+    }] : []),
     {
       title: 'Support',
       items: [
@@ -275,7 +280,7 @@ export default function ProfileScreen() {
                 { color: theme.colors.textMuted },
               ]}
             >
-              Total Rides
+              Reviews
             </Text>
           </View>
 
@@ -512,7 +517,7 @@ export default function ProfileScreen() {
             },
           ]}
         >
-          Commute Companion v1.0.0
+          Commute Companion v{Constants.expoConfig?.version ?? '1.0.0'}
         </Text>
       </ScrollView>
     </SafeAreaView>

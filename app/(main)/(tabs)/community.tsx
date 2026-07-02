@@ -301,7 +301,23 @@ export default function CommunityScreen() {
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}
           >
             {loading ? (
-              <ActivityIndicator color={theme.colors.primary} style={{ marginTop: 40 }} />
+              <>
+                {[1, 2, 3].map((i) => (
+                  <View key={i} style={[styles.postCard, { backgroundColor: theme.colors.surface, shadowColor: theme.colors.shadow }]}>
+                    <View style={styles.authorRow}>
+                      <View style={[styles.avatar, { backgroundColor: theme.colors.border }]} />
+                      <View style={styles.authorInfo}>
+                        <View style={{ width: 100, height: 14, backgroundColor: theme.colors.border, borderRadius: 4, marginBottom: 6 }} />
+                        <View style={{ width: 60, height: 10, backgroundColor: theme.colors.border, borderRadius: 4 }} />
+                      </View>
+                    </View>
+                    <View style={{ marginTop: 14 }}>
+                      <View style={{ width: '90%', height: 12, backgroundColor: theme.colors.border, borderRadius: 4, marginBottom: 8 }} />
+                      <View style={{ width: '70%', height: 12, backgroundColor: theme.colors.border, borderRadius: 4 }} />
+                    </View>
+                  </View>
+                ))}
+              </>
             ) : posts.length === 0 ? (
               <EmptyState icon="chatbubble-outline" title="No posts yet" message="Be the first to post an update on this route!" />
             ) : (
@@ -457,7 +473,7 @@ export default function CommunityScreen() {
       </Modal>
 
       {/* COMMENTS MODAL */}
-      <Modal visible={commentsVisible} animationType="slide" transparent={true}>
+      <Modal visible={commentsVisible} animationType="slide" transparent={true} onRequestClose={() => setCommentsVisible(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
           <View style={[styles.commentsContent, { backgroundColor: theme.colors.background }]}>
             <View style={[styles.modalHandle, { backgroundColor: theme.colors.border }]} />
@@ -585,7 +601,7 @@ const styles = StyleSheet.create({
 
   // Modals
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
-  modalContent: { height: '85%', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
+  modalContent: { height: '55%', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
   modalHandle: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 12 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, paddingBottom: 10 },
   postButton: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },

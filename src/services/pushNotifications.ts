@@ -14,6 +14,11 @@ Notifications.setNotificationHandler({
 });
 
 export async function registerForPushNotificationsAsync() {
+  if (!Device.isDevice) {
+    console.log('[PUSH] Bypassing push token registration: running on an emulator/simulator.');
+    return null;
+  }
+
   let token;
 
   if (Platform.OS === 'android') {
@@ -56,10 +61,6 @@ export async function registerForPushNotificationsAsync() {
     console.log('[PUSH] Successfully generated token:', token);
   } catch (e) {
     console.warn("[PUSH] Failed to get Expo push token:", e);
-  }
-
-  if (!Device.isDevice) {
-    console.log('Warning: Push Notifications may not work reliably on all emulators.');
   }
 
   return token;

@@ -128,18 +128,39 @@ export default function FareBreakdown({ fareBreakdown, passengers = 1 }: FareBre
           />
         )}
 
-        <FareRow
-          label="Platform fee"
-          amount={formatCurrency(fareBreakdown.platformFee)}
-          color={theme.colors.text}
-          mutedColor={theme.colors.textMuted}
-        />
+        <View style={styles.row}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Text
+              style={[
+                styles.rowLabel,
+                {
+                  color: theme.colors.textMuted,
+                  fontFamily: 'Inter-Regular',
+                },
+              ]}
+            >
+              Platform fee
+            </Text>
+            <Ionicons name="information-circle-outline" size={14} color={`${theme.colors.textMuted}80`} />
+          </View>
+          <Text
+            style={[
+              styles.rowAmount,
+              {
+                color: theme.colors.textMuted,
+                fontFamily: 'Inter-Medium',
+              },
+            ]}
+          >
+            {formatCurrency(fareBreakdown.platformFee)}
+          </Text>
+        </View>
       </View>
 
       {/* Total divider + total row */}
       <View style={[styles.totalDivider, { backgroundColor: theme.colors.border }]} />
 
-      <View style={styles.totalRow}>
+      <View style={[styles.totalRow, { backgroundColor: `${theme.colors.primary}08`, borderRadius: 10, padding: 12, marginHorizontal: -4 }]}>
         <Text
           style={[
             styles.totalLabel,
@@ -208,6 +229,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   totalAmount: {
-    fontSize: 18,
+    fontSize: 20,
   },
 });

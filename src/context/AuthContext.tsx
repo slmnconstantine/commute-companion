@@ -80,21 +80,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [profile?.id]); // Only re-run if a new user logs in
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session?.user) {
-        fetchProfile(session.user.id).finally(() => setIsLoading(false));
-      } else {
+    supabase.auth.getSession()
+      .then(({ data: { session }, error }) => {
+        if (error) {
+          console.warn('[AUTH] Session restoration failed (likely expired/invalid refresh token). Clearing session:', error.message);
+          supabase.auth.signOut().catch(() => {});
+          setSession(null);
+          setProfile(null);
+          setIsLoading(false);
+          return;
+        }
+        setSession(session);
+        if (session?.user) {
+          fetchProfile(session.user.id).finally(() => setIsLoading(false));
+        } else {
+          setIsLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error('[AUTH] Unexpected error in getSession:', err);
+        supabase.auth.signOut().catch(() => {});
+        setSession(null);
+        setProfile(null);
         setIsLoading(false);
-      }
-    });
+      });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         setSession(session);
-        if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user) {
-          await fetchProfile(session.user.id);
-        } else if (event === 'SIGNED_OUT') {
+        if (session?.user) {
+          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+            await fetchProfile(session.user.id);
+          }
+        } else {
           setProfile(null);
         }
       }
