@@ -18,7 +18,6 @@ import { Map, Camera, type CameraRef } from '@maplibre/maplibre-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { isValidEmail } from '@/utils/validators';
 
-// Premium Dark Theme Colors
 const COLORS = {
   primary: '#0D9488',
   primaryGlow: 'rgba(13, 148, 136, 0.4)',
@@ -51,7 +50,7 @@ export default function SignInScreen() {
     } else if (identifier.includes('@') && !isValidEmail(identifier)) {
       newErrors.identifier = 'Enter a valid email';
     }
-    
+
     if (!password) newErrors.password = 'Password is required';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -112,7 +111,7 @@ export default function SignInScreen() {
             }}
           />
         </Map>
-        
+
         {/* Deep Gradient Overlay */}
         <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)' }]} />
       </View>
@@ -123,8 +122,8 @@ export default function SignInScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Back Button */}
-        <Pressable 
-          style={[styles.backButton, { marginTop: 8 }]} 
+        <Pressable
+          style={[styles.backButton, { marginTop: 8 }]}
           onPress={() => router.back()}
         >
           <View style={styles.backButtonBackground} />

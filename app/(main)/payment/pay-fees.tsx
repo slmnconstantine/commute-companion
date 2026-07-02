@@ -64,7 +64,6 @@ export default function PayFeesScreen() {
       const res = await createCheckoutSession({
         amount: Math.round(parsedAmount * 100),
         currency: 'PHP',
-        payment_method_types: ['gcash', 'paymaya', 'card'],
         description: `Payment of Platform Fees for driver: ${profile?.full_name || 'Driver Account'}`,
         billing: {
           name: profile?.full_name || 'Driver Account',

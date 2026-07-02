@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
                 quantity: 1
               }
             ],
-            payment_method_types: payment_method_types || ['gcash', 'paymaya', 'card'],
+            ...(payment_method_types ? { payment_method_types } : {}),
             description: description || 'Commute Companion Payment',
             success_url: success_url || 'commute-companion://payment/success',
             cancel_url: cancel_url || 'commute-companion://payment/cancel',
