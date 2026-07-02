@@ -33,6 +33,7 @@ export default function MainLayout() {
         <Stack.Screen name="chat" />
         <Stack.Screen name="verification" />
         <Stack.Screen name="settings" />
+        <Stack.Screen name="assistant-demo" />
       </Stack>
     </NotificationProvider>
   );

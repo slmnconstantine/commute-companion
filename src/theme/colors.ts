@@ -37,7 +37,7 @@ const emeraldShared = {
   primary: '#10B981', // Emerald
   primaryDark: '#059669',
   accent: '#F59E0B',
-  success: '#10B981',
+  success: '#22C55E',  // Green-500 — distinct from primary emerald
   warning: '#F59E0B',
   error: '#EF4444',
   info: '#3B82F6',
@@ -82,7 +82,7 @@ const glassEmeraldShared = {
   primary: '#10B981', // Emerald
   primaryDark: '#059669',
   accent: '#F59E0B',
-  success: '#10B981',
+  success: '#22C55E',  // Green-500 — distinct from primary emerald
   warning: '#F59E0B',
   error: '#EF4444',
   info: '#3B82F6',
@@ -121,7 +121,7 @@ const glassEmeraldDark: Colors = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. EXTRACTA // SYSTEM TERMINAL PRESET
+// 3. EXTRACTA // SYSTEM TERMINAL PRESET (forced-dark — "light" and "dark" modes are identical)
 // ─────────────────────────────────────────────────────────────────────────────
 const extractaShared = {
   primary: '#E5EC5B', // Yellow-green neon terminal color

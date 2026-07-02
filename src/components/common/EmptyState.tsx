@@ -6,8 +6,8 @@
  * and an optional action button.
  */
 
-import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { StyleSheet, Text, View, Animated, Easing } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import Button from './Button';
@@ -34,14 +34,46 @@ export default function EmptyState({
 }: EmptyStateProps) {
   const { theme } = useTheme();
 
+  // Entrance animation
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        delay: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 500,
+        delay: 100,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
   return (
-    <View style={styles.container}>
-      <Ionicons
-        name={icon}
-        size={64}
-        color={theme.colors.textMuted}
-        style={styles.icon}
-      />
+    <Animated.View
+      style={[
+        styles.container,
+        {
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim }],
+        },
+      ]}
+    >
+      <View style={[styles.iconCircle, { backgroundColor: `${theme.colors.primary}12` }]}>
+        <Ionicons
+          name={icon}
+          size={56}
+          color={`${theme.colors.primary}60`}
+          style={styles.icon}
+        />
+      </View>
 
       <Text
         style={[
@@ -68,7 +100,7 @@ export default function EmptyState({
           <Button title={actionLabel} onPress={onAction} variant="primary" size="md" />
         </View>
       ) : null}
-    </View>
+    </Animated.View>
   );
 }
 
@@ -78,10 +110,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 32,
-    paddingVertical: 48,
+    paddingVertical: 56,
+  },
+  iconCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
   },
   icon: {
-    marginBottom: 16,
+    // positioned inside the circle
   },
   title: {
     textAlign: 'center',
@@ -90,6 +130,7 @@ const styles = StyleSheet.create({
   message: {
     textAlign: 'center',
     marginBottom: 24,
+    lineHeight: 22,
   },
   action: {
     alignSelf: 'stretch',

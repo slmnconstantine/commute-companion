@@ -94,5 +94,3 @@ export default function TabLayout() {
     </Tabs>
   );
 }
-
-import { StyleSheet } from 'react-native';

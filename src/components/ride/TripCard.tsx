@@ -132,22 +132,22 @@ export default function TripCard({ trip, onPress, loading = false }: TripCardPro
       {/* Route */}
       <View style={styles.routeContainer}>
         <View style={styles.routeDots}>
-          <View style={[styles.originDot, { backgroundColor: theme.colors.primary }]} />
+          <View style={[styles.originDot, { backgroundColor: theme.colors.success }]} />
           <View style={[styles.routeLine, { backgroundColor: theme.colors.border }]} />
-          <View style={[styles.destDot, { backgroundColor: theme.colors.accent }]} />
+          <View style={[styles.destDot, { backgroundColor: theme.colors.error }]} />
         </View>
         <View style={styles.routeLabels}>
           <Text
             style={[styles.routeText, { color: theme.colors.text, fontFamily: 'Inter-Regular' }]}
             numberOfLines={1}
           >
-            {trip.origin_label}
+            {trip.origin_label.split(',')[0]}
           </Text>
           <Text
             style={[styles.routeText, { color: theme.colors.text, fontFamily: 'Inter-Regular' }]}
             numberOfLines={1}
           >
-            {trip.destination_label}
+            {trip.destination_label.split(',')[0]}
           </Text>
         </View>
       </View>

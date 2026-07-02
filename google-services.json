@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:339423137801:android:c54a2aec4c656b309ce8d8",
+        "mobilesdk_app_id": "1:339423137801:android:a4bdfd002ee268999ce8d8",
         "android_client_info": {
-          "package_name": "com.commutablecompanion.app"
+          "package_name": "com.commutecompanion.app"
         }
       },
       "oauth_client": [],

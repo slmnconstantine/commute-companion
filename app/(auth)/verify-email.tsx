@@ -96,10 +96,12 @@ export default function VerifyEmailScreen() {
           logo={false}
           attribution={false}
           compass={false}
-          zoomEnabled={false}
-          scrollEnabled={false}
-          pitchEnabled={false}
-          rotateEnabled={false}
+          dragPan={false}
+          touchZoom={false}
+          doubleTapZoom={false}
+          doubleTapHoldZoom={false}
+          touchPitch={false}
+          touchRotate={false}
         >
           <Camera
             ref={cameraRef}
@@ -107,7 +109,7 @@ export default function VerifyEmailScreen() {
               center: [123.891, 10.315], // Cebu City
               zoom: 13,
               pitch: 65,
-              heading: 0,
+              bearing: 0,
             }}
           />
         </Map>

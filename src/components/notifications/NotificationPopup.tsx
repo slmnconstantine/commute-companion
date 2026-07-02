@@ -1,8 +1,13 @@
-import React from 'react';
-import { Animated, View, Text, StyleSheet, Pressable } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, View, Text, StyleSheet, Pressable, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface NotificationPopupProps {
   centerPopupNotification: {
@@ -15,103 +20,240 @@ interface NotificationPopupProps {
 }
 
 export default function NotificationPopup({ centerPopupNotification, popupScaleAnim, handleDismissPopup }: NotificationPopupProps) {
-  const { theme } = useTheme();
+  const { theme, mode } = useTheme();
   const router = useRouter();
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const glowPulse = useRef(new Animated.Value(0.4)).current;
+  const checkScale = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (centerPopupNotification) {
+      // Haptic on popup
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      // Fade in overlay
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+
+      // Glow pulse loop
+      const glow = Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowPulse, {
+            toValue: 0.8,
+            duration: 1200,
+            useNativeDriver: true,
+          }),
+          Animated.timing(glowPulse, {
+            toValue: 0.4,
+            duration: 1200,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      glow.start();
+
+      // Check/icon bounce-in
+      Animated.spring(checkScale, {
+        toValue: 1,
+        delay: 200,
+        tension: 120,
+        friction: 6,
+        useNativeDriver: true,
+      }).start();
+
+      return () => {
+        glow.stop();
+        fadeAnim.setValue(0);
+        checkScale.setValue(0);
+      };
+    }
+  }, [centerPopupNotification]);
 
   if (!centerPopupNotification) return null;
 
+  const gradientColors = theme.colors.gradientPrimary;
+
   return (
-    <View style={styles.popupOverlay}>
+    <Animated.View style={[styles.popupOverlay, { opacity: fadeAnim }]}>
+      {/* Blur backdrop */}
+      <BlurView
+        intensity={mode === 'dark' ? 50 : 40}
+        tint={mode === 'dark' ? 'dark' : 'default'}
+        style={StyleSheet.absoluteFill}
+      />
+
+      {/* Dim overlay on top of blur */}
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.15)' }]} />
+
       <Animated.View
         style={[
-          styles.popupCard,
+          styles.popupCardWrapper,
           {
             transform: [{ scale: popupScaleAnim }],
-            backgroundColor: theme.colors.surface,
-            borderColor: theme.colors.border,
-            shadowColor: theme.colors.shadow,
           },
         ]}
       >
-        <View style={[styles.popupIconContainer, { backgroundColor: `${theme.colors.primary}15` }]}>
-          <Ionicons name="car-sport-outline" size={32} color={theme.colors.primary} />
-        </View>
-        <Text
-          style={[
-            theme.typography.heading,
-            styles.popupTitle,
-            { color: theme.colors.text, fontFamily: 'Inter-SemiBold' },
-          ]}
+        {/* Gradient border glow */}
+        <LinearGradient
+          colors={[gradientColors[0], theme.colors.info, gradientColors[1]]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.gradientBorder}
         >
-          {centerPopupNotification.title}
-        </Text>
-        <Text
-          style={[
-            theme.typography.body,
-            styles.popupBody,
-            { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' },
-          ]}
-        >
-          {centerPopupNotification.body}
-        </Text>
-        <View style={styles.popupBtnRow}>
-          <Pressable
-            style={[styles.popupBtn, { backgroundColor: `${theme.colors.textMuted}15` }]}
-            onPress={handleDismissPopup}
-          >
-            <Text
-              style={[
-                styles.popupBtnText,
-                { color: theme.colors.textMuted, fontFamily: 'Inter-Medium' },
-              ]}
-            >
-              Dismiss
-            </Text>
-          </Pressable>
-          {centerPopupNotification.tripId && (
-            <Pressable
-              style={[styles.popupBtn, { backgroundColor: theme.colors.primary }]}
-              onPress={() => {
-                router.push(`/(main)/ride/${centerPopupNotification.tripId}`);
-                handleDismissPopup();
-              }}
-            >
-              <Text
+          {/* Inner card */}
+          <View style={[styles.popupCard, { backgroundColor: theme.colors.surface }]}>
+            {/* Blur inside card */}
+            <BlurView
+              intensity={mode === 'dark' ? 20 : 10}
+              tint={mode === 'dark' ? 'dark' : 'light'}
+              style={StyleSheet.absoluteFill}
+            />
+
+            {/* Animated icon ring */}
+            <View style={styles.iconRingContainer}>
+              <Animated.View style={[styles.glowRing, { backgroundColor: `${theme.colors.primary}15`, opacity: glowPulse }]} />
+              <Animated.View style={[styles.glowRingOuter, { borderColor: `${theme.colors.primary}20`, opacity: glowPulse }]} />
+              <Animated.View
                 style={[
-                  styles.popupBtnText,
-                  { color: theme.colors.white, fontFamily: 'Inter-SemiBold' },
+                  styles.popupIconContainer,
+                  {
+                    backgroundColor: `${theme.colors.primary}18`,
+                    transform: [{ scale: checkScale }],
+                  },
                 ]}
               >
-                Check Details
-              </Text>
-            </Pressable>
-          )}
-        </View>
+                <Ionicons name="car-sport-outline" size={32} color={theme.colors.primary} />
+              </Animated.View>
+            </View>
+
+            {/* Title */}
+            <Text
+              style={[
+                styles.popupTitle,
+                { color: theme.colors.text, fontFamily: 'Inter-Bold' },
+              ]}
+            >
+              {centerPopupNotification.title}
+            </Text>
+
+            {/* Subtitle */}
+            <Text
+              style={[
+                styles.popupBody,
+                { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' },
+              ]}
+            >
+              {centerPopupNotification.body}
+            </Text>
+
+            {/* Divider */}
+            <View style={[styles.divider, { backgroundColor: `${theme.colors.border}` }]} />
+
+            {/* Action buttons */}
+            <View style={styles.popupBtnRow}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.popupBtn,
+                  styles.dismissBtn,
+                  {
+                    borderColor: `${theme.colors.border}`,
+                    opacity: pressed ? 0.7 : 1,
+                    transform: [{ scale: pressed ? 0.97 : 1 }],
+                  },
+                ]}
+                onPress={handleDismissPopup}
+              >
+                <Text
+                  style={[
+                    styles.popupBtnText,
+                    { color: theme.colors.textMuted, fontFamily: 'Inter-Medium' },
+                  ]}
+                >
+                  Dismiss
+                </Text>
+              </Pressable>
+
+              {centerPopupNotification.tripId && (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.popupBtn,
+                    { opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.97 : 1 }] },
+                  ]}
+                  onPress={() => {
+                    router.push(`/(main)/ride/${centerPopupNotification.tripId}`);
+                    handleDismissPopup();
+                  }}
+                >
+                  <LinearGradient
+                    colors={gradientColors}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.gradientBtn}
+                  >
+                    <Ionicons name="arrow-forward" size={16} color="#fff" style={{ marginRight: 4 }} />
+                    <Text
+                      style={[
+                        styles.popupBtnText,
+                        { color: '#fff', fontFamily: 'Inter-SemiBold' },
+                      ]}
+                    >
+                      Check Details
+                    </Text>
+                  </LinearGradient>
+                </Pressable>
+              )}
+            </View>
+          </View>
+        </LinearGradient>
       </Animated.View>
-    </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   popupOverlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 10000,
     padding: 24,
   },
-  popupCard: {
+  popupCardWrapper: {
     width: '100%',
-    maxWidth: 320,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    padding: 24,
+    maxWidth: 340,
+  },
+  gradientBorder: {
+    borderRadius: 24,
+    padding: 1.5,
+  },
+  popupCard: {
+    borderRadius: 23,
+    padding: 28,
     alignItems: 'center',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 15,
+    overflow: 'hidden',
+  },
+  iconRingContainer: {
+    width: 88,
+    height: 88,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  glowRing: {
+    position: 'absolute',
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+  },
+  glowRingOuter: {
+    position: 'absolute',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 2,
   },
   popupIconContainer: {
     width: 64,
@@ -119,18 +261,23 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
   },
   popupTitle: {
-    fontSize: 18,
+    fontSize: 20,
     textAlign: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
+    letterSpacing: -0.3,
   },
   popupBody: {
     fontSize: 14,
     textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 24,
+    lineHeight: 21,
+    marginBottom: 20,
+  },
+  divider: {
+    height: 1,
+    width: '100%',
+    marginBottom: 20,
   },
   popupBtnRow: {
     flexDirection: 'row',
@@ -139,12 +286,24 @@ const styles = StyleSheet.create({
   },
   popupBtn: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  dismissBtn: {
+    borderWidth: 1,
+    paddingVertical: 13,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  gradientBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 13,
+    borderRadius: 14,
+  },
   popupBtnText: {
     fontSize: 14,
+    letterSpacing: 0.1,
   },
 });

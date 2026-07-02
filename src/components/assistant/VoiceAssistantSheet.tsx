@@ -1,17 +1,132 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Animated, ActivityIndicator, ScrollView, TextInput } from 'react-native';
+import {
+  View, Text, StyleSheet, Pressable, Animated, ScrollView, TextInput,
+  Easing, Dimensions,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/context/ThemeContext';
 import { useVoiceAssistant } from '@/context/VoiceAssistantContext';
 
-export default function VoiceAssistantSheet() {
-  const { theme } = useTheme();
-  const { state, conversation, stopRecording, cancel, confirmAction, processTextInput } = useVoiceAssistant();
-  
-  const [inputValue, setInputValue] = useState('');
-  const slideAnim = useRef(new Animated.Value(300)).current;
-  const scrollViewRef = useRef<ScrollView>(null);
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+// Thinking dots component
+function ThinkingDots({ color }: { color: string }) {
+  const dot1 = useRef(new Animated.Value(0)).current;
+  const dot2 = useRef(new Animated.Value(0)).current;
+  const dot3 = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const createDotAnimation = (dot: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(dot, { toValue: -8, duration: 300, useNativeDriver: true, easing: Easing.out(Easing.cubic) }),
+          Animated.timing(dot, { toValue: 0, duration: 300, useNativeDriver: true, easing: Easing.in(Easing.cubic) }),
+          Animated.delay(600 - delay),
+        ])
+      );
+
+    const a1 = createDotAnimation(dot1, 0);
+    const a2 = createDotAnimation(dot2, 150);
+    const a3 = createDotAnimation(dot3, 300);
+    a1.start(); a2.start(); a3.start();
+
+    return () => { a1.stop(); a2.stop(); a3.stop(); };
+  }, []);
+
+  return (
+    <View style={dotStyles.container}>
+      {[dot1, dot2, dot3].map((dot, i) => (
+        <Animated.View
+          key={i}
+          style={[
+            dotStyles.dot,
+            { backgroundColor: color, transform: [{ translateY: dot }] },
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
+
+const dotStyles = StyleSheet.create({
+  container: { flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', paddingVertical: 16 },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+});
+
+// Waveform ring component for recording state
+function WaveformRing({ color }: { color: string }) {
+  const ring1 = useRef(new Animated.Value(0)).current;
+  const ring2 = useRef(new Animated.Value(0)).current;
+  const ring3 = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const createRing = (anim: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.parallel([
+            Animated.timing(anim, { toValue: 1, duration: 1500, useNativeDriver: true, easing: Easing.out(Easing.cubic) }),
+          ]),
+          Animated.timing(anim, { toValue: 0, duration: 0, useNativeDriver: true }),
+        ])
+      );
+
+    const r1 = createRing(ring1, 0);
+    const r2 = createRing(ring2, 500);
+    const r3 = createRing(ring3, 1000);
+    r1.start(); r2.start(); r3.start();
+
+    return () => { r1.stop(); r2.stop(); r3.stop(); };
+  }, []);
+
+  return (
+    <View style={waveStyles.container}>
+      {[ring1, ring2, ring3].map((ring, i) => (
+        <Animated.View
+          key={i}
+          style={[
+            waveStyles.ring,
+            {
+              borderColor: color,
+              opacity: ring.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0] }),
+              transform: [{ scale: ring.interpolate({ inputRange: [0, 1], outputRange: [1, 2] }) }],
+            },
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
+
+const waveStyles = StyleSheet.create({
+  container: { position: 'absolute', width: 80, height: 80, alignItems: 'center', justifyContent: 'center' },
+  ring: { position: 'absolute', width: 72, height: 72, borderRadius: 36, borderWidth: 2 },
+});
+
+// State label config
+const STATE_CONFIG: Record<string, { label: string; icon: string; color?: string }> = {
+  recording: { label: 'Listening', icon: 'mic' },
+  transcribing: { label: 'Transcribing', icon: 'document-text' },
+  thinking: { label: 'Thinking', icon: 'sparkles' },
+  speaking: { label: 'Assistant', icon: 'chatbubble-ellipses' },
+  confirming: { label: 'Confirm Action', icon: 'help-circle' },
+  executing: { label: 'Executing', icon: 'flash' },
+  error: { label: 'Error', icon: 'alert-circle', color: 'error' },
+};
+
+export default function VoiceAssistantSheet() {
+  const { theme, mode } = useTheme();
+  const { state, conversation, stopRecording, cancel, confirmAction, processTextInput } = useVoiceAssistant();
+
+  const [inputValue, setInputValue] = useState('');
+  const slideAnim = useRef(new Animated.Value(400)).current;
+  const scrollViewRef = useRef<ScrollView>(null);
+  const statePulse = useRef(new Animated.Value(0.5)).current;
+
+  // Auto-scroll to bottom on new messages
   useEffect(() => {
     if (scrollViewRef.current && conversation.length > 0) {
       setTimeout(() => {
@@ -22,6 +137,7 @@ export default function VoiceAssistantSheet() {
 
   const isVisible = state !== 'idle' && state !== 'error';
 
+  // Sheet slide animation
   useEffect(() => {
     if (isVisible) {
       Animated.spring(slideAnim, {
@@ -32,87 +148,192 @@ export default function VoiceAssistantSheet() {
       }).start();
     } else {
       Animated.timing(slideAnim, {
-        toValue: 300,
+        toValue: 400,
         duration: 250,
         useNativeDriver: true,
       }).start();
     }
   }, [isVisible]);
 
+  // State pulse animation
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(statePulse, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(statePulse, { toValue: 0.5, duration: 800, useNativeDriver: true }),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [state]);
+
   if (!isVisible && state !== 'error') return null;
+
+  const stateConfig = STATE_CONFIG[state] || { label: state, icon: 'ellipse' };
+  const stateColor = stateConfig.color === 'error' ? theme.colors.error : theme.colors.primary;
+  const gradientColors = theme.colors.gradientPrimary;
 
   return (
     <View style={styles.overlay} pointerEvents="box-none">
-      <Animated.View 
+      <Animated.View
         style={[
-          styles.sheet, 
-          { backgroundColor: theme.colors.surface, transform: [{ translateY: slideAnim }] }
+          styles.sheet,
+          { transform: [{ translateY: slideAnim }] },
         ]}
       >
+        {/* Blur background */}
+        <BlurView
+          intensity={mode === 'dark' ? 50 : 70}
+          tint={mode === 'dark' ? 'dark' : 'light'}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.colors.glassBackground }]} />
+
+        {/* Handle bar */}
+        <View style={[styles.handleBar, { backgroundColor: `${theme.colors.textMuted}30` }]} />
+
+        {/* Header */}
         <View style={styles.header}>
-          <Text style={[styles.title, { color: theme.colors.text }]}>
-            {state === 'recording' && 'Listening...'}
-            {state === 'transcribing' && 'Transcribing...'}
-            {state === 'thinking' && 'Thinking...'}
-            {state === 'speaking' && 'Assistant'}
-            {state === 'confirming' && 'Confirmation Required'}
-            {state === 'executing' && 'Executing...'}
-            {state === 'error' && 'Error'}
-          </Text>
-          <Pressable onPress={cancel} style={styles.closeBtn}>
-            <Ionicons name="close" size={24} color={theme.colors.textMuted} />
+          {/* Animated state pill */}
+          <View style={[styles.statePill, { backgroundColor: `${stateColor}15` }]}>
+            <Animated.View style={[styles.stateDot, { backgroundColor: stateColor, opacity: statePulse }]} />
+            <Ionicons name={stateConfig.icon as any} size={14} color={stateColor} />
+            <Text style={[styles.stateLabel, { color: stateColor, fontFamily: 'Inter-SemiBold' }]}>
+              {stateConfig.label}
+            </Text>
+          </View>
+
+          <Pressable
+            onPress={cancel}
+            style={({ pressed }) => [
+              styles.closeBtn,
+              { backgroundColor: `${theme.colors.textMuted}12`, opacity: pressed ? 0.7 : 1 },
+            ]}
+          >
+            <Ionicons name="close" size={18} color={theme.colors.textMuted} />
           </Pressable>
         </View>
 
+        {/* Chat content */}
         <View style={styles.content}>
-          <ScrollView 
+          <ScrollView
             ref={scrollViewRef}
             style={styles.chatScroll}
             contentContainerStyle={styles.chatScrollContent}
             showsVerticalScrollIndicator={false}
           >
-            {conversation.map((msg) => (
-              <Text 
-                key={msg.id} 
+            {conversation.map((msg, index) => (
+              <Animated.View
+                key={msg.id}
                 style={[
-                  msg.role === 'user' ? styles.transcript : styles.reply, 
-                  { color: msg.role === 'user' ? theme.colors.textMuted : theme.colors.text }
+                  styles.messageBubbleContainer,
+                  msg.role === 'user' ? styles.userBubbleContainer : styles.assistantBubbleContainer,
                 ]}
               >
-                {msg.role === 'user' ? `"${msg.text}"` : msg.text}
-              </Text>
+                {msg.role === 'assistant' && (
+                  <View style={[styles.avatarDot, { backgroundColor: theme.colors.primary }]}>
+                    <Ionicons name="sparkles" size={10} color="#fff" />
+                  </View>
+                )}
+                <View
+                  style={[
+                    styles.messageBubble,
+                    msg.role === 'user'
+                      ? [styles.userBubble, { backgroundColor: `${theme.colors.primary}18` }]
+                      : [styles.assistantBubble, { backgroundColor: `${theme.colors.text}08` }],
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.messageText,
+                      {
+                        color: msg.role === 'user' ? theme.colors.text : theme.colors.text,
+                        fontFamily: msg.role === 'user' ? 'Inter-Medium' : 'Inter-Regular',
+                      },
+                    ]}
+                  >
+                    {msg.text}
+                  </Text>
+                  <Text style={[styles.messageTime, { color: theme.colors.textMuted }]}>
+                    just now
+                  </Text>
+                </View>
+              </Animated.View>
             ))}
 
+            {/* Thinking/Transcribing/Executing indicator */}
             {['transcribing', 'thinking', 'executing'].includes(state) && (
-              <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginVertical: 20 }} />
+              <View style={styles.assistantBubbleContainer}>
+                <View style={[styles.avatarDot, { backgroundColor: theme.colors.primary }]}>
+                  <Ionicons name="sparkles" size={10} color="#fff" />
+                </View>
+                <View style={[styles.messageBubble, styles.assistantBubble, { backgroundColor: `${theme.colors.text}08` }]}>
+                  <ThinkingDots color={theme.colors.primary} />
+                </View>
+              </View>
             )}
 
+            {/* Recording state — waveform ring + stop button */}
             {state === 'recording' && (
-              <Pressable 
-                onPress={stopRecording}
-                style={[styles.recordBtn, { backgroundColor: theme.colors.error }]}
-              >
-                <Ionicons name="stop" size={32} color="#fff" />
-              </Pressable>
+              <View style={styles.recordingContainer}>
+                <Pressable
+                  onPress={stopRecording}
+                  style={({ pressed }) => [
+                    styles.recordBtn,
+                    { opacity: pressed ? 0.8 : 1 },
+                  ]}
+                >
+                  <WaveformRing color={theme.colors.error} />
+                  <LinearGradient
+                    colors={[theme.colors.error, '#C53030']}
+                    style={styles.recordBtnInner}
+                  >
+                    <Ionicons name="stop" size={28} color="#fff" />
+                  </LinearGradient>
+                </Pressable>
+                <Text style={[styles.recordHint, { color: theme.colors.textMuted, fontFamily: 'Inter-Medium' }]}>
+                  Tap to stop recording
+                </Text>
+              </View>
             )}
 
+            {/* Confirming state */}
             {state === 'confirming' && (
-              <View style={{ alignItems: 'center', width: '100%', gap: 12, marginVertical: 10 }}>
-                <Text style={[styles.listeningSubtext, { color: theme.colors.primary }]}>
-                  🎙️ Listening for "yes" or "no"...
-                </Text>
-                <View style={styles.actionRow}>
-                  <Pressable 
-                    style={[styles.btn, styles.btnCancel, { borderColor: theme.colors.border }]} 
+              <View style={styles.confirmContainer}>
+                <View style={[styles.confirmHintPill, { backgroundColor: `${theme.colors.primary}12` }]}>
+                  <Ionicons name="mic" size={14} color={theme.colors.primary} />
+                  <Text style={[styles.confirmHintText, { color: theme.colors.primary, fontFamily: 'Inter-Medium' }]}>
+                    Listening for "yes" or "no"…
+                  </Text>
+                </View>
+                <View style={styles.confirmRow}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.confirmBtn,
+                      styles.cancelBtn,
+                      { borderColor: theme.colors.border, opacity: pressed ? 0.7 : 1 },
+                    ]}
                     onPress={cancel}
                   >
-                    <Text style={[styles.btnText, { color: theme.colors.text }]}>Cancel</Text>
+                    <Ionicons name="close-circle-outline" size={18} color={theme.colors.textMuted} />
+                    <Text style={[styles.confirmBtnText, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>Cancel</Text>
                   </Pressable>
-                  <Pressable 
-                    style={[styles.btn, styles.btnConfirm, { backgroundColor: theme.colors.primary }]} 
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.confirmBtn,
+                      { opacity: pressed ? 0.85 : 1, overflow: 'hidden' },
+                    ]}
                     onPress={confirmAction}
                   >
-                    <Text style={[styles.btnText, { color: '#fff' }]}>Confirm</Text>
+                    <LinearGradient
+                      colors={gradientColors}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.confirmGradient}
+                    >
+                      <Ionicons name="checkmark-circle" size={18} color="#fff" />
+                      <Text style={[styles.confirmBtnText, { color: '#fff', fontFamily: 'Inter-Bold' }]}>Confirm</Text>
+                    </LinearGradient>
                   </Pressable>
                 </View>
               </View>
@@ -121,20 +342,39 @@ export default function VoiceAssistantSheet() {
 
           {/* Text input fallback */}
           {['recording', 'speaking', 'confirming', 'thinking', 'error'].includes(state) && (
-            <View style={[styles.inputContainer, { borderTopColor: theme.colors.border }]}>
-              <TextInput
-                value={inputValue}
-                onChangeText={setInputValue}
-                placeholder="Type a command..."
-                placeholderTextColor={theme.colors.textMuted}
-                style={[styles.textInput, { color: theme.colors.text, backgroundColor: `${theme.colors.border}40` }]}
-                onSubmitEditing={() => {
-                  if (inputValue.trim()) {
-                    processTextInput(inputValue.trim());
-                    setInputValue('');
-                  }
-                }}
-              />
+            <View style={[styles.inputContainer, { borderTopColor: `${theme.colors.border}` }]}>
+              <View style={[styles.inputWrapper, { backgroundColor: `${theme.colors.text}06` }]}>
+                <TextInput
+                  value={inputValue}
+                  onChangeText={setInputValue}
+                  placeholder="Type a command…"
+                  placeholderTextColor={theme.colors.textMuted}
+                  style={[styles.textInput, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]}
+                  onSubmitEditing={() => {
+                    if (inputValue.trim()) {
+                      processTextInput(inputValue.trim());
+                      setInputValue('');
+                    }
+                  }}
+                />
+                <Pressable
+                  onPress={() => {
+                    if (inputValue.trim()) {
+                      processTextInput(inputValue.trim());
+                      setInputValue('');
+                    }
+                  }}
+                  style={({ pressed }) => [
+                    styles.sendBtn,
+                    {
+                      backgroundColor: inputValue.trim() ? theme.colors.primary : `${theme.colors.textMuted}20`,
+                      opacity: pressed ? 0.7 : 1,
+                    },
+                  ]}
+                >
+                  <Ionicons name="arrow-up" size={16} color={inputValue.trim() ? '#fff' : theme.colors.textMuted} />
+                </Pressable>
+              </View>
             </View>
           )}
         </View>
@@ -150,100 +390,203 @@ const styles = StyleSheet.create({
     zIndex: 10000,
   },
   sheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: 40,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingBottom: 36,
+    overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 20,
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 25,
+  },
+  handleBar: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 10,
+    marginBottom: 4,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 12,
   },
-  title: {
-    fontFamily: 'Inter-Bold',
-    fontSize: 18,
+  statePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+  },
+  stateDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  stateLabel: {
+    fontSize: 13,
+    letterSpacing: 0.2,
   },
   closeBtn: {
-    padding: 4,
-  },
-  content: {
-    alignItems: 'center',
-    minHeight: 120,
-    width: '100%',
-  },
-  chatScroll: {
-    maxHeight: 300,
-    width: '100%',
-  },
-  chatScrollContent: {
-    alignItems: 'center',
-    paddingVertical: 10,
-    width: '100%',
-  },
-  recordBtn: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginVertical: 20,
   },
-  transcript: {
-    fontFamily: 'Inter-Medium',
-    fontSize: 14,
-    fontStyle: 'italic',
-    textAlign: 'center',
-    marginBottom: 12,
+  content: {
+    width: '100%',
+    minHeight: 140,
   },
-  reply: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 18,
-    textAlign: 'center',
-    marginBottom: 20,
+  chatScroll: {
+    maxHeight: 320,
+    paddingHorizontal: 16,
   },
-  listeningSubtext: {
-    fontFamily: 'Inter-Medium',
-    fontSize: 13,
+  chatScrollContent: {
+    paddingVertical: 8,
+    gap: 8,
+  },
+  messageBubbleContainer: {
+    flexDirection: 'row',
+    gap: 8,
     marginBottom: 4,
   },
-  actionRow: {
-    flexDirection: 'row',
-    gap: 16,
-    width: '100%',
+  userBubbleContainer: {
+    justifyContent: 'flex-end',
+    paddingLeft: 40,
   },
-  btn: {
-    flex: 1,
-    paddingVertical: 14,
+  assistantBubbleContainer: {
+    justifyContent: 'flex-start',
+    paddingRight: 40,
+  },
+  avatarDot: {
+    width: 24,
+    height: 24,
     borderRadius: 12,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
   },
-  btnCancel: {
+  messageBubble: {
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    maxWidth: '85%',
+  },
+  userBubble: {
+    borderTopRightRadius: 4,
+    marginLeft: 'auto',
+  },
+  assistantBubble: {
+    borderTopLeftRadius: 4,
+  },
+  messageText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  messageTime: {
+    fontSize: 10,
+    marginTop: 4,
+    fontFamily: 'Inter-Regular',
+  },
+  recordingContainer: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    gap: 12,
+  },
+  recordBtn: {
+    width: 80,
+    height: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recordBtnInner: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recordHint: {
+    fontSize: 12,
+    letterSpacing: 0.1,
+  },
+  confirmContainer: {
+    alignItems: 'center',
+    width: '100%',
+    gap: 14,
+    paddingVertical: 10,
+  },
+  confirmHintPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  confirmHintText: {
+    fontSize: 12,
+    letterSpacing: 0.1,
+  },
+  confirmRow: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  confirmBtn: {
+    flex: 1,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  cancelBtn: {
     borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 14,
   },
-  btnConfirm: {},
-  btnText: {
-    fontFamily: 'Inter-Bold',
-    fontSize: 16,
+  confirmGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 14,
+  },
+  confirmBtnText: {
+    fontSize: 15,
   },
   inputContainer: {
-    width: '100%',
-    paddingTop: 16,
-    marginTop: 8,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    marginTop: 4,
     borderTopWidth: 1,
   },
-  textInput: {
-    width: '100%',
-    height: 48,
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
     borderRadius: 24,
-    paddingHorizontal: 18,
-    fontFamily: 'Inter-Medium',
-    fontSize: 15,
+    paddingLeft: 16,
+    paddingRight: 4,
+    height: 48,
+  },
+  textInput: {
+    flex: 1,
+    fontSize: 14,
+    height: 48,
+  },
+  sendBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

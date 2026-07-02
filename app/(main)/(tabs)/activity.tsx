@@ -25,6 +25,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { getCommuterBookings } from '@/services/bookings';
 import { getDriverTrips } from '@/services/trips';
 import EmptyState from '@/components/common/EmptyState';
+import Skeleton from '@/components/common/Skeleton';
 import TripCard from '@/components/ride/TripCard';
 import Avatar from '@/components/common/Avatar';
 import { BookingWithTrip, TripWithDriver } from '@/types/database';
@@ -67,15 +68,17 @@ function ActivityCard({
 
   return (
     <Pressable
-      style={[
+      onPress={onPress}
+      style={({ pressed }) => [
         styles.activityCard,
         {
           backgroundColor: theme.colors.surface,
           shadowColor: theme.colors.shadow,
+          opacity: pressed ? 0.95 : 1,
+          transform: [{ scale: pressed ? 0.98 : 1 }],
         },
       ]}
     >
-      <Pressable onPress={onPress}>
       {/* Top row: date / status */}
       <View style={styles.cardTopRow}>
         <View style={styles.dateRow}>
@@ -175,10 +178,13 @@ function ActivityCard({
       </View>
 
       {/* Review prompt for past completed rides */}
-      {['completed', 'cancelled', 'rejected'].includes(booking.status) && booking.status === 'completed' && (!booking.reviews || booking.reviews.length === 0) && (
+      {booking.status === 'completed' && (!booking.reviews || booking.reviews.length === 0) && (
         <Pressable
           style={[styles.reviewBtn, { backgroundColor: `${theme.colors.primary}12` }]}
-          onPress={onReview}
+          onPress={(e) => {
+            e.stopPropagation();
+            onReview?.();
+          }}
         >
           <Ionicons name="star-outline" size={16} color={theme.colors.primary} />
           <Text
@@ -218,9 +224,54 @@ function ActivityCard({
           </Text>
         </View>
       )}
-      </Pressable>
     </Pressable>
   );
+}
+
+// ── Skeleton Card ─────────────────────────────────────────────────────────────
+
+function ActivitySkeletonCard({ theme }: { theme: any }) {
+  return (
+    <View style={[styles.activityCard, { backgroundColor: theme.colors.surface, shadowColor: theme.colors.shadow }]}>
+      <View style={styles.cardTopRow}>
+        <Skeleton width={100} height={14} />
+        <Skeleton width={70} height={22} borderRadius={12} />
+      </View>
+      <View style={styles.routeSection}>
+        <View style={styles.routeIndicator}>
+          <Skeleton width={10} height={10} borderRadius={5} />
+          <View style={[styles.routeLine, { backgroundColor: theme.colors.border }]} />
+          <Skeleton width={10} height={10} borderRadius={5} />
+        </View>
+        <View style={[styles.routeLabels, { gap: 8 }]}>
+          <Skeleton width="80%" height={14} />
+          <Skeleton width="60%" height={14} />
+        </View>
+      </View>
+      <View style={[styles.cardBottomRow, { borderTopColor: theme.colors.border }]}>
+        <View style={styles.driverRow}>
+          <Skeleton width={28} height={28} borderRadius={14} />
+          <Skeleton width={80} height={12} style={{ marginLeft: 6 }} />
+        </View>
+        <Skeleton width={50} height={18} />
+      </View>
+    </View>
+  );
+}
+
+// ── Date Grouping Utility ─────────────────────────────────────────────────────
+
+function getDateGroup(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today.getTime() - 86400000);
+  const weekAgo = new Date(today.getTime() - 7 * 86400000);
+
+  if (date >= today) return 'Today';
+  if (date >= yesterday) return 'Yesterday';
+  if (date >= weekAgo) return 'This Week';
+  return date.toLocaleDateString('en-PH', { month: 'short', year: 'numeric' });
 }
 
 // ── Main Screen ───────────────────────────────────────────────────────────────
@@ -232,6 +283,7 @@ export default function ActivityScreen() {
 
   const [activeSegment, setActiveSegment] = useState<Segment>('Upcoming');
   const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [bookings, setBookings] = useState<BookingWithTrip[]>([]);
   const [driverTrips, setDriverTrips] = useState<TripWithDriver[]>([]);
   const [driverLimit, setDriverLimit] = useState(5);
@@ -241,6 +293,7 @@ export default function ActivityScreen() {
 
   const loadData = useCallback(async () => {
     if (!profile?.id) return;
+    setLoading(true);
     try {
       const data = await getCommuterBookings(profile.id);
       setBookings(data);
@@ -250,6 +303,8 @@ export default function ActivityScreen() {
       }
     } catch (e: any) {
       alert('Error loading activity: ' + (e.message || JSON.stringify(e)));
+    } finally {
+      setLoading(false);
     }
   }, [profile?.id]);
 
@@ -376,7 +431,13 @@ export default function ActivityScreen() {
           />
         }
       >
-        {filteredBookings.length === 0 && filteredDriverTrips.length === 0 ? (
+        {loading ? (
+          <>
+            <ActivitySkeletonCard theme={theme} />
+            <ActivitySkeletonCard theme={theme} />
+            <ActivitySkeletonCard theme={theme} />
+          </>
+        ) : filteredBookings.length === 0 && filteredDriverTrips.length === 0 ? (
           <EmptyState
             icon={activeSegment === 'Upcoming' ? 'calendar-outline' : 'time-outline'}
             title={`No ${activeSegment.toLowerCase()} activity`}
@@ -395,21 +456,21 @@ export default function ActivityScreen() {
               return (
                 <>
                   {filteredDriverTrips.length > 0 && (
-                    <View style={{ marginBottom: filteredBookings.length > 0 ? 24 : 0 }}>
-                      {isDriver && <Text style={[theme.typography.caption, { color: theme.colors.textMuted, marginBottom: 12, fontFamily: 'Inter-Medium', paddingLeft: 4 }]}>AS A DRIVER</Text>}
+                    <View style={styles.driverSectionWrap}>
+                      {isDriver && <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>AS A DRIVER</Text>}
                       {visibleDriverTrips.map((trip) => {
                         const tripReviews = trip.bookings?.flatMap(b => b.reviews || []) || [];
                         const avgRating = tripReviews.length > 0 ? (tripReviews.reduce((sum, r) => sum + r.rating, 0) / tripReviews.length).toFixed(1) : null;
                         
                         return (
-                          <View key={`driver-${trip.id}`} style={{ marginBottom: 14 }}>
+                          <View key={`driver-${trip.id}`} style={styles.tripItemWrap}>
                             <TripCard trip={trip} onPress={() => router.push(`/(main)/ride/${trip.id}`)} />
                             {trip.status === 'completed' && tripReviews.length > 0 && (
-                              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, paddingHorizontal: 4 }}>
-                                <View style={{ flexDirection: 'row', backgroundColor: `${theme.colors.accent}15`, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, alignItems: 'center' }}>
+                              <View style={styles.tripRatingRow}>
+                                <View style={[styles.tripRatingBadge, { backgroundColor: `${theme.colors.accent}15` }]}>
                                   <Ionicons name="star" color={theme.colors.accent} size={14} />
-                                  <Text style={{ marginLeft: 6, color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 13 }}>
-                                    {avgRating} <Text style={{ fontFamily: 'Inter-Regular', color: theme.colors.textMuted }}>from passengers</Text>
+                                  <Text style={[styles.tripRatingText, { color: theme.colors.text }]}>
+                                    {avgRating} <Text style={[styles.tripRatingMuted, { color: theme.colors.textMuted }]}>from passengers</Text>
                                   </Text>
                                 </View>
                               </View>
@@ -441,7 +502,7 @@ export default function ActivityScreen() {
                   
                   {filteredBookings.length > 0 && (
                     <View>
-                      {isDriver && <Text style={[theme.typography.caption, { color: theme.colors.textMuted, marginBottom: 12, fontFamily: 'Inter-Medium', paddingLeft: 4 }]}>AS A PASSENGER</Text>}
+                      {isDriver && <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>AS A PASSENGER</Text>}
                       {visibleBookings.map((item) => (
                         <ActivityCard
                           key={`passenger-${item.id}`}
@@ -638,5 +699,41 @@ const styles = StyleSheet.create({
   },
   showMoreText: {
     fontSize: 14,
+  },
+
+  /* Extracted inline styles */
+  driverSectionWrap: {
+    marginBottom: 24,
+  },
+  sectionLabel: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 12,
+    marginBottom: 12,
+    paddingLeft: 4,
+    letterSpacing: 0.5,
+  },
+  tripItemWrap: {
+    marginBottom: 14,
+  },
+  tripRatingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    paddingHorizontal: 4,
+  },
+  tripRatingBadge: {
+    flexDirection: 'row',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  tripRatingText: {
+    marginLeft: 6,
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 13,
+  },
+  tripRatingMuted: {
+    fontFamily: 'Inter-Regular',
   },
 });

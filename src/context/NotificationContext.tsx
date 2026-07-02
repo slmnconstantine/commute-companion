@@ -177,12 +177,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     if (activeNotification) {
-      // Slide down
+      // Slide down with bouncy spring
       Animated.spring(slideAnim, {
         toValue: 60, // position from top
         useNativeDriver: true,
-        tension: 40,
-        friction: 8,
+        tension: 50,
+        friction: 7,
       }).start();
 
       // Auto dismiss after 6 seconds
