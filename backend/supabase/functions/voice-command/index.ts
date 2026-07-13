@@ -232,8 +232,9 @@ For spokenReply:
     throw new Error('Could not determine action for voice assistant');
   } catch (error: any) {
     console.error('Voice Assistant Error:', error);
+    // Return 200 with error property so frontend doesn't throw FunctionsHttpError and can read the error message
     return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
+      status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }

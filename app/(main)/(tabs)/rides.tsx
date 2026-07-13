@@ -34,6 +34,7 @@ import { supabase } from '@/lib/supabase';
 import { getDriverTrips, getTrips } from '@/services/trips';
 import { getCommuterRequests, CommuterRequest } from '@/services/rideRequests';
 import type { TripWithDriver } from '@/types/database';
+import AnimatedSegmentControl from '@/components/common/AnimatedSegmentControl';
 import TripCard from '@/components/ride/TripCard';
 import DatePickerModal from '@/components/ride/DatePickerModal';
 import TimePickerModal from '@/components/ride/TimePickerModal';
@@ -470,7 +471,15 @@ export default function RidesScreen() {
           Rides
         </Text>
         <Pressable
-          style={[styles.filterBtn, { backgroundColor: theme.colors.inputBackground }]}
+          style={({ pressed }) => [
+            styles.filterBtn,
+            {
+              backgroundColor: theme.colors.glassBackground,
+              borderColor: theme.colors.glassBorder,
+              borderWidth: 1,
+              transform: [{ scale: pressed ? 0.93 : 1 }],
+            },
+          ]}
           onPress={() => setShowFilterModal(true)}
         >
           <Ionicons name="options-outline" size={20} color={theme.colors.text} />
@@ -481,51 +490,16 @@ export default function RidesScreen() {
       </View>
 
       {/* Segmented control — visible to ALL users */}
-      <View
-        style={[
-          styles.segmentRow,
-          { backgroundColor: theme.colors.inputBackground },
-        ]}
-      >
-        {SEGMENTS.map((seg) => {
-          const active = seg === activeSegment;
-          return (
-            <Pressable
-              key={seg}
-              style={[
-                styles.segmentBtn,
-                active && {
-                  backgroundColor: theme.colors.surface,
-                  shadowColor: theme.colors.shadow,
-                  shadowOffset: { width: 0, height: 1 },
-                  shadowOpacity: 1,
-                  shadowRadius: 3,
-                  elevation: 2,
-                },
-              ]}
-              onPress={() => setActiveSegment(seg)}
-            >
-              <Ionicons
-                name={seg === 'Search Rides' ? 'search' : 'add-circle'}
-                size={16}
-                color={active ? theme.colors.primary : theme.colors.textMuted}
-                style={{ marginRight: 4 }}
-              />
-              <Text
-                style={[
-                  theme.typography.caption,
-                  {
-                    color: active ? theme.colors.primary : theme.colors.textMuted,
-                    fontFamily: active ? 'Inter-SemiBold' : 'Inter-Regular',
-                  },
-                ]}
-              >
-                {seg}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      <AnimatedSegmentControl
+        segments={SEGMENTS}
+        activeSegment={activeSegment}
+        onSegmentChange={setActiveSegment}
+        primaryColor={theme.colors.primary}
+        backgroundColor={theme.colors.inputBackground}
+        activeTextColor="#fff"
+        inactiveTextColor={theme.colors.textMuted}
+        style={{ marginHorizontal: 20, marginBottom: 16 }}
+      />
 
       {/* Content */}
       <ScrollView
@@ -908,13 +882,6 @@ const styles = StyleSheet.create({
   },
 
   /* Segment control */
-  segmentRow: {
-    flexDirection: 'row',
-    marginHorizontal: 20,
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 12,
-  },
   segmentBtn: {
     flex: 1,
     flexDirection: 'row',

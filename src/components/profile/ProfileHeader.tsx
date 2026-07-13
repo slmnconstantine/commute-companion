@@ -38,7 +38,7 @@ export default function ProfileHeader({ profile, loading = false }: ProfileHeade
   if (loading || !profile) {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.surface }]}>
-        <Skeleton width={80} height={80} borderRadius={40} style={styles.avatar} />
+        <Skeleton width={80} height={80} borderRadius={40} />
         <Skeleton width={160} height={24} style={{ marginBottom: 8, marginTop: 16 }} />
         <Skeleton width={100} height={16} style={{ marginBottom: 16 }} />
         <View style={styles.statsRow}>

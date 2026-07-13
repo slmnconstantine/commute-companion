@@ -5,8 +5,9 @@
  * Displays commuter info, route, seats, time, and an "Offer Ride" button.
  */
 
-import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
+
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '@/components/common/Avatar';
 
@@ -33,14 +34,26 @@ export default function CommuterRequestCard({
   displayTime,
   onOfferRide,
 }: CommuterRequestCardProps) {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
   return (
-    <View
-      style={[
-        styles.container,
-        { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-      ]}
-    >
-      <View style={styles.row}>
+    <Animated.View style={{ opacity: fadeAnim, marginBottom: 12 }}>
+      <View
+        style={[
+          styles.container,
+          { backgroundColor: 'transparent', borderColor: theme.colors.border },
+        ]}
+      >
+        <View style={[styles.blurContainer, { backgroundColor: theme.colors.surface }]}>
+          <View style={styles.row}>
         <Avatar
           uri={commuterAvatarUrl}
           name={commuterName}
@@ -94,18 +107,22 @@ export default function CommuterRequestCard({
       >
         <Text style={styles.offerBtnText}>Offer Ride</Text>
       </Pressable>
-    </View>
+        </View>
+      </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  blurContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    marginBottom: 12,
     gap: 12,
   },
   row: {

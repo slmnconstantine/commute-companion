@@ -6,9 +6,11 @@
  * dots, and a bottom info row showing departure time, available seats, and fare.
  */
 
-import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { TripWithDriver } from '@/types/database';
@@ -25,8 +27,18 @@ interface TripCardProps {
 }
 
 export default function TripCard({ trip, onPress, loading = false }: TripCardProps) {
-  const { theme } = useTheme();
+  const { theme, mode } = useTheme();
   const { profile } = useAuth();
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
   if (loading || !trip) {
     return (
@@ -74,21 +86,48 @@ export default function TripCard({ trip, onPress, loading = false }: TripCardPro
     ? trip.bookings.filter((b) => b.status === 'pending').length
     : 0;
 
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.96,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+  };
+
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`Trip from ${trip.origin_label} to ${trip.destination_label}. Driven by ${trip.driver?.full_name}. Fare is ${trip.fare_per_seat === 0 ? 'free' : formatCurrency(trip.fare_per_seat)}.`}
-      style={({ pressed }) => [
-        styles.container,
-        {
-          backgroundColor: theme.colors.surface,
-          borderColor: theme.colors.border,
-          opacity: pressed ? 0.95 : 1,
-          transform: [{ scale: pressed ? 0.98 : 1 }],
-        },
-      ]}
-      onPress={onPress}
-    >
+    <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: scaleAnim }] }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Trip from ${trip.origin_label} to ${trip.destination_label}. Driven by ${trip.driver?.full_name}. Fare is ${trip.fare_per_seat === 0 ? 'free' : formatCurrency(trip.fare_per_seat)}.`}
+        style={[
+          styles.container,
+          {
+            backgroundColor: 'transparent', // BlurView provides background
+            borderColor: theme.colors.border,
+          },
+        ]}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        onPress={onPress}
+      >
+        <BlurView 
+          intensity={mode === 'dark' ? 40 : 60} 
+          tint={mode === 'dark' ? 'dark' : 'light'} 
+          style={StyleSheet.absoluteFill} 
+        />
+        <View style={[styles.blurContainer, { backgroundColor: theme.colors.glassBackground }]}>
+          <LinearGradient
+            colors={[`${theme.colors.primary}90`, `${theme.colors.accent}90`]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={styles.accentGlow}
+          />
       {/* Driver Info Row */}
       <View style={styles.driverRow}>
         <Avatar
@@ -177,7 +216,9 @@ export default function TripCard({ trip, onPress, loading = false }: TripCardPro
           )}
         </View>
       </View>
+      </View>
     </Pressable>
+    </Animated.View>
   );
 }
 
@@ -185,8 +226,27 @@ const styles = StyleSheet.create({
   container: {
     borderRadius: 16,
     borderWidth: 1,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  blurContainer: {
+    flex: 1,
+    borderRadius: 16,
     padding: 16,
     gap: 14,
+  },
+  accentGlow: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    borderTopLeftRadius: 16,
+    borderBottomLeftRadius: 16,
   },
   driverRow: {
     flexDirection: 'row',

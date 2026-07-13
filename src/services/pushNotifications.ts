@@ -34,30 +34,30 @@ export async function registerForPushNotificationsAsync() {
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
   console.log('[PUSH] Existing permission status:', existingStatus);
-  
+
   if (existingStatus !== 'granted') {
     const { status } = await Notifications.requestPermissionsAsync();
     finalStatus = status;
     console.log('[PUSH] Requested new permission status:', finalStatus);
   }
-  
+
   if (finalStatus !== 'granted') {
     console.log('[PUSH] Returning null because permission not granted.');
     return null;
   }
 
   try {
-    const projectId = Constants?.expoConfig?.extra?.eas?.projectId 
+    const projectId = Constants?.expoConfig?.extra?.eas?.projectId
       ?? Constants?.easConfig?.projectId;
-    
+
     console.log('[PUSH] Fetching token for Project ID:', projectId);
-      
+
     token = (
       await Notifications.getExpoPushTokenAsync({
         projectId,
       })
     ).data;
-    
+
     console.log('[PUSH] Successfully generated token:', token);
   } catch (e) {
     console.warn("[PUSH] Failed to get Expo push token:", e);

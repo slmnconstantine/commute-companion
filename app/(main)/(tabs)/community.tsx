@@ -22,10 +22,12 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/context/ThemeContext';
 import { useRoute } from '@/context/RouteContext';
 import { useAuth } from '@/context/AuthContext';
 import EmptyState from '@/components/common/EmptyState';
+import GlassCard from '@/components/common/GlassCard';
 import { getPosts, toggleLike, createPost, getComments, createComment, deletePost, updatePost } from '@/services/hub';
 import { HubPostWithAuthor, PostCommentWithAuthor } from '@/types/database';
 import HubPostCard, { STATUS_CONFIG } from '@/components/community/HubPostCard';
@@ -34,11 +36,16 @@ import HubPostCard, { STATUS_CONFIG } from '@/components/community/HubPostCard';
 
 function RouteBanner({ theme, activeRoute }: { theme: any; activeRoute: any }) {
   return (
-    <View style={[styles.routeBanner, { backgroundColor: `${theme.colors.primary}10`, borderColor: `${theme.colors.primary}25` }]}>
+    <LinearGradient
+      colors={[`${theme.colors.primary}25`, `${theme.colors.primary}05`]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={[styles.routeBanner, { borderColor: `${theme.colors.primary}30` }]}
+    >
       <View style={styles.routeBannerRoute}>
         <View style={styles.routeBannerDots}>
           <View style={[styles.routeBannerDotGreen, { backgroundColor: theme.colors.success }]} />
-          <View style={[styles.routeBannerLine, { backgroundColor: theme.colors.border }]} />
+          <View style={[styles.routeBannerLine, { backgroundColor: theme.colors.primarySubtle }]} />
           <View style={[styles.routeBannerDotRed, { backgroundColor: theme.colors.error }]} />
         </View>
         <View style={styles.routeBannerLabels}>
@@ -51,12 +58,12 @@ function RouteBanner({ theme, activeRoute }: { theme: any; activeRoute: any }) {
         </View>
       </View>
       <View style={styles.routeBannerMeta}>
-        <Ionicons name="people" size={14} color={theme.colors.primary} />
-        <Text style={[theme.typography.small, { color: theme.colors.primary, fontFamily: 'Inter-Medium', marginLeft: 4 }]}>
+        <Ionicons name="people" size={16} color={theme.colors.primary} />
+        <Text style={[theme.typography.small, { color: theme.colors.primary, fontFamily: 'Inter-SemiBold', marginLeft: 6 }]}>
           Route Community
         </Text>
       </View>
-    </View>
+    </LinearGradient>
   );
 }
 
@@ -344,10 +351,32 @@ export default function CommunityScreen() {
             )}
           </ScrollView>
 
-          <Pressable style={[styles.fab, { backgroundColor: theme.colors.primary }]} onPress={() => setNewPostVisible(true)}>
-            <Ionicons name="create-outline" size={22} color={theme.colors.white} />
-            <Text style={[theme.typography.caption, { color: theme.colors.white, fontFamily: 'Inter-SemiBold', marginLeft: 8 }]}>New Post</Text>
-          </Pressable>
+          <GlassCard
+            backgroundColor={theme.colors.primary}
+            borderColor="transparent"
+            intensity={60}
+            borderRadius={18}
+            style={styles.fabContainer}
+          >
+            <Pressable
+              style={({ pressed }) => [
+                styles.fabInner,
+                { transform: [{ scale: pressed ? 0.95 : 1 }] },
+              ]}
+              onPress={() => {
+                if (activeRoute) {
+                  setNewPostVisible(true);
+                } else {
+                  Alert.alert("Route Required", "Please set a commute route first to post to its community.");
+                }
+              }}
+            >
+              <Ionicons name="create" size={20} color="#fff" />
+              <Text style={[theme.typography.body, { color: '#fff', fontFamily: 'Inter-SemiBold', marginLeft: 8 }]}>
+                New Post
+              </Text>
+            </Pressable>
+          </GlassCard>
         </>
       )}
 
@@ -597,7 +626,8 @@ const styles = StyleSheet.create({
   locationRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
   actionsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14, paddingTop: 12, borderTopWidth: 1, gap: 20 },
   actionBtn: { flexDirection: 'row', alignItems: 'center' },
-  fab: { position: 'absolute', right: 20, bottom: 88, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 8 },
+  fabContainer: { position: 'absolute', right: 20, bottom: 88, overflow: 'hidden' },
+  fabInner: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14 },
 
   // Modals
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },

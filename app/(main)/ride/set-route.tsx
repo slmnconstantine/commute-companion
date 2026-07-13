@@ -11,6 +11,9 @@ import { useRoute } from '@/context/RouteContext';
 import { useLocation } from '@/hooks/useLocation';
 import { getRoute } from '@/services/routing';
 import { searchPlaces, GeocodingResult, reverseGeocode } from '@/services/geocoding';
+import RouteLayer from '@/components/common/RouteLayer';
+import AnimatedMarker from '@/components/common/AnimatedMarker';
+import GlassCard from '@/components/common/GlassCard';
 
 interface LocationData {
   lat: number;
@@ -30,7 +33,7 @@ export default function SetRouteScreen() {
     destination_label?: string;
   }>();
   const insets = useSafeAreaInsets();
-  const { theme } = useTheme();
+  const { theme, mode } = useTheme();
   const { location } = useLocation();
   const { saveRoute, activeRoute } = useRoute();
 
@@ -329,7 +332,11 @@ export default function SetRouteScreen() {
             />
             <RasterSource
               id="osm"
-              tiles={['https://tile.openstreetmap.org/{z}/{x}/{y}.png']}
+              tiles={[
+                mode === 'dark'
+                  ? 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'
+                  : 'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png'
+              ]}
               tileSize={256}
               maxzoom={19}
             >
@@ -339,31 +346,25 @@ export default function SetRouteScreen() {
             {/* User location indicator */}
             {location && (
               <Marker id="user-location" lngLat={[location.longitude, location.latitude]}>
-                <View style={styles.userDotOuter}>
-                  <View style={[styles.userDotInner, { backgroundColor: theme.colors.primary }]} />
-                </View>
+                <AnimatedMarker variant="user" primaryColor={theme.colors.primary} />
               </Marker>
             )}
 
             {origin && (
               <Marker id="origin" lngLat={[origin.lng, origin.lat]}>
-                <View style={{ alignItems: 'center' }}>
-                  <Ionicons name="location" size={36} color={theme.colors.success} style={styles.pinShadow} />
-                </View>
+                <AnimatedMarker variant="origin" color={theme.colors.success} />
               </Marker>
             )}
             {destination && (
               <Marker id="destination" lngLat={[destination.lng, destination.lat]}>
-                <View style={{ alignItems: 'center' }}>
-                  <Ionicons name="flag" size={36} color={theme.colors.error} style={styles.pinShadow} />
-                </View>
+                <AnimatedMarker variant="destination" color={theme.colors.error} />
               </Marker>
             )}
 
             {routeCoords.length > 0 && (
-              <GeoJSONSource
-                id="route"
-                data={{
+              <RouteLayer
+                id="setRoute"
+                routeGeoJSON={{
                   type: 'Feature',
                   geometry: {
                     type: 'LineString',
@@ -371,14 +372,15 @@ export default function SetRouteScreen() {
                   },
                   properties: {}
                 }}
-              >
-                <Layer id="routeLayer" type="line" source="route" style={{ lineColor: '#0D9488', lineWidth: 4 }} />
-              </GeoJSONSource>
+                color={theme.colors.primary}
+                glowColor={theme.colors.routeGlow}
+                casingColor={`${theme.colors.primaryDark}66`}
+              />
             )}
           </Map>
 
           {/* Location inputs overlay */}
-          <View style={[styles.locationInputs, { backgroundColor: theme.colors.surface }]}>
+          <GlassCard style={styles.locationInputs}>
             <Pressable style={[styles.locationRow, { borderBottomColor: theme.colors.border }]} onPress={() => setSearchMode('origin')}>
               <View style={[styles.locationDot, { backgroundColor: theme.colors.success }]} />
               <Text style={[styles.locationText, { color: origin ? theme.colors.text : theme.colors.textMuted, fontFamily: 'Inter-Regular' }]} numberOfLines={1}>
@@ -397,10 +399,10 @@ export default function SetRouteScreen() {
                 <Ionicons name="search-outline" size={18} color={theme.colors.textMuted} />
               </Pressable>
             </Pressable>
-          </View>
+          </GlassCard>
 
           {/* Pin mode toggle */}
-          <View style={[styles.pinModeBar, { backgroundColor: theme.colors.surface }]}>
+          <GlassCard style={styles.pinModeBar}>
             <Ionicons name="finger-print" size={16} color={theme.colors.primary} />
             <Text style={[styles.pinModeLabel, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
               Tap map to set:
@@ -435,7 +437,7 @@ export default function SetRouteScreen() {
                 Destination
               </Text>
             </Pressable>
-          </View>
+          </GlassCard>
 
           {/* Reverse geocoding indicator */}
           {reverseGeocoding && (
@@ -445,7 +447,7 @@ export default function SetRouteScreen() {
           )}
 
           {routeInfo && (
-            <View style={[styles.routeInfoCard, { backgroundColor: theme.colors.surface }]}>
+            <GlassCard style={styles.routeInfoCard}>
               <View style={styles.routeInfoRow}>
                 <Ionicons name="navigate" size={16} color={theme.colors.primary} />
                 <Text style={[styles.routeInfoText, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]}>
@@ -458,7 +460,7 @@ export default function SetRouteScreen() {
                   {routeInfo.durationMin} min
                 </Text>
               </View>
-            </View>
+            </GlassCard>
           )}
 
           {origin && destination && routeInfo && (
@@ -491,16 +493,15 @@ const styles = StyleSheet.create({
   mapContainer: { flex: 1 },
   map: { flex: 1 },
 
-  userDotOuter: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(13, 148, 136, 0.2)', alignItems: 'center', justifyContent: 'center' },
+  userDotOuter: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(13, 148, 136, 0.2)', alignItems: 'center' as const, justifyContent: 'center' as const },
   userDotInner: { width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: '#fff' },
-  pinShadow: { textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4 },
 
-  locationInputs: { position: 'absolute', top: 16, left: 16, right: 16, borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 5 },
+  locationInputs: { position: 'absolute', top: 16, left: 16, right: 16, borderRadius: 16, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 5 },
   locationRow: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1 },
   locationDot: { width: 10, height: 10, borderRadius: 5, marginRight: 16 },
   locationText: { flex: 1, fontSize: 15 },
 
-  pinModeBar: { position: 'absolute', bottom: 120, left: 16, right: 16, flexDirection: 'row', alignItems: 'center', padding: 8, paddingHorizontal: 16, borderRadius: 100, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
+  pinModeBar: { position: 'absolute', bottom: 120, left: 16, right: 16, flexDirection: 'row', alignItems: 'center', padding: 8, paddingHorizontal: 16, borderRadius: 100, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
   pinModeLabel: { fontSize: 13, marginLeft: 6, marginRight: 12 },
   pinModeBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100, borderWidth: 1, borderColor: 'transparent', marginRight: 8 },
   pinModeDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
@@ -509,7 +510,7 @@ const styles = StyleSheet.create({
   geocodingBanner: { position: 'absolute', top: 130, alignSelf: 'center', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
   geocodingText: { color: '#fff', fontSize: 13 },
 
-  routeInfoCard: { position: 'absolute', bottom: 180, right: 16, padding: 12, borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
+  routeInfoCard: { position: 'absolute', bottom: 180, right: 16, padding: 12, borderRadius: 12, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
   routeInfoRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 4 },
   routeInfoText: { fontSize: 14, marginLeft: 8 },
 
