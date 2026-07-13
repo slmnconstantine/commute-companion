@@ -22,12 +22,14 @@ import LoadingSpinner from '@/components/common/LoadingSpinner';
 import { TripWithDriver, BookingWithCommuter } from '@/types/database';
 import DriverBookingsList from '@/components/ride/DriverBookingsList';
 import TripBottomActions from '@/components/ride/TripBottomActions';
+import RouteLayer from '@/components/common/RouteLayer';
+import AnimatedMarker from '@/components/common/AnimatedMarker';
 
 export default function TripDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { theme } = useTheme();
+  const { theme, mode } = useTheme();
   const { profile } = useAuth();
 
   const [trip, setTrip] = useState<TripWithDriver | null>(null);
@@ -482,7 +484,11 @@ export default function TripDetailScreen() {
           />
           <RasterSource
             id="osm"
-            tiles={['https://tile.openstreetmap.org/{z}/{x}/{y}.png']}
+            tiles={[
+              mode === 'dark'
+                ? 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'
+                : 'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png'
+            ]}
             tileSize={256}
             maxzoom={19}
           >
@@ -490,24 +496,22 @@ export default function TripDetailScreen() {
           </RasterSource>
 
           <Marker id="origin" lngLat={[trip.origin_lng, trip.origin_lat]}>
-            <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: '#0D9488', borderWidth: 2, borderColor: '#fff' }} />
+            <AnimatedMarker variant="origin" label="Pickup" color={theme.colors.primary} />
           </Marker>
           <Marker id="destination" lngLat={[trip.destination_lng, trip.destination_lat]}>
-            <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: '#F59E0B', borderWidth: 2, borderColor: '#fff' }} />
+            <AnimatedMarker variant="destination" label="Drop-off" color={theme.colors.accent} />
           </Marker>
 
           {driverLiveLocation && (
             <Marker id="driverLive" lngLat={[driverLiveLocation.longitude, driverLiveLocation.latitude]}>
-              <View style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', opacity: isDriverStale ? 0.4 : 1 }}>
-                <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: isDriverStale ? '#9CA3AF' : theme.colors.primary, borderWidth: 3, borderColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5 }} />
-              </View>
+              <AnimatedMarker variant="driver" isStale={isDriverStale} primaryColor={theme.colors.primary} />
             </Marker>
           )}
 
           {routeCoords.length > 0 && (
-            <GeoJSONSource
-              id="route"
-              data={{
+            <RouteLayer
+              id="tripRoute"
+              routeGeoJSON={{
                 type: 'Feature',
                 geometry: {
                   type: 'LineString',
@@ -515,9 +519,10 @@ export default function TripDetailScreen() {
                 },
                 properties: {}
               }}
-            >
-              <Layer id="routeLayer" type="line" source="route" style={{ lineColor: '#0D9488', lineWidth: 4 }} />
-            </GeoJSONSource>
+              color={theme.colors.primary}
+              glowColor={theme.colors.routeGlow}
+              casingColor={`${theme.colors.primaryDark}66`}
+            />
           )}
         </Map>
 
@@ -608,18 +613,20 @@ export default function TripDetailScreen() {
         </View>
 
         {/* Bookings Section (Driver Only) */}
-        <DriverBookingsList
-          bookings={bookings}
-          trip={trip}
-          theme={theme}
-          processingBookingId={processingBookingId}
-          acceptedBookings={acceptedBookings}
-          driverPayoutDetails={driverPayoutDetails}
-          handleAcceptBooking={handleAcceptBooking}
-          handleRejectBooking={handleRejectBooking}
-          handleRemovePassenger={handleRemovePassenger}
-          handleDriverArrival={handleDriverArrival}
-        />
+        {isDriver && (
+          <DriverBookingsList
+            bookings={bookings}
+            trip={trip}
+            theme={theme}
+            processingBookingId={processingBookingId}
+            acceptedBookings={acceptedBookings}
+            driverPayoutDetails={driverPayoutDetails}
+            handleAcceptBooking={handleAcceptBooking}
+            handleRejectBooking={handleRejectBooking}
+            handleRemovePassenger={handleRemovePassenger}
+            handleDriverArrival={handleDriverArrival}
+          />
+        )}
       </ScrollView>
 
       {/* Bottom CTA */}

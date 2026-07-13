@@ -326,9 +326,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         if (data.chatRoomId && data.type === 'chat') {
           router.push(`/(main)/chat/${data.chatRoomId}` as any);
         } else if (data.tripId) {
-          if (data.type === 'ride_matched' || data.type === 'trip_update') {
-            router.push(`/(main)/ride/${data.tripId}` as any);
-          }
+          router.push(`/(main)/ride/${data.tripId}` as any);
         }
       }
     });

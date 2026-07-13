@@ -22,10 +22,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import Constants from 'expo-constants';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import Avatar from '@/components/common/Avatar';
 import Badge from '@/components/common/Badge';
+import ThemeToggle from '@/components/common/ThemeToggle';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -136,21 +138,6 @@ export default function ProfileScreen() {
       title: 'App',
       items: [
         {
-          icon: 'moon-outline',
-          label: 'Dark Mode',
-          rightElement: (
-            <Switch
-              value={mode === 'dark'}
-              onValueChange={toggleTheme}
-              trackColor={{
-                false: theme.colors.border,
-                true: theme.colors.primary,
-              }}
-              thumbColor={theme.colors.white}
-            />
-          ),
-        },
-        {
           icon: 'notifications-outline',
           label: 'Notifications',
           onPress: () => router.push('/(main)/settings/notifications' as any),
@@ -200,35 +187,45 @@ export default function ProfileScreen() {
         contentContainerStyle={styles.scrollContent}
       >
         {/* ── Profile Header ──────────────────────────────────────── */}
-        <View style={styles.profileHeader}>
-          <Avatar
-            uri={profile?.avatar_url}
-            name={profile?.full_name ?? 'User'}
-            size="xl"
-            showBadge={profile?.verified_badge ?? false}
+        <View style={styles.profileHeaderWrap}>
+          <LinearGradient
+            colors={theme.colors.gradientPrimary}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.profileGradient}
           />
+          <View style={styles.profileHeader}>
+            <View style={styles.avatarGlow}>
+              <Avatar
+                uri={profile?.avatar_url}
+                name={profile?.full_name ?? 'User'}
+                size="xl"
+                showBadge={profile?.verified_badge ?? false}
+              />
+            </View>
 
-          <Text
-            style={[
-              theme.typography.heading,
-              { color: theme.colors.text, marginTop: 16 },
-            ]}
-          >
-            {profile?.full_name ?? 'User'}
-          </Text>
+            <Text
+              style={[
+                theme.typography.heading,
+                { color: theme.colors.text, marginTop: 16 },
+              ]}
+            >
+              {profile?.full_name ?? 'User'}
+            </Text>
 
-          {/* Badges row */}
-          <View style={styles.badgeRow}>
-            <Badge
-              label={isDriver ? 'Driver' : 'Commuter'}
-              variant={isDriver ? 'driver' : 'commuter'}
-            />
-            {profile?.is_verified && (
-              <Badge label="Verified" variant="verified" />
-            )}
-            {!profile?.is_verified && (
-              <Badge label="Unverified" variant="unverified" />
-            )}
+            {/* Badges row */}
+            <View style={styles.badgeRow}>
+              <Badge
+                label={isDriver ? 'Driver' : 'Commuter'}
+                variant={isDriver ? 'driver' : 'commuter'}
+              />
+              {profile?.is_verified && (
+                <Badge label="Verified" variant="verified" />
+              )}
+              {!profile?.is_verified && (
+                <Badge label="Unverified" variant="unverified" />
+              )}
+            </View>
           </View>
         </View>
 
@@ -429,7 +426,10 @@ export default function ProfileScreen() {
               {section.items.map((item, idx) => (
                 <React.Fragment key={item.label}>
                   <Pressable
-                    style={styles.menuItem}
+                    style={({ pressed }) => [
+                      styles.menuItem,
+                      pressed && { backgroundColor: theme.colors.primarySubtle },
+                    ]}
                     onPress={item.onPress}
                     disabled={!item.onPress && !item.rightElement}
                   >
@@ -478,6 +478,26 @@ export default function ProfileScreen() {
             </View>
           </View>
         ))}
+
+        {/* ── Appearance Settings ─────────────────────────────────────────── */}
+        <View style={styles.menuSection}>
+          <Text
+            style={[
+              theme.typography.small,
+              {
+                color: theme.colors.textMuted,
+                fontFamily: 'Inter-SemiBold',
+                textTransform: 'uppercase',
+                letterSpacing: 1,
+                marginBottom: 8,
+                paddingHorizontal: 4,
+              },
+            ]}
+          >
+            Appearance
+          </Text>
+          <ThemeToggle />
+        </View>
 
         {/* ── Sign Out ────────────────────────────────────────────── */}
         <Pressable
@@ -535,10 +555,30 @@ const styles = StyleSheet.create({
   },
 
   /* Profile header */
+  profileHeaderWrap: {
+    position: 'relative',
+    marginBottom: 0,
+  },
+  profileGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 120,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    opacity: 0.12,
+  },
   profileHeader: {
     alignItems: 'center',
     paddingVertical: 24,
     paddingHorizontal: 20,
+  },
+  avatarGlow: {
+    borderRadius: 60,
+    padding: 3,
+    borderWidth: 2,
+    borderColor: 'rgba(16, 185, 129, 0.2)',
   },
   badgeRow: {
     flexDirection: 'row',
@@ -551,12 +591,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginHorizontal: 20,
-    borderRadius: 16,
+    borderRadius: 20,
     padding: 20,
     marginBottom: 24,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
     elevation: 4,
   },
   statItem: {

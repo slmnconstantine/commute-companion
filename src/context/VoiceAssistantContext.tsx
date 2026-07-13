@@ -70,7 +70,9 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
     }
   }, [startAudioRecording]);
 
-  const startConfirmationLoop = useCallback(async (cmd: AssistantCommand, contextData: any) => {
+  const stopRecordingRef = useRef<(() => Promise<void>) | null>(null);
+
+  const startConfirmationLoop: (cmd: AssistantCommand, contextData: any) => Promise<void> = useCallback(async (cmd, contextData) => {
     setState('confirming');
     
     try {
@@ -84,15 +86,17 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
       await new Promise(resolve => setTimeout(resolve, 3500));
       
       if (stateRef.current === 'confirming') {
-        await stopRecording();
+        if (stopRecordingRef.current) {
+          await stopRecordingRef.current();
+        }
       }
     } catch (err) {
       console.error('Error starting auto-confirmation recording:', err);
       setState('idle');
     }
-  }, [startRecording, stopRecording]);
+  }, [startRecording]);
 
-  const stopRecording = useCallback(async () => {
+  const stopRecording: () => Promise<void> = useCallback(async () => {
     const currentState = stateRef.current;
     if (currentState !== 'recording' && currentState !== 'confirming') return;
     
@@ -154,7 +158,11 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
         }
       });
     }
-  }, [stopAudioAndTranscribe, parseCommand, profile, startConfirmationLoop]);
+  }, [stopAudioAndTranscribe, parseCommand, profile]);
+
+  useEffect(() => {
+    stopRecordingRef.current = stopRecording;
+  }, [stopRecording]);
 
   const processTextInput = useCallback(async (text: string, contextData?: any) => {
     const activeContext = contextData || currentContextRef.current;

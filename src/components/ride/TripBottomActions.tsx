@@ -82,19 +82,20 @@ export default function TripBottomActions({
                   backgroundColor: 'transparent',
                   borderColor: theme.colors.error + '40',
                   borderWidth: 1,
-                  height: 44,
+                  height: 48,
                   elevation: 0,
                   shadowOpacity: 0,
                   paddingHorizontal: 16,
                   flexDirection: 'row',
                   gap: 6,
+                  flexShrink: 0,
                 }
               ]}
               onPress={() => handleLeaveTrip(userBooking.id)}
               disabled={processingBookingId === userBooking.id}
             >
               <Ionicons name="exit-outline" size={16} color={theme.colors.error} />
-              <Text style={[styles.ctaButtonText, { color: theme.colors.error, fontSize: 13 }]}>Leave Trip</Text>
+              <Text style={[styles.ctaButtonText, { color: theme.colors.error, fontSize: 13 }]} numberOfLines={1}>Leave Trip</Text>
             </Pressable>
           )}
         </View>

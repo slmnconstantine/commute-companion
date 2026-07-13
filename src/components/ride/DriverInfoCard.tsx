@@ -7,8 +7,9 @@
  * verification status, and full vehicle specs.
  */
 
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Animated } from 'react-native';
+
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import { Profile, Vehicle } from '@/types/database';
@@ -19,12 +20,21 @@ import Skeleton from '@/components/common/Skeleton';
 
 interface DriverInfoCardProps {
   driver?: Pick<Profile, 'full_name' | 'avatar_url' | 'verified_badge' | 'rating_avg' | 'total_ratings'>;
-  vehicle?: Pick<Vehicle, 'model' | 'plate_number' | 'color' | 'type' | 'capacity'>;
+  vehicle?: Pick<Vehicle, 'model' | 'plate_number' | 'type' | 'capacity'>;
   loading?: boolean;
 }
 
 export default function DriverInfoCard({ driver, vehicle, loading = false }: DriverInfoCardProps) {
   const { theme } = useTheme();
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
   if (loading || !driver) {
     return (
@@ -40,15 +50,17 @@ export default function DriverInfoCard({ driver, vehicle, loading = false }: Dri
   }
 
   return (
-    <View
+    <Animated.View
       style={[
         styles.container,
         {
-          backgroundColor: theme.colors.surface,
+          backgroundColor: 'transparent',
           borderColor: theme.colors.border,
+          opacity: fadeAnim,
         },
       ]}
     >
+      <View style={[styles.blurContainer, { backgroundColor: theme.colors.surface }]}>
       {/* Top section: Avatar + Driver info */}
       <View style={styles.topSection}>
         {/* Avatar */}
@@ -162,7 +174,8 @@ export default function DriverInfoCard({ driver, vehicle, loading = false }: Dri
           </View>
         </>
       )}
-    </View>
+      </View>
+    </Animated.View>
   );
 }
 
@@ -221,6 +234,9 @@ const styles = StyleSheet.create({
   container: {
     borderRadius: 16,
     borderWidth: 1,
+    overflow: 'hidden',
+  },
+  blurContainer: {
     padding: 16,
   },
   topSection: {

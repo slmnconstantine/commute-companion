@@ -30,6 +30,7 @@ import TripCard from '@/components/ride/TripCard';
 import Avatar from '@/components/common/Avatar';
 import { BookingWithTrip, TripWithDriver } from '@/types/database';
 import { formatDepartureTime } from '@/utils/dateFormatter';
+import AnimatedSegmentControl from '@/components/common/AnimatedSegmentControl';
 
 // ── Placeholder data ──────────────────────────────────────────────────────────
 
@@ -76,6 +77,8 @@ function ActivityCard({
           shadowColor: theme.colors.shadow,
           opacity: pressed ? 0.95 : 1,
           transform: [{ scale: pressed ? 0.98 : 1 }],
+          borderLeftWidth: 3,
+          borderLeftColor: statusColor,
         },
       ]}
     >
@@ -377,45 +380,16 @@ export default function ActivityScreen() {
       </View>
 
       {/* Segmented control */}
-      <View
-        style={[
-          styles.segmentRow,
-          { backgroundColor: theme.colors.inputBackground },
-        ]}
-      >
-        {SEGMENTS.map((seg) => {
-          const active = seg === activeSegment;
-          return (
-            <Pressable
-              key={seg}
-              style={[
-                styles.segmentBtn,
-                active && {
-                  backgroundColor: theme.colors.surface,
-                  shadowColor: theme.colors.shadow,
-                  shadowOffset: { width: 0, height: 1 },
-                  shadowOpacity: 1,
-                  shadowRadius: 3,
-                  elevation: 2,
-                },
-              ]}
-              onPress={() => setActiveSegment(seg)}
-            >
-              <Text
-                style={[
-                  theme.typography.caption,
-                  {
-                    color: active ? theme.colors.primary : theme.colors.textMuted,
-                    fontFamily: active ? 'Inter-SemiBold' : 'Inter-Regular',
-                  },
-                ]}
-              >
-                {seg}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      <AnimatedSegmentControl
+        segments={SEGMENTS}
+        activeSegment={activeSegment}
+        onSegmentChange={setActiveSegment}
+        primaryColor={theme.colors.primary}
+        backgroundColor={theme.colors.inputBackground}
+        activeTextColor="#fff"
+        inactiveTextColor={theme.colors.textMuted}
+        style={{ marginHorizontal: 20, marginBottom: 16 }}
+      />
 
       {/* Content */}
       <ScrollView
@@ -562,13 +536,6 @@ const styles = StyleSheet.create({
   },
 
   /* Segment control */
-  segmentRow: {
-    flexDirection: 'row',
-    marginHorizontal: 20,
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 16,
-  },
   segmentBtn: {
     flex: 1,
     paddingVertical: 10,

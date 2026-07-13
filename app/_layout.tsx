@@ -55,7 +55,7 @@ function RootLayoutNav() {
     if (isLoading || !navigationState?.key) return;
 
     const inAuthGroup = segments[0] === '(auth)';
-    const isVerifyEmail = inAuthGroup && segments[1] === 'verify-email';
+    const isVerifyEmail = inAuthGroup && (segments as string[]).length > 1 && (segments as string[])[1] === 'verify-email';
 
     if (!session && !inAuthGroup) {
       router.replace('/(auth)/welcome');
