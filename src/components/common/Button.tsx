@@ -19,6 +19,7 @@ import {
   type StyleProp,
 } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
+import * as Haptics from 'expo-haptics';
 
 type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
 type ButtonSize = 'sm' | 'md' | 'lg';
@@ -60,6 +61,9 @@ export default function Button({
 
   // ---- press animation helpers ----
   const animateIn = () => {
+    if (variant === 'primary' || variant === 'danger') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
     Animated.spring(scale, {
       toValue: 0.97,
       useNativeDriver: true,

@@ -163,9 +163,9 @@ export default function BookRideScreen() {
 
         {/* Fare Summary */}
         <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-          <Text style={[styles.cardTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>Fare Summary</Text>
+          <Text style={[styles.cardTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>Price Breakdown</Text>
           <View style={styles.fareRow}>
-            <Text style={[styles.fareLabel, { color: theme.colors.textMuted }]}>Fare per seat</Text>
+            <Text style={[styles.fareLabel, { color: theme.colors.textMuted }]}>Base per seat</Text>
             <Text style={[styles.fareValue, { color: trip.fare_per_seat === 0 ? theme.colors.success : theme.colors.text, fontFamily: trip.fare_per_seat === 0 ? 'Inter-SemiBold' : 'Inter-Regular' }]}>
               {trip.fare_per_seat === 0 ? 'FREE' : formatCurrency(trip.fare_per_seat)}
             </Text>
@@ -187,6 +187,11 @@ export default function BookRideScreen() {
               {trip.fare_per_seat === 0 ? 'FREE' : formatCurrency(totalFare + platformFee)}
             </Text>
           </View>
+          {seats > 1 && trip.fare_per_seat > 0 && (
+            <Text style={[styles.breakdownText, { color: theme.colors.textMuted }]}>
+              ({formatCurrency(trip.fare_per_seat + (platformFee / seats))} × {seats} passengers)
+            </Text>
+          )}
         </View>
       </ScrollView>
 
@@ -225,6 +230,7 @@ const styles = StyleSheet.create({
   fareDivider: { height: 1 },
   fareTotalLabel: { fontSize: 16 },
   fareTotalValue: { fontSize: 20 },
+  breakdownText: { fontSize: 13, marginTop: 4, fontFamily: 'Inter-Regular', textAlign: 'right' },
   bottomBar: { paddingHorizontal: 20, paddingTop: 16, borderTopWidth: 1 },
   bookBtn: { height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center', shadowColor: '#0D9488', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
   bookBtnText: { color: '#fff', fontSize: 16, fontFamily: 'Inter-SemiBold' },

@@ -1,11 +1,49 @@
 import { Tabs } from 'expo-router';
-import { Platform, View, StyleSheet } from 'react-native';
+import { Platform, View, StyleSheet, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNotifications } from '@/context/NotificationContext';
 import { useAuth } from '@/context/AuthContext';
 import { BlurView } from 'expo-blur';
+import * as Haptics from 'expo-haptics';
+import React, { useRef, useEffect } from 'react';
+
+function AnimatedTabIcon({ name, focused, color }: { name: string; focused: boolean; color: any }) {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (focused) {
+      Animated.sequence([
+        Animated.spring(scale, {
+          toValue: 1.2,
+          useNativeDriver: true,
+          speed: 60,
+          bounciness: 15,
+        }),
+        Animated.spring(scale, {
+          toValue: 1.05,
+          useNativeDriver: true,
+          speed: 40,
+          bounciness: 8,
+        }),
+      ]).start();
+    } else {
+      Animated.spring(scale, {
+        toValue: 1,
+        useNativeDriver: true,
+        speed: 40,
+        bounciness: 8,
+      }).start();
+    }
+  }, [focused]);
+
+  return (
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <Ionicons name={name as any} size={22} color={color} />
+    </Animated.View>
+  );
+}
 
 export default function TabLayout() {
   const { theme, mode } = useTheme();
@@ -65,15 +103,18 @@ export default function TabLayout() {
           )
         ),
       }}
+      screenListeners={{
+        tabPress: () => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        },
+      }}
     >
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
           tabBarIcon: ({ color, focused }) => (
-            <View style={focused ? styles.activeIconWrap : undefined}>
-              <Ionicons name={focused ? 'home' : 'home-outline'} size={22} color={color} />
-            </View>
+            <AnimatedTabIcon name={focused ? 'home' : 'home-outline'} focused={focused} color={color} />
           ),
         }}
       />
@@ -84,9 +125,7 @@ export default function TabLayout() {
           tabBarBadge: profile?.role === 'driver' && driverPendingCount > 0 ? driverPendingCount : undefined,
           tabBarBadgeStyle: { backgroundColor: theme.colors.error, color: '#fff', fontSize: 10, fontFamily: 'Inter-Bold' },
           tabBarIcon: ({ color, focused }) => (
-            <View style={focused ? styles.activeIconWrap : undefined}>
-              <Ionicons name={focused ? 'car-sport' : 'car-sport-outline'} size={22} color={color} />
-            </View>
+            <AnimatedTabIcon name={focused ? 'car-sport' : 'car-sport-outline'} focused={focused} color={color} />
           ),
         }}
       />
@@ -95,9 +134,7 @@ export default function TabLayout() {
         options={{
           title: 'Hub',
           tabBarIcon: ({ color, focused }) => (
-            <View style={focused ? styles.activeIconWrap : undefined}>
-              <Ionicons name={focused ? 'people' : 'people-outline'} size={22} color={color} />
-            </View>
+            <AnimatedTabIcon name={focused ? 'people' : 'people-outline'} focused={focused} color={color} />
           ),
         }}
       />
@@ -108,9 +145,7 @@ export default function TabLayout() {
           tabBarBadge: commuterUpcomingCount > 0 ? commuterUpcomingCount : undefined,
           tabBarBadgeStyle: { backgroundColor: theme.colors.primary, color: '#fff', fontSize: 10, fontFamily: 'Inter-Bold' },
           tabBarIcon: ({ color, focused }) => (
-            <View style={focused ? styles.activeIconWrap : undefined}>
-              <Ionicons name={focused ? 'time' : 'time-outline'} size={22} color={color} />
-            </View>
+            <AnimatedTabIcon name={focused ? 'time' : 'time-outline'} focused={focused} color={color} />
           ),
         }}
       />
@@ -119,18 +154,10 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, focused }) => (
-            <View style={focused ? styles.activeIconWrap : undefined}>
-              <Ionicons name={focused ? 'person' : 'person-outline'} size={22} color={color} />
-            </View>
+            <AnimatedTabIcon name={focused ? 'person' : 'person-outline'} focused={focused} color={color} />
           ),
         }}
       />
     </Tabs>
   );
 }
-
-const styles = StyleSheet.create({
-  activeIconWrap: {
-    transform: [{ scale: 1.1 }],
-  },
-});

@@ -17,6 +17,7 @@ interface DriverBookingsListProps {
   handleRejectBooking: (b: BookingWithCommuter) => void;
   handleRemovePassenger: (b: BookingWithCommuter) => void;
   handleDriverArrival: (id: string) => void;
+  onAvatarPress: (userId: string) => void;
 }
 
 export default function DriverBookingsList({
@@ -30,6 +31,7 @@ export default function DriverBookingsList({
   handleRejectBooking,
   handleRemovePassenger,
   handleDriverArrival,
+  onAvatarPress,
 }: DriverBookingsListProps) {
   if (bookings.length === 0) return null;
 
@@ -41,7 +43,9 @@ export default function DriverBookingsList({
       {bookings.map(booking => (
         <View key={booking.id} style={[styles.bookingItem, { borderBottomColor: theme.colors.border }]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-            <Avatar uri={booking.commuter?.avatar_url} name={booking.commuter?.full_name || ''} size="sm" />
+            <Pressable onPress={() => booking.commuter?.id && onAvatarPress(booking.commuter.id)}>
+              <Avatar uri={booking.commuter?.avatar_url} name={booking.commuter?.full_name || ''} size="sm" />
+            </Pressable>
             <View style={{ marginLeft: 10, flex: 1, alignItems: 'flex-start' }}>
               <Text style={{ color: theme.colors.text, fontFamily: 'Inter-Medium', marginBottom: 4 }} numberOfLines={1}>
                 {booking.commuter?.full_name}

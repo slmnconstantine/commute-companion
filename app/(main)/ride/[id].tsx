@@ -1,12 +1,15 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Map, Camera, RasterSource, Layer, GeoJSONSource, Marker, type CameraRef } from '@maplibre/maplibre-react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
-import { getTripById, updateTripStatus } from '@/services/trips';
+import { getTripById, updateTripStatus, hasActiveTrip } from '@/services/trips';
 import { getTripBookings, updateBookingStatus, deleteBooking, confirmCommuterArrival, confirmDriverArrival } from '@/services/bookings';
 import { getOrCreateChatRoom, joinChatRoom, getChatRoom } from '@/services/chatRooms';
 import { sendMessage } from '@/services/messages';
@@ -24,6 +27,24 @@ import DriverBookingsList from '@/components/ride/DriverBookingsList';
 import TripBottomActions from '@/components/ride/TripBottomActions';
 import RouteLayer from '@/components/common/RouteLayer';
 import AnimatedMarker from '@/components/common/AnimatedMarker';
+import ProfileCardModal from '@/components/common/ProfileCardModal';
+import ETAOverlay from '@/components/ride/ETAOverlay';
+import SOSButton from '@/components/ride/SOSButton';
+import { recordCancellation, getCancellationWarning } from '@/utils/cancellationTracker';
+
+// Haversine formula to calculate distance in km
+const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const R = 6371; // Radius of the earth in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const d = R * c; // Distance in km
+  return d;
+};
 
 export default function TripDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -48,6 +69,8 @@ export default function TripDetailScreen() {
   const [chatRoomId, setChatRoomId] = useState<string | null>(null);
   const [processingBookingId, setProcessingBookingId] = useState<string | null>(null);
   const [hasPromptedArrival, setHasPromptedArrival] = useState(false);
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
+  const [profileModalVisible, setProfileModalVisible] = useState(false);
 
   const cameraRef = useRef<CameraRef>(null);
 
@@ -64,19 +87,18 @@ export default function TripDetailScreen() {
   const totalCollectedFare = acceptedBookings.reduce((sum, b) => sum + (b.fare_paid || 0), 0);
   const driverPayoutDetails = getDriverPayout(totalCollectedFare);
 
-  // Haversine formula to calculate distance in km
-  const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371; // Radius of the earth in km
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-      Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    const d = R * c; // Distance in km
-    return d;
-  };
+  // Compute ETA & remaining distance during ongoing trips
+  const etaInfo = React.useMemo(() => {
+    if (!trip || trip.status !== 'ongoing' || !driverLiveLocation || routeCoords.length < 2) return null;
+    const destLat = trip.destination_lat;
+    const destLng = trip.destination_lng;
+    const remainingKm = getDistance(driverLiveLocation.latitude, driverLiveLocation.longitude, destLat, destLng);
+    // Estimate ETA: city average ~25 km/h
+    const etaMinutes = Math.round((remainingKm / 25) * 60);
+    return { remainingKm, etaMinutes };
+  }, [driverLiveLocation, trip?.status, routeCoords.length]);
+
+
 
   useFocusEffect(
     useCallback(() => {
@@ -149,7 +171,7 @@ export default function TripDetailScreen() {
 
     return () => {
       if (locationSubscription) locationSubscription.remove();
-      if (trip.status !== 'ongoing') stopBroadcastingLocation();
+      stopBroadcastingLocation();
       if (unsubscribeCommuter) unsubscribeCommuter();
     };
   }, [trip?.status, profile?.id]);
@@ -202,15 +224,20 @@ export default function TripDetailScreen() {
               await updateBookingStatus(booking.id, 'accepted');
 
               if (trip) {
-                const seatsBooked = trip.fare_per_seat > 0 ? Math.round(booking.fare_paid / trip.fare_per_seat) : 1;
+                const seatsBooked = booking.seats_booked || 1;
                 const newAvailableSeats = Math.max(0, trip.available_seats - seatsBooked);
+                
+                const updates: any = { available_seats: newAvailableSeats };
+                if (newAvailableSeats <= 0 && trip.status === 'open') {
+                  updates.status = 'full';
+                }
 
                 await supabase
                   .from('trips')
-                  .update({ available_seats: newAvailableSeats })
+                  .update(updates)
                   .eq('id', trip.id);
 
-                setTrip(prev => prev ? { ...prev, available_seats: newAvailableSeats } : null);
+                setTrip(prev => prev ? { ...prev, ...updates } : null);
               }
 
               let room = await getChatRoom(id);
@@ -286,15 +313,20 @@ export default function TripDetailScreen() {
               await deleteBooking(booking.id);
 
               if (isAccepted && trip) {
-                const seatsBooked = trip.fare_per_seat > 0 ? Math.round(booking.fare_paid / trip.fare_per_seat) : 1;
+                const seatsBooked = booking.seats_booked || 1;
                 const newAvailableSeats = trip.available_seats + seatsBooked;
+                
+                const updates: any = { available_seats: newAvailableSeats };
+                if (newAvailableSeats > 0 && trip.status === 'full') {
+                  updates.status = 'open';
+                }
 
                 await supabase
                   .from('trips')
-                  .update({ available_seats: newAvailableSeats })
+                  .update(updates)
                   .eq('id', trip.id);
 
-                setTrip(prev => prev ? { ...prev, available_seats: newAvailableSeats } : null);
+                setTrip(prev => prev ? { ...prev, ...updates } : null);
               }
 
               if (chatRoomId && profile?.id) {
@@ -314,9 +346,14 @@ export default function TripDetailScreen() {
   };
 
   const handleLeaveTrip = async (bookingId: string) => {
+    const warning = await getCancellationWarning();
+    const alertBody = warning 
+      ? `Are you sure you want to remove yourself from this trip?\n\n${warning}`
+      : 'Are you sure you want to remove yourself from this trip?';
+
     Alert.alert(
       'Leave Trip',
-      'Are you sure you want to remove yourself from this trip?',
+      alertBody,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -331,21 +368,27 @@ export default function TripDetailScreen() {
               await deleteBooking(bookingId);
 
               if (booking && isAccepted && trip) {
-                const seatsBooked = trip.fare_per_seat > 0 ? Math.round(booking.fare_paid / trip.fare_per_seat) : 1;
+                const seatsBooked = booking.seats_booked || 1;
                 const newAvailableSeats = trip.available_seats + seatsBooked;
+                
+                const updates: any = { available_seats: newAvailableSeats };
+                if (newAvailableSeats > 0 && trip.status === 'full') {
+                  updates.status = 'open';
+                }
 
                 await supabase
                   .from('trips')
-                  .update({ available_seats: newAvailableSeats })
+                  .update(updates)
                   .eq('id', trip.id);
 
-                setTrip(prev => prev ? { ...prev, available_seats: newAvailableSeats } : null);
+                setTrip(prev => prev ? { ...prev, ...updates } : null);
               }
 
               if (chatRoomId && profile?.id) {
                 await sendMessage(chatRoomId, profile.id, `${profile.full_name} has left the trip.`, true);
               }
               setBookings(prev => prev.filter(b => b.id !== bookingId));
+              await recordCancellation();
               Alert.alert('Success', 'You have left the trip.');
             } catch (e: any) {
               Alert.alert('Error', e.message || 'Failed to leave trip');
@@ -378,8 +421,46 @@ export default function TripDetailScreen() {
     }
   };
 
+  const handleEndRideEarly = async (bookingId: string) => {
+    Alert.alert(
+      'End Ride Early',
+      'Are you sure you want to end your ride here?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'End Ride',
+          style: 'destructive',
+          onPress: async () => {
+            setProcessingBookingId(bookingId);
+            try {
+              await updateBookingStatus(bookingId, 'dropped_off_early');
+              if (chatRoomId && profile?.id) {
+                await sendMessage(chatRoomId, profile.id, `${profile.full_name} has ended their ride early.`, true);
+              }
+              setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: 'dropped_off_early' as any } : b));
+              Alert.alert('Ride Ended', 'You have successfully ended your ride.');
+              await loadTrip();
+            } catch (e: any) {
+              Alert.alert('Error', e.message || 'Failed to end ride early');
+            } finally {
+              setProcessingBookingId(null);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const handleUpdateTripStatus = async (newStatus: 'ongoing' | 'completed') => {
     if (newStatus === 'ongoing') {
+      if (profile?.id) {
+        const hasActive = await hasActiveTrip(profile.id);
+        if (hasActive) {
+          Alert.alert('Active Ride Exists', 'You already have an active ride. Please complete or cancel it before starting a new one.');
+          return;
+        }
+      }
+
       Alert.alert(
         'Start Trip 🚗',
         'Are you sure you want to start this trip and set off now?',
@@ -420,7 +501,7 @@ export default function TripDetailScreen() {
 
                 await updateTripStatus(id as string, 'completed');
                 setTrip(prev => prev ? { ...prev, status: 'completed' } : null);
-                Alert.alert('Trip Completed!', 'The trip has been completed successfully.');
+                router.push(`/(main)/ride/trip-summary?tripId=${id}` as any);
                 await loadTrip();
               } catch (e: any) {
                 Alert.alert('Error', e.message || 'Failed to update trip status');
@@ -466,6 +547,9 @@ export default function TripDetailScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      {/* @ts-ignore */}
+      {trip?.status === 'ongoing' && <StatusBar style="light" backgroundColor={theme.colors.success as any} />}
+      
       {/* Map Header */}
       <View style={[styles.mapSection, isOngoingActiveUser && styles.mapSectionEnlarged]}>
         <Map
@@ -473,7 +557,11 @@ export default function TripDetailScreen() {
           logo={false}
           attribution={false}
           compass={false}
-          mapStyle={{ version: 8, sources: {}, layers: [] }}
+          mapStyle={
+            mode === 'dark'
+              ? 'https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json'
+              : 'https://basemaps.cartocdn.com/gl/voyager-nolabels-gl-style/style.json'
+          }
         >
           <Camera
             ref={cameraRef}
@@ -482,18 +570,6 @@ export default function TripDetailScreen() {
               zoom: 10,
             }}
           />
-          <RasterSource
-            id="osm"
-            tiles={[
-              mode === 'dark'
-                ? 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'
-                : 'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png'
-            ]}
-            tileSize={256}
-            maxzoom={19}
-          >
-            <Layer id="osm-layer" type="raster" source="osm" />
-          </RasterSource>
 
           <Marker id="origin" lngLat={[trip.origin_lng, trip.origin_lat]}>
             <AnimatedMarker variant="origin" label="Pickup" color={theme.colors.primary} />
@@ -527,11 +603,29 @@ export default function TripDetailScreen() {
         </Map>
 
         {/* Back button overlay */}
+        {trip.status === 'ongoing' && (
+          <LinearGradient
+            colors={[`${theme.colors.success}DD`, `${theme.colors.success}00`]}
+            style={[StyleSheet.absoluteFill, { height: insets.top + 80, zIndex: 5 }]}
+            pointerEvents="none"
+          />
+        )}
         <Pressable
-          style={[styles.backBtn, { backgroundColor: theme.colors.surface, top: insets.top + 8 }]}
+          style={[
+            styles.backBtn, 
+            { 
+              backgroundColor: trip.status === 'ongoing' ? theme.colors.success : theme.colors.surface, 
+              top: insets.top + 8,
+              zIndex: 10,
+            }
+          ]}
           onPress={() => router.back()}
         >
-          <Ionicons name="arrow-back" size={22} color={theme.colors.text} />
+          <Ionicons 
+            name="arrow-back" 
+            size={22} 
+            color={trip.status === 'ongoing' ? theme.colors.white : theme.colors.text} 
+          />
         </Pressable>
 
         {/* Delete Ride button overlay */}
@@ -543,10 +637,33 @@ export default function TripDetailScreen() {
             <Ionicons name="trash-outline" size={22} color={theme.colors.error} />
           </Pressable>
         )}
+
+        {/* ETA Overlay */}
+        {trip.status === 'ongoing' && etaInfo && (
+          <ETAOverlay distanceKm={etaInfo.remainingKm} etaMinutes={etaInfo.etaMinutes} theme={theme} />
+        )}
+
+        {/* SOS Button */}
+        {trip.status === 'ongoing' && (isDriver || isConfirmedPassenger) && (
+          <SOSButton
+            theme={theme}
+            tripId={trip.id}
+            driverName={trip.driver?.full_name || 'Driver'}
+            currentLocation={driverLiveLocation}
+            originLabel={trip.origin_label || ''}
+            destinationLabel={trip.destination_label || ''}
+          />
+        )}
       </View>
 
-      {/* Content */}
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
+      {/* Bottom Sheet Content */}
+      <BottomSheet
+        index={0}
+        snapPoints={['35%', '85%']}
+        backgroundStyle={{ backgroundColor: theme.colors.background }}
+        handleIndicatorStyle={{ backgroundColor: theme.colors.border }}
+      >
+        <BottomSheetScrollView contentContainerStyle={styles.contentInner}>
         {/* Status + Time */}
         <View style={styles.statusRow}>
           <Badge label={trip.status} variant={trip.status === 'open' || trip.status === 'full' ? 'pending' : trip.status === 'ongoing' ? 'active' : 'completed'} />
@@ -576,7 +693,9 @@ export default function TripDetailScreen() {
 
         {/* Driver Info */}
         <View style={[styles.driverCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-          <Avatar uri={trip.driver?.avatar_url} name={trip.driver?.full_name || ''} size="lg" showBadge={trip.driver?.verified_badge} />
+          <Pressable onPress={() => { setSelectedProfileId(trip.driver?.id || null); setProfileModalVisible(true); }}>
+            <Avatar uri={trip.driver?.avatar_url} name={trip.driver?.full_name || ''} size="lg" showBadge={trip.driver?.verified_badge} />
+          </Pressable>
           <View style={styles.driverInfo}>
             <Text style={[styles.driverName, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>{trip.driver?.full_name}</Text>
             <View style={styles.ratingRow}>
@@ -625,9 +744,11 @@ export default function TripDetailScreen() {
             handleRejectBooking={handleRejectBooking}
             handleRemovePassenger={handleRemovePassenger}
             handleDriverArrival={handleDriverArrival}
+            onAvatarPress={(userId) => { setSelectedProfileId(userId); setProfileModalVisible(true); }}
           />
         )}
-      </ScrollView>
+        </BottomSheetScrollView>
+      </BottomSheet>
 
       {/* Bottom CTA */}
       <TripBottomActions
@@ -642,8 +763,16 @@ export default function TripDetailScreen() {
         handleLeaveTrip={handleLeaveTrip}
         handleCommuterArrival={handleCommuterArrival}
         handleUpdateTripStatus={handleUpdateTripStatus}
+        handleEndRideEarly={handleEndRideEarly}
         router={router}
-        id={id}
+        id={id as string}
+      />
+
+      {/* Modals */}
+      <ProfileCardModal 
+        userId={selectedProfileId} 
+        visible={profileModalVisible} 
+        onClose={() => setProfileModalVisible(false)} 
       />
     </View>
   );
@@ -661,9 +790,9 @@ function StatItem({ icon, label, value, theme, highlight }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  mapSection: { height: 260 },
-  mapSectionEnlarged: { height: 480 },
-  map: { flex: 1 },
+  mapSection: { width: '100%', height: '45%', position: 'relative' },
+  mapSectionEnlarged: { height: '65%' },
+  map: { flex: 1, width: '100%', height: '100%' },
   backBtn: { position: 'absolute', left: 16, width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 4 },
   deleteBtn: { position: 'absolute', right: 16, width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 4 },
   content: { flex: 1 },

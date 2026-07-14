@@ -23,6 +23,7 @@ import { RouteProvider } from '@/context/RouteContext';
 import { VoiceAssistantProvider } from '@/context/VoiceAssistantContext';
 import VoiceAssistantFab from '@/components/assistant/VoiceAssistantFab';
 import VoiceAssistantSheet from '@/components/assistant/VoiceAssistantSheet';
+import { ToastProvider } from '@/components/common/Toast';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -43,11 +44,15 @@ function RootLayoutNav() {
   const router = useRouter();
   const navigationState = useRootNavigationState();
   const [hasSkippedVerification, setHasSkippedVerification] = React.useState(false);
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = React.useState<boolean | null>(null);
 
   // Check if user previously chose "Skip for now" on this device
   useEffect(() => {
     AsyncStorage.getItem('@skipped_verification').then(val => {
       if (val === 'true') setHasSkippedVerification(true);
+    });
+    AsyncStorage.getItem('@onboarding_complete').then(val => {
+      setHasCompletedOnboarding(val === 'true');
     });
   }, []);
 
@@ -58,7 +63,11 @@ function RootLayoutNav() {
     const isVerifyEmail = inAuthGroup && (segments as string[]).length > 1 && (segments as string[])[1] === 'verify-email';
 
     if (!session && !inAuthGroup) {
-      router.replace('/(auth)/welcome');
+      if (hasCompletedOnboarding === false) {
+        router.replace('/(auth)/onboarding');
+      } else if (hasCompletedOnboarding === true) {
+        router.replace('/(auth)/welcome');
+      }
     } else if (session && inAuthGroup) {
       // Soft Gate logic
       if (!session.user.email_confirmed_at && !hasSkippedVerification && !isVerifyEmail) {
@@ -72,7 +81,7 @@ function RootLayoutNav() {
         }
       }
     }
-  }, [session, isLoading, segments, navigationState?.key, hasSkippedVerification]);
+  }, [session, isLoading, segments, navigationState?.key, hasSkippedVerification, hasCompletedOnboarding]);
 
   return (
     <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
@@ -109,6 +118,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={styles.container}>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
+          <ToastProvider>
           <AuthProvider>
             <RouteProvider>
               <VoiceAssistantProvider>
@@ -118,6 +128,7 @@ export default function RootLayout() {
               </VoiceAssistantProvider>
             </RouteProvider>
           </AuthProvider>
+          </ToastProvider>
         </ThemeProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>

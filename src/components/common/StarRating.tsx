@@ -7,10 +7,11 @@
  * alongside the stars.
  */
 
-import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useRef } from 'react';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
+import * as Haptics from 'expo-haptics';
 
 type StarSize = 'sm' | 'md' | 'lg';
 
@@ -53,8 +54,26 @@ export default function StarRating({
     return 'star-outline';
   };
 
+  const starScales = useRef([1,2,3,4,5].map(() => new Animated.Value(1))).current;
+
   const handlePress = (index: number) => {
     if (interactive && onRatingChange) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      // Pop animation
+      Animated.sequence([
+        Animated.spring(starScales[index - 1], {
+          toValue: 1.4,
+          useNativeDriver: true,
+          speed: 50,
+          bounciness: 12,
+        }),
+        Animated.spring(starScales[index - 1], {
+          toValue: 1,
+          useNativeDriver: true,
+          speed: 50,
+          bounciness: 8,
+        }),
+      ]).start();
       onRatingChange(index);
     }
   };
@@ -73,14 +92,15 @@ export default function StarRating({
 
         if (interactive) {
           return (
-            <Pressable
-              key={i}
-              onPress={() => handlePress(i)}
-              hitSlop={4}
-              style={styles.star}
-            >
-              {icon}
-            </Pressable>
+            <Animated.View key={i} style={{ transform: [{ scale: starScales[i - 1] }] }}>
+              <Pressable
+                onPress={() => handlePress(i)}
+                hitSlop={4}
+                style={styles.star}
+              >
+                {icon}
+              </Pressable>
+            </Animated.View>
           );
         }
 

@@ -12,7 +12,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  RefreshControl,
   Pressable,
   Modal,
   KeyboardAvoidingView,
@@ -36,9 +35,11 @@ import { getCommuterRequests, CommuterRequest } from '@/services/rideRequests';
 import type { TripWithDriver } from '@/types/database';
 import AnimatedSegmentControl from '@/components/common/AnimatedSegmentControl';
 import TripCard from '@/components/ride/TripCard';
+import AnimatedListItem from '@/components/common/AnimatedListItem';
 import DatePickerModal from '@/components/ride/DatePickerModal';
 import TimePickerModal from '@/components/ride/TimePickerModal';
 import BecomeDriverBanner from '@/components/ride/BecomeDriverBanner';
+import CustomRefreshControl from '@/components/common/CustomRefreshControl';
 import TripFiltersModal from '@/components/ride/TripFiltersModal';
 import CommuterRequestModal from '@/components/ride/CommuterRequestModal';
 import ActiveRouteCard from '@/components/ride/ActiveRouteCard';
@@ -117,6 +118,7 @@ export default function RidesScreen() {
   const [activeSegment, setActiveSegment] = useState<Segment>('Search Rides');
   const [refreshing, setRefreshing] = useState(false);
   const [myRides, setMyRides] = useState<TripWithDriver[]>([]);
+  const [recentDriverTrips, setRecentDriverTrips] = useState<TripWithDriver[]>([]);
   const [availableRides, setAvailableRides] = useState<TripWithDriver[]>([]);
   const [rideRequests, setRideRequests] = useState<CommuterRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -407,6 +409,27 @@ export default function RidesScreen() {
         });
         setMyRides(activePostedRides);
 
+        const pastPostedRides = myPostedRides.filter((a) =>
+          ['completed'].includes(a.status)
+        );
+        // Sort by newest first
+        pastPostedRides.sort((a, b) => {
+          return new Date(b.departure_time).getTime() - new Date(a.departure_time).getTime();
+        });
+        
+        // Group by route to avoid duplicates
+        const uniqueRoutes: TripWithDriver[] = [];
+        const seenRoutes = new Set<string>();
+        for (const trip of pastPostedRides) {
+          const routeStr = `${trip.origin_label}-${trip.destination_label}`;
+          if (!seenRoutes.has(routeStr)) {
+            seenRoutes.add(routeStr);
+            uniqueRoutes.push(trip);
+          }
+          if (uniqueRoutes.length >= 3) break;
+        }
+        setRecentDriverTrips(uniqueRoutes);
+
         const requests = await getCommuterRequests();
         setRideRequests(requests);
       }
@@ -507,11 +530,9 @@ export default function RidesScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl
+          <CustomRefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={theme.colors.primary}
-            colors={[theme.colors.primary]}
           />
         }
       >
@@ -603,10 +624,12 @@ export default function RidesScreen() {
                   <TripSkeletonCard theme={theme} />
                 </>
               ) : filteredAndSortedRides.length > 0 ? (
-                filteredAndSortedRides.map((trip) => (
-                  <View key={trip.id} style={{ marginBottom: 14 }}>
-                    <TripCard trip={trip} onPress={() => router.push(`/(main)/ride/${trip.id}`)} />
-                  </View>
+                filteredAndSortedRides.map((trip, i) => (
+                  <AnimatedListItem key={trip.id} index={i}>
+                    <View style={{ marginBottom: 14 }}>
+                      <TripCard trip={trip} onPress={() => router.push(`/(main)/ride/${trip.id}`)} />
+                    </View>
+                  </AnimatedListItem>
                 ))
               ) : (
                 <EmptyState
@@ -667,6 +690,62 @@ export default function RidesScreen() {
                 <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginBottom: 14 }}>
                   You don't have any active posted rides.
                 </Text>
+              )}
+
+              {/* Recent Routes / Re-post */}
+              {recentDriverTrips.length > 0 && (
+                <>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14, marginTop: 16 }}>
+                    <Text style={[styles.myRidesTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', marginBottom: 0 }]}>
+                      Favorite Routes
+                    </Text>
+                  </View>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingBottom: 8 }}>
+                    {recentDriverTrips.map(trip => (
+                      <Pressable 
+                        key={trip.id}
+                        style={{
+                          backgroundColor: theme.colors.surface,
+                          padding: 14,
+                          borderRadius: 16,
+                          borderWidth: 1,
+                          borderColor: theme.colors.border,
+                          width: 260
+                        }}
+                        onPress={() => {
+                          const params = {
+                            originLat: trip.origin_lat,
+                            originLng: trip.origin_lng,
+                            originLabel: trip.origin_label,
+                            destLat: trip.destination_lat,
+                            destLng: trip.destination_lng,
+                            destLabel: trip.destination_label,
+                            fare: trip.fare_per_seat,
+                            seats: trip.available_seats
+                          };
+                          router.push({ pathname: '/(main)/ride/create', params });
+                        }}
+                      >
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                          <Ionicons name="time-outline" size={16} color={theme.colors.textMuted} />
+                          <Text style={{ color: theme.colors.textMuted, fontSize: 13 }}>Re-post this route</Text>
+                        </View>
+                        <Text style={{ color: theme.colors.text, fontFamily: 'Inter-Medium', fontSize: 14 }} numberOfLines={1}>
+                          From: {trip.origin_label?.split(',')[0]}
+                        </Text>
+                        <Text style={{ color: theme.colors.text, fontFamily: 'Inter-Medium', fontSize: 14 }} numberOfLines={1}>
+                          To: {trip.destination_label?.split(',')[0]}
+                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 }}>
+                          <Ionicons name="refresh-circle" size={18} color={theme.colors.primary} />
+                          <Text style={{ color: theme.colors.primary, fontFamily: 'Inter-SemiBold', fontSize: 13 }}>
+                            Create Ride
+                          </Text>
+                        </View>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </>
               )}
 
               {/* Ride Requests Board */}

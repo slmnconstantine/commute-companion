@@ -7,6 +7,7 @@
 
 import React, { useRef, useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Animated, LayoutChangeEvent } from 'react-native';
+import * as Haptics from 'expo-haptics';
 
 interface AnimatedSegmentControlProps<T extends string> {
   segments: readonly T[];
@@ -84,7 +85,10 @@ export default function AnimatedSegmentControl<T extends string>({
         <Pressable
           key={segment}
           style={styles.segment}
-          onPress={() => onSegmentChange(segment)}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            onSegmentChange(segment);
+          }}
         >
           <Text
             style={[

@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { formatCurrency } from '@/utils/fareCalculator';
 import { BookingWithCommuter, TripWithDriver } from '@/types/database';
 
@@ -16,6 +17,7 @@ interface TripBottomActionsProps {
   handleLeaveTrip: (id: string) => void;
   handleCommuterArrival: (id: string) => void;
   handleUpdateTripStatus: (status: 'ongoing' | 'completed') => void;
+  handleEndRideEarly: (id: string) => void;
   router: any;
   id: string;
 }
@@ -32,6 +34,7 @@ export default function TripBottomActions({
   handleLeaveTrip,
   handleCommuterArrival,
   handleUpdateTripStatus,
+  handleEndRideEarly,
   router,
   id,
 }: TripBottomActionsProps) {
@@ -50,7 +53,10 @@ export default function TripBottomActions({
           </View>
           <Pressable
             style={[styles.ctaButton, { backgroundColor: theme.colors.primary }]}
-            onPress={() => router.push(`/(main)/ride/book/${id}`)}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              router.push(`/(main)/ride/book/${id}`);
+            }}
           >
             <Text style={styles.ctaButtonText}>Book Seat</Text>
           </Pressable>
@@ -127,6 +133,25 @@ export default function TripBottomActions({
               <Text style={styles.ctaButtonText}>Open Trip Chat</Text>
             </Pressable>
           )}
+          <Pressable
+            style={[
+              styles.ctaButton,
+              {
+                backgroundColor: 'transparent',
+                borderColor: theme.colors.error + '40',
+                borderWidth: 1,
+                elevation: 0,
+                shadowOpacity: 0,
+                flexDirection: 'row',
+                gap: 8,
+              }
+            ]}
+            onPress={() => handleEndRideEarly(userBooking.id)}
+            disabled={processingBookingId === userBooking.id}
+          >
+            <Ionicons name="exit-outline" size={20} color={theme.colors.error} />
+            <Text style={[styles.ctaButtonText, { color: theme.colors.error }]}>End Ride Early</Text>
+          </Pressable>
         </View>
       )}
 
@@ -181,11 +206,16 @@ export default function TripBottomActions({
 
 const styles = StyleSheet.create({
   bottomCTA: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     paddingHorizontal: 20,
     paddingTop: 16,
     borderTopWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    zIndex: 50,
   },
   ctaInfo: {
     flex: 1,

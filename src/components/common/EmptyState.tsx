@@ -37,8 +37,10 @@ export default function EmptyState({
   // Entrance animation
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
+  const floatAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    // Entrance
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -53,7 +55,25 @@ export default function EmptyState({
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
-    ]).start();
+    ]).start(() => {
+      // Start floating loop after entrance
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(floatAnim, {
+            toValue: -8,
+            duration: 1500,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
+          Animated.timing(floatAnim, {
+            toValue: 0,
+            duration: 1500,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    });
   }, []);
 
   return (
@@ -66,14 +86,16 @@ export default function EmptyState({
         },
       ]}
     >
-      <View style={[styles.iconCircle, { backgroundColor: `${theme.colors.primary}12` }]}>
-        <Ionicons
-          name={icon}
-          size={56}
-          color={`${theme.colors.primary}60`}
-          style={styles.icon}
-        />
-      </View>
+      <Animated.View style={{ transform: [{ translateY: floatAnim }] }}>
+        <View style={[styles.iconCircle, { backgroundColor: `${theme.colors.primary}12` }]}>
+          <Ionicons
+            name={icon}
+            size={56}
+            color={`${theme.colors.primary}60`}
+            style={styles.icon}
+          />
+        </View>
+      </Animated.View>
 
       <Text
         style={[

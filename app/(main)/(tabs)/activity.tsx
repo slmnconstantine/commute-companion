@@ -29,6 +29,8 @@ import Skeleton from '@/components/common/Skeleton';
 import TripCard from '@/components/ride/TripCard';
 import Avatar from '@/components/common/Avatar';
 import { BookingWithTrip, TripWithDriver } from '@/types/database';
+import { exportTripsAsCSV } from '@/utils/exportHistory';
+import AnimatedListItem from '@/components/common/AnimatedListItem';
 import { formatDepartureTime } from '@/utils/dateFormatter';
 import AnimatedSegmentControl from '@/components/common/AnimatedSegmentControl';
 
@@ -49,6 +51,7 @@ const STATUS_STYLES: Record<
   open: { label: 'Open', colorKey: 'success' },
   full: { label: 'Full', colorKey: 'warning' },
   ongoing: { label: 'Ongoing', colorKey: 'info' },
+  dropped_off_early: { label: 'Dropped Off Early', colorKey: 'warning' },
 };
 
 // ── ActivityCard ──────────────────────────────────────────────────────────────
@@ -227,6 +230,32 @@ function ActivityCard({
           </Text>
         </View>
       )}
+
+      {/* View Receipt for completed rides */}
+      {booking.status === 'completed' && (
+        <Pressable
+          style={[styles.reviewBtn, { backgroundColor: `${theme.colors.success}12` }]}
+          onPress={(e) => {
+            e.stopPropagation();
+            const { router } = require('expo-router');
+            router.push(`/(main)/ride/trip-summary?tripId=${booking.trip_id}` as any);
+          }}
+        >
+          <Ionicons name="receipt-outline" size={16} color={theme.colors.success} />
+          <Text
+            style={[
+              theme.typography.caption,
+              {
+                color: theme.colors.success,
+                fontFamily: 'Inter-SemiBold',
+                marginLeft: 6,
+              },
+            ]}
+          >
+            View Receipt
+          </Text>
+        </Pressable>
+      )}
     </Pressable>
   );
 }
@@ -336,7 +365,7 @@ export default function ActivityScreen() {
       if (activeSegment === 'Upcoming') {
         return ['pending', 'accepted', 'open', 'full', 'ongoing'].includes(b.status);
       } else {
-        return ['completed', 'cancelled', 'rejected'].includes(b.status);
+        return ['completed', 'cancelled', 'rejected', 'dropped_off_early'].includes(b.status);
       }
     })
     .sort((a, b) => {
@@ -377,6 +406,23 @@ export default function ActivityScreen() {
         <Text style={[theme.typography.heading, { color: theme.colors.text }]}>
           Activity
         </Text>
+        {activeSegment === 'Past' && (
+          <Pressable 
+            onPress={() => {
+              if (profile?.role === 'driver') {
+                exportTripsAsCSV(driverTrips.filter((t: any) => ['completed', 'cancelled'].includes(t.status)), 'driver');
+              } else {
+                exportTripsAsCSV(bookings.filter((b: any) => b.trip && ['completed', 'cancelled'].includes(b.trip.status)), 'commuter');
+              }
+            }}
+            style={styles.exportBtn}
+          >
+            <Ionicons name="download-outline" size={20} color={theme.colors.primary} />
+            <Text style={[theme.typography.caption, { color: theme.colors.primary, fontFamily: 'Inter-Medium', marginLeft: 4 }]}>
+              Export
+            </Text>
+          </Pressable>
+        )}
       </View>
 
       {/* Segmented control */}
@@ -432,24 +478,26 @@ export default function ActivityScreen() {
                   {filteredDriverTrips.length > 0 && (
                     <View style={styles.driverSectionWrap}>
                       {isDriver && <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>AS A DRIVER</Text>}
-                      {visibleDriverTrips.map((trip) => {
+                      {visibleDriverTrips.map((trip, index) => {
                         const tripReviews = trip.bookings?.flatMap(b => b.reviews || []) || [];
                         const avgRating = tripReviews.length > 0 ? (tripReviews.reduce((sum, r) => sum + r.rating, 0) / tripReviews.length).toFixed(1) : null;
                         
                         return (
-                          <View key={`driver-${trip.id}`} style={styles.tripItemWrap}>
-                            <TripCard trip={trip} onPress={() => router.push(`/(main)/ride/${trip.id}`)} />
-                            {trip.status === 'completed' && tripReviews.length > 0 && (
-                              <View style={styles.tripRatingRow}>
-                                <View style={[styles.tripRatingBadge, { backgroundColor: `${theme.colors.accent}15` }]}>
-                                  <Ionicons name="star" color={theme.colors.accent} size={14} />
-                                  <Text style={[styles.tripRatingText, { color: theme.colors.text }]}>
-                                    {avgRating} <Text style={[styles.tripRatingMuted, { color: theme.colors.textMuted }]}>from passengers</Text>
-                                  </Text>
+                          <AnimatedListItem key={`driver-${trip.id}`} index={index}>
+                            <View style={styles.tripItemWrap}>
+                              <TripCard trip={trip} onPress={() => router.push(`/(main)/ride/${trip.id}`)} />
+                              {trip.status === 'completed' && tripReviews.length > 0 && (
+                                <View style={styles.tripRatingRow}>
+                                  <View style={[styles.tripRatingBadge, { backgroundColor: `${theme.colors.accent}15` }]}>
+                                    <Ionicons name="star" color={theme.colors.accent} size={14} />
+                                    <Text style={[styles.tripRatingText, { color: theme.colors.text }]}>
+                                      {avgRating} <Text style={[styles.tripRatingMuted, { color: theme.colors.textMuted }]}>from passengers</Text>
+                                    </Text>
+                                  </View>
                                 </View>
-                              </View>
-                            )}
-                          </View>
+                              )}
+                            </View>
+                          </AnimatedListItem>
                         );
                       })}
                       
@@ -477,18 +525,19 @@ export default function ActivityScreen() {
                   {filteredBookings.length > 0 && (
                     <View>
                       {isDriver && <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>AS A PASSENGER</Text>}
-                      {visibleBookings.map((item) => (
-                        <ActivityCard
-                          key={`passenger-${item.id}`}
-                          booking={item}
-                          theme={theme}
-                          onPress={() => router.push(`/(main)/ride/${item.trip_id}` as any)}
-                          onReview={() => {
-                            if (item.status === 'completed' && (!item.reviews || item.reviews.length === 0)) {
-                              router.push(`/(main)/ride/review/${item.id}?driverId=${item.trip.driver_id}`);
-                            }
-                          }}
-                        />
+                      {visibleBookings.map((item, index) => (
+                        <AnimatedListItem key={`passenger-${item.id}`} index={index + (filteredDriverTrips.length > 0 ? visibleDriverTrips.length : 0)}>
+                          <ActivityCard
+                            booking={item}
+                            theme={theme}
+                            onPress={() => router.push(`/(main)/ride/${item.trip_id}` as any)}
+                            onReview={() => {
+                              if (item.status === 'completed' && (!item.reviews || item.reviews.length === 0)) {
+                                router.push(`/(main)/ride/review/${item.id}?driverId=${item.trip.driver_id}`);
+                              }
+                            }}
+                          />
+                        </AnimatedListItem>
                       ))}
 
                       {hasMorePassenger && (
@@ -530,9 +579,18 @@ const styles = StyleSheet.create({
 
   /* Header */
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 12,
+    paddingVertical: 16,
+  },
+  exportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(13, 148, 136, 0.1)',
   },
 
   /* Segment control */

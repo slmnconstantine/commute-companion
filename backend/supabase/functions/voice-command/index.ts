@@ -86,15 +86,17 @@ serve(async (req: Request) => {
 
       // Convert base64 to File for Groq Whisper API
       const base64Data = audioBase64.replace(/^data:[^;]+;base64,/, "");
-      const byteCharacters = atob(base64Data);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: 'audio/m4a' });
+      
+      // Efficiently convert base64 to Blob using native fetch
+      const reqDataUri = `data:audio/m4a;base64,${base64Data}`;
+      const response = await fetch(reqDataUri);
+      const blob = await response.blob();
+      
+      // Some APIs require the payload to be a File rather than a Blob
+      const file = new File([blob], 'audio.m4a', { type: 'audio/m4a' });
+      
       const formData = new FormData();
-      formData.append('file', blob, 'audio.m4a');
+      formData.append('file', file);
       formData.append('model', Deno.env.get('AI_TRANSCRIBE_MODEL') || 'whisper-large-v3');
       formData.append('language', 'en'); // 'en' handles Taglish reasonably well
 

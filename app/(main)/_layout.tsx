@@ -27,12 +27,12 @@ export default function MainLayout() {
   return (
     <NotificationProvider>
       <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="ride" />
+        <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
+        <Stack.Screen name="ride" options={{ animation: 'slide_from_bottom' }} />
         <Stack.Screen name="hub" />
         <Stack.Screen name="chat" />
         <Stack.Screen name="verification" />
-        <Stack.Screen name="settings" />
+        <Stack.Screen name="settings" options={{ animation: 'fade' }} />
         <Stack.Screen name="assistant-demo" />
       </Stack>
     </NotificationProvider>

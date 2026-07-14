@@ -2,44 +2,39 @@ import { supabase } from '@/lib/supabase';
 import { Booking, BookingWithTrip, BookingWithCommuter } from '@/types/database';
 import { sendPushNotification } from './pushNotifications';
 import { updateTripStatus } from './trips';
+import { scheduleRideReminder, cancelRideReminder } from './rideReminders';
 
 /** Create a booking request */
 export async function createBooking(bookingData: Omit<Booking, 'id' | 'created_at'>): Promise<{ data: Booking | null; error: Error | null }> {
-  // Check seat availability
-  const { data: trip } = await supabase.from('trips').select('available_seats').eq('id', bookingData.trip_id).single();
-  if (!trip || trip.available_seats <= 0) {
-    return { data: null, error: new Error('Trip is full or unavailable') };
-  }
-
-  // Prevent duplicate bookings
-  const { data: existingBooking } = await supabase
-    .from('bookings')
-    .select('id')
-    .eq('trip_id', bookingData.trip_id)
-    .eq('commuter_id', bookingData.commuter_id)
-    .in('status', ['pending', 'accepted'])
-    .maybeSingle();
-
-  if (existingBooking) {
-    return { data: null, error: new Error('You already have an active booking for this trip.') };
-  }
-
   const { data, error } = await supabase
-    .from('bookings')
-    .insert(bookingData)
-    .select()
+    .rpc('create_booking_if_available', {
+      p_trip_id: bookingData.trip_id,
+      p_commuter_id: bookingData.commuter_id,
+      p_pickup_lat: bookingData.pickup_lat,
+      p_pickup_lng: bookingData.pickup_lng,
+      p_dropoff_lat: bookingData.dropoff_lat,
+      p_dropoff_lng: bookingData.dropoff_lng,
+      p_status: bookingData.status,
+      p_fare_paid: bookingData.fare_paid,
+      p_platform_fee: bookingData.platform_fee,
+      p_seats_booked: bookingData.seats_booked,
+      p_driver_confirmed: bookingData.driver_confirmed,
+      p_commuter_confirmed: bookingData.commuter_confirmed
+    })
     .single();
 
-  if (data && !error) {
+  const booking = data as any;
+
+  if (booking && !error) {
     // Notify the driver
-    const { data: tripData } = await supabase.from('trips').select('driver:profiles!driver_id(push_token)').eq('id', bookingData.trip_id).single();
+    const { data: tripData } = await supabase.from('trips').select('driver:profiles!driver_id(id, push_token)').eq('id', bookingData.trip_id).single();
     const pushToken = (tripData?.driver as any)?.push_token;
     if (pushToken) {
-      await sendPushNotification(pushToken, 'New Ride Request', 'A commuter has requested to join your ride!', { type: 'booking', bookingId: data.id });
+      await sendPushNotification(pushToken, 'New Ride Request', 'A commuter has requested to join your ride!', { type: 'booking', bookingId: booking.id }, (tripData?.driver as any)?.id);
     }
   }
 
-  return { data: data as Booking | null, error: error as Error | null };
+  return { data: booking as Booking | null, error: error as Error | null };
 }
 
 /** Get bookings for a commuter with trip details */
@@ -59,9 +54,9 @@ export async function getCommuterBookings(commuterId: string): Promise<BookingWi
       if (b.status === 'pending' || b.status === 'accepted') {
         const newStatus = b.trip.status === 'cancelled' ? 'rejected' : 'completed';
         // Fire and forget update to fix it in the database
-        supabase.from('bookings').update({ status: newStatus }).eq('id', b.id).then();
+        supabase.from('bookings').update({ status: newStatus }).eq('id', b.id).then(({ error }) => { if (error) console.error(error); });
         // Instantly reflect the correct status in the UI
-        b.status = newStatus;
+        b.status = newStatus as any;
       }
     }
     return b;
@@ -95,7 +90,25 @@ export async function updateBookingStatus(id: string, status: string): Promise<v
         title = 'Ride Declined';
         body = 'The driver declined your booking request.';
       }
-      await sendPushNotification(pushToken, title, body, { type: 'booking_update', status });
+      await sendPushNotification(pushToken, title, body, { type: 'booking_update', status }, data.commuter_id);
+    }
+    if (status === 'accepted') {
+      // Schedule ride reminders for the commuter
+      try {
+        const { data: tripInfo } = await supabase
+          .from('trips')
+          .select('departure_time, origin_label, driver:profiles!driver_id(full_name)')
+          .eq('id', data.trip_id)
+          .single();
+        if (tripInfo) {
+          const driverName = (tripInfo.driver as any)?.full_name || 'your driver';
+          scheduleRideReminder(data.trip_id, tripInfo.departure_time, driverName, tripInfo.origin_label || '').catch(console.error);
+        }
+      } catch (e) {
+        console.error('[Reminders] Failed to schedule:', e);
+      }
+    } else if (status === 'rejected' || status === 'cancelled') {
+      cancelRideReminder(data.trip_id).catch(console.error);
     }
   }
 
@@ -140,7 +153,8 @@ export async function confirmCommuterArrival(bookingId: string): Promise<void> {
         driverPushToken,
         'Passenger Arrived! 🏁',
         `${passengerName} has confirmed their arrival at the destination.`,
-        { type: 'passenger_arrival', bookingId }
+        { type: 'passenger_arrival', bookingId },
+        (updatedBooking.trip as any)?.driver_id
       );
     }
   }
@@ -177,7 +191,8 @@ export async function confirmDriverArrival(bookingId: string): Promise<void> {
         commuterPushToken,
         'Driver Confirmed Arrival 🚗',
         'Your driver has confirmed arrival at your destination. Tap to confirm.',
-        { type: 'driver_arrival', bookingId }
+        { type: 'driver_arrival', bookingId },
+        updatedBooking.commuter_id
       );
     }
   }
@@ -195,11 +210,11 @@ export async function checkAndCompleteTrip(tripId: string): Promise<void> {
     return;
   }
 
-  // Filter only active bookings (accepted or completed)
-  const activeBookings = (bookings || []).filter(b => b.status === 'accepted' || b.status === 'completed');
+  // Filter only active bookings (accepted, completed, or dropped_off_early)
+  const activeBookings = (bookings || []).filter(b => b.status === 'accepted' || b.status === 'completed' || b.status === 'dropped_off_early');
   
-  // If there are bookings and all of them are completed, complete the trip
-  const allCompleted = activeBookings.length > 0 && activeBookings.every(b => b.status === 'completed');
+  // If there are bookings and all of them are completed or dropped_off_early, complete the trip
+  const allCompleted = activeBookings.length > 0 && activeBookings.every(b => b.status === 'completed' || b.status === 'dropped_off_early');
 
   if (allCompleted) {
     try {

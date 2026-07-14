@@ -2,6 +2,8 @@ import { Platform } from 'react-native';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
+import { createNotification } from '@/services/notifications';
+import { handleServiceError } from '@/utils/errorHelper';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -66,7 +68,7 @@ export async function registerForPushNotificationsAsync() {
   return token;
 }
 
-export async function sendPushNotification(expoPushToken: string, title: string, body: string, data = {}) {
+export async function sendPushNotification(expoPushToken: string, title: string, body: string, data: any = {}, userId?: string) {
   const message = {
     to: expoPushToken,
     sound: 'default',
@@ -85,10 +87,14 @@ export async function sendPushNotification(expoPushToken: string, title: string,
       },
       body: JSON.stringify(message),
     });
-    const data = await response.json();
-    console.log('Expo Push Response:', data);
+    const result = await response.json();
+    console.log('Expo Push Response:', result);
+
+    // If userId is provided, log to in-app notifications
+    if (userId) {
+      await createNotification(userId, title, body, data?.type || 'general', data);
+    }
   } catch (e) {
-    const { handleServiceError } = require('@/utils/errorHelper');
     handleServiceError('Error sending push notification', e);
   }
 }

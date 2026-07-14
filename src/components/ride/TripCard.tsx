@@ -123,7 +123,14 @@ export default function TripCard({ trip, onPress, loading = false }: TripCardPro
         />
         <View style={[styles.blurContainer, { backgroundColor: theme.colors.glassBackground }]}>
           <LinearGradient
-            colors={[`${theme.colors.primary}90`, `${theme.colors.accent}90`]}
+            colors={
+              trip.status === 'open' ? ['#34D39990', '#05966990'] :
+              trip.status === 'full' ? ['#FBBF2490', '#F59E0B90'] :
+              trip.status === 'ongoing' ? ['#60A5FA90', '#3B82F690'] :
+              trip.status === 'completed' ? [`${theme.colors.textMuted}50`, `${theme.colors.textMuted}30`] :
+              trip.status === 'cancelled' ? ['#EF444490', '#DC262690'] :
+              [`${theme.colors.primary}90`, `${theme.colors.accent}90`]
+            }
             start={{ x: 0, y: 0 }}
             end={{ x: 0, y: 1 }}
             style={styles.accentGlow}

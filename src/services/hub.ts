@@ -167,7 +167,7 @@ export const createPost = async (
   
   // Notify other users tracking this route (only commute routes, ignoring temporary ride request routes)
   const { data: routesData } = await supabase
-    .from('user_routes')
+    .from('routes')
     .select('user_id, label')
     .eq('route_hash', routeHash);
 
