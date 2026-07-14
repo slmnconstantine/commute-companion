@@ -22,6 +22,10 @@ interface AvatarProps {
   size?: AvatarSize;
   /** Show a small green verification badge */
   showBadge?: boolean;
+  /** Optional ring color for trust indicators */
+  ringColor?: string;
+  /** User rating — auto-sets gold ring for 4.5+ */
+  rating?: number;
 }
 
 const SIZE_MAP: Record<AvatarSize, number> = {
@@ -46,52 +50,85 @@ export default function Avatar({
   name,
   size = 'md',
   showBadge = false,
+  ringColor,
+  rating,
 }: AvatarProps) {
   const { theme } = useTheme();
   const dim = SIZE_MAP[size];
   const badgeSize = Math.max(12, Math.round(dim * 0.3));
   const initialsFont = Math.round(dim * 0.38);
 
+  // Auto-derive ring color from rating if not explicitly set
+  const resolvedRing = ringColor
+    ? ringColor
+    : rating && rating >= 4.5
+    ? '#F59E0B' // Gold for high-rated
+    : showBadge
+    ? theme.colors.success // Green for verified
+    : undefined;
+
+  const ringWidth = resolvedRing ? 2.5 : 0;
+  const outerDim = dim + ringWidth * 2 + 2;
+
   return (
-    <View style={[styles.wrapper, { width: dim, height: dim }]}>
-      {uri ? (
-        <Image
-          source={{ uri }}
+    <View style={[styles.wrapper, { width: outerDim, height: outerDim }]}>
+      {/* Ring */}
+      {resolvedRing ? (
+        <View
           style={[
-            styles.image,
+            styles.ring,
             {
-              width: dim,
-              height: dim,
-              borderRadius: dim / 2,
+              width: outerDim,
+              height: outerDim,
+              borderRadius: outerDim / 2,
+              borderWidth: ringWidth,
+              borderColor: resolvedRing,
             },
           ]}
         />
-      ) : (
-        <View
-          style={[
-            styles.initialsContainer,
-            {
-              width: dim,
-              height: dim,
-              borderRadius: dim / 2,
-              backgroundColor: theme.colors.primary,
-            },
-          ]}
-        >
-          <Text
+      ) : null}
+
+      {/* Avatar content */}
+      <View style={[styles.avatarInner, { width: dim, height: dim, top: ringWidth + 1, left: ringWidth + 1 }]}>
+        {uri ? (
+          <Image
+            source={{ uri }}
             style={[
-              styles.initialsText,
+              styles.image,
               {
-                fontSize: initialsFont,
-                color: theme.colors.white,
-                fontFamily: theme.typography.subtitle.fontFamily,
+                width: dim,
+                height: dim,
+                borderRadius: dim / 2,
+              },
+            ]}
+          />
+        ) : (
+          <View
+            style={[
+              styles.initialsContainer,
+              {
+                width: dim,
+                height: dim,
+                borderRadius: dim / 2,
+                backgroundColor: theme.colors.primary,
               },
             ]}
           >
-            {getInitials(name)}
-          </Text>
-        </View>
-      )}
+            <Text
+              style={[
+                styles.initialsText,
+                {
+                  fontSize: initialsFont,
+                  color: theme.colors.white,
+                  fontFamily: theme.typography.subtitle.fontFamily,
+                },
+              ]}
+            >
+              {getInitials(name)}
+            </Text>
+          </View>
+        )}
+      </View>
 
       {showBadge && (
         <View
@@ -120,6 +157,14 @@ export default function Avatar({
 const styles = StyleSheet.create({
   wrapper: {
     position: 'relative',
+  },
+  ring: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+  },
+  avatarInner: {
+    position: 'absolute',
   },
   image: {
     resizeMode: 'cover',

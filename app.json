@@ -73,7 +73,8 @@
       "expo-splash-screen",
       "expo-audio",
       "expo-asset",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-sharing"
     ],
     "extra": {
       "router": {},

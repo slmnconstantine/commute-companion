@@ -37,7 +37,7 @@ export async function sendMessage(
           
           profilesData.forEach((user: any) => {
             if (user.push_token) {
-              sendPushNotification(user.push_token, notificationTitle, content, { type: 'chat', chatRoomId });
+              sendPushNotification(user.push_token, notificationTitle, content, { type: 'chat', chatRoomId }, user.id);
             }
           });
         }

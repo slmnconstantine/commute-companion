@@ -7,6 +7,7 @@ import {
   Dimensions,
   StatusBar,
   Pressable,
+  ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -99,16 +100,21 @@ export default function WelcomeScreen() {
       </View>
 
       {/* Animated Content Wrapper */}
-      <Animated.View 
-        style={[
+      <Animated.ScrollView 
+        contentContainerStyle={[
           styles.contentWrapper, 
           { 
             paddingTop: insets.top + 60,
-            paddingBottom: insets.bottom + 30,
-            opacity: contentOpacity,
-            transform: [{ translateY: contentTranslateY }]
+            paddingBottom: Math.max(insets.bottom, 20) + 40,
           }
         ]}
+        style={{
+          flex: 1,
+          opacity: contentOpacity,
+          transform: [{ translateY: contentTranslateY }]
+        }}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
       >
         {/* Header / Logo */}
         <View style={styles.header}>
@@ -145,7 +151,7 @@ export default function WelcomeScreen() {
             variant="glass" 
           />
         </View>
-      </Animated.View>
+      </Animated.ScrollView>
     </View>
   );
 }
@@ -218,7 +224,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentWrapper: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: 24,
     justifyContent: 'space-between',
   },

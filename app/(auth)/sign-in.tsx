@@ -124,7 +124,13 @@ export default function SignInScreen() {
         {/* Back Button */}
         <Pressable
           style={[styles.backButton, { marginTop: 8 }]}
-          onPress={() => router.back()}
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/');
+            }
+          }}
         >
           <View style={styles.backButtonBackground} />
           <Ionicons name="arrow-back" size={22} color={COLORS.text} />

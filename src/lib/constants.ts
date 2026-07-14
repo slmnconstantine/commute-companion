@@ -53,4 +53,4 @@ export const DEFAULT_PAGE_SIZE = 20;
 // ---------------------------------------------------------------------------
 
 export const TRIP_STATUSES = ['open', 'full', 'ongoing', 'completed', 'cancelled'] as const;
-export const BOOKING_STATUSES = ['pending', 'accepted', 'rejected', 'completed'] as const;
+export const BOOKING_STATUSES = ['pending', 'accepted', 'rejected', 'completed', 'dropped_off_early'] as const;

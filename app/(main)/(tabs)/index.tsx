@@ -377,7 +377,7 @@ export default function HomeScreen() {
       const next = !prev;
       Alert.alert(
         next ? 'Visibility Enabled 👁️' : 'Visibility Disabled 🙈',
-        next 
+        next
           ? 'Your location is now visible to other members commuting on this route.'
           : 'Your location is no longer shared with this route community.'
       );
@@ -453,7 +453,7 @@ export default function HomeScreen() {
           const ne = [Math.max(...lngs), Math.max(...lats)];
           cameraRef.current.fitBounds(
             [sw[0], sw[1], ne[0], ne[1]],
-            { padding: { top: 50, bottom: 50, left: 50, right: 50 }, duration: 1000 }
+            { padding: { top: 120, bottom: 380, left: 50, right: 80 }, duration: 1000 }
           );
         }
       }
@@ -547,7 +547,7 @@ export default function HomeScreen() {
         {Object.values(routeMembers).map((member) => {
           // Skip drawing ourselves
           if (member.userId === profile?.id) return null;
-          
+
           return (
             <Marker
               key={member.userId}
@@ -608,41 +608,59 @@ export default function HomeScreen() {
             </LinearGradient>
           </Pressable>
         ) : (
-          <GlassCard
-            backgroundColor={theme.colors.glassBackground}
-            borderColor={theme.colors.glassBorder}
-            borderRadius={16}
-            tint={mode === 'dark' ? 'dark' : 'light'}
-            intensity={50}
-            style={styles.searchBarGlass}
-          >
-            <Pressable
-              style={styles.searchBarInner}
-              onPress={() => {
-                // TODO: navigate to search screen
-              }}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, width: '100%' }}>
+            <GlassCard
+              backgroundColor={theme.colors.glassBackground}
+              borderColor={theme.colors.glassBorder}
+              borderRadius={16}
+              tint={mode === 'dark' ? 'dark' : 'light'}
+              intensity={50}
+              style={[styles.searchBarGlass, { flex: 1 }]}
             >
-              <View style={[styles.searchIconWrap, { backgroundColor: theme.colors.primarySubtle }]}>
-                <Ionicons name="search" size={18} color={theme.colors.primary} />
-              </View>
-              <Text
-                style={[
-                  styles.searchPlaceholder,
-                  theme.typography.body,
-                  { color: theme.colors.textMuted },
-                ]}
+              <Pressable
+                style={styles.searchBarInner}
+                onPress={() => {
+                  // TODO: navigate to search screen
+                }}
               >
-                Where are you going?
-              </Text>
-              <View
-                style={[
-                  styles.searchDivider,
-                  { backgroundColor: theme.colors.border },
-                ]}
-              />
-              <Ionicons name="time-outline" size={18} color={theme.colors.primary} />
-            </Pressable>
-          </GlassCard>
+                <View style={[styles.searchIconWrap, { backgroundColor: theme.colors.primarySubtle }]}>
+                  <Ionicons name="search" size={18} color={theme.colors.primary} />
+                </View>
+                <Text
+                  style={[
+                    styles.searchPlaceholder,
+                    theme.typography.body,
+                    { color: theme.colors.textMuted },
+                  ]}
+                >
+                  Where are you going?
+                </Text>
+                <View
+                  style={[
+                    styles.searchDivider,
+                    { backgroundColor: theme.colors.border },
+                  ]}
+                />
+                <Ionicons name="time-outline" size={18} color={theme.colors.primary} />
+              </Pressable>
+            </GlassCard>
+
+            <GlassCard
+              backgroundColor={theme.colors.glassBackground}
+              borderColor={theme.colors.glassBorder}
+              borderRadius={16}
+              tint={mode === 'dark' ? 'dark' : 'light'}
+              intensity={50}
+              style={styles.bellGlass}
+            >
+              <Pressable
+                style={styles.bellBtn}
+                onPress={() => router.push('/(main)/notification-inbox')}
+              >
+                <Ionicons name="notifications-outline" size={24} color={theme.colors.text} />
+              </Pressable>
+            </GlassCard>
+          </View>
         )}
       </SafeAreaView>
 
@@ -735,8 +753,8 @@ export default function HomeScreen() {
                   {locationLoading
                     ? 'Getting your location…'
                     : nearbyRidesCount === null
-                    ? 'Finding rides nearby…'
-                    : `${nearbyRidesCount} ${nearbyRidesCount === 1 ? 'ride' : 'rides'} nearby`}
+                      ? 'Finding rides nearby…'
+                      : `${nearbyRidesCount} ${nearbyRidesCount === 1 ? 'ride' : 'rides'} nearby`}
                 </Text>
               </View>
               <View style={[styles.chevronWrap, { backgroundColor: theme.colors.primarySubtle }]}>
@@ -796,7 +814,7 @@ export default function HomeScreen() {
                   Set Route
                 </Text>
               </Pressable>
-              {([{icon: 'home', label: 'Home'}, {icon: 'business', label: 'Work'}, {icon: 'star', label: 'Saved'}] as const).map((item) => (
+              {([{ icon: 'home', label: 'Home' }, { icon: 'business', label: 'Work' }, { icon: 'star', label: 'Saved' }] as const).map((item) => (
                 <Pressable
                   key={item.label}
                   style={({ pressed }) => [
@@ -842,12 +860,25 @@ const styles = StyleSheet.create({
     zIndex: 10,
     paddingHorizontal: 16,
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 8 : 0,
+    flexDirection: 'row',
+    gap: 8,
   },
   searchBarGlass: {
+    flex: 1,
+    height: 52,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.12,
     shadowRadius: 16,
     elevation: 10,
+  },
+  bellGlass: {
+    height: 52,
+    width: 52,
+  },
+  bellBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   searchBarInner: {
     flexDirection: 'row',
@@ -996,11 +1027,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   ongoingBanner: {
+    flex: 1,
     borderRadius: 16,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.35,
     shadowRadius: 14,
-    elevation: 10,
+    elevation: 4,
     overflow: 'hidden',
   },
   bannerGradient: {

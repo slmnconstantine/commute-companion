@@ -247,7 +247,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
           .from('trips')
           .select('id')
           .eq('driver_id', profile.id)
-          .in('status', ['scheduled', 'in_progress']);
+          .in('status', ['open', 'full', 'ongoing']);
 
         if (trips && trips.length > 0) {
           const tripIds = trips.map(t => t.id);

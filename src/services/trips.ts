@@ -100,12 +100,19 @@ export async function updateTripStatus(id: string, status: string): Promise<{ er
     }
 
     if (status === 'completed' || status === 'cancelled') {
-      // Cascade status to bookings
+      // Cancel pending bookings
+      await supabase
+        .from('bookings')
+        .update({ status: 'cancelled' })
+        .eq('trip_id', id)
+        .in('status', ['pending']);
+
+      // Cascade status to accepted bookings
       await supabase
         .from('bookings')
         .update({ status: status })
         .eq('trip_id', id)
-        .in('status', ['accepted', 'pending']);
+        .in('status', ['accepted']);
     }
 
     // Send push notifications to passengers
@@ -283,4 +290,20 @@ export async function deleteTrip(id: string): Promise<{ error: Error | null }> {
   }
 
   return { error: error as unknown as Error };
+}
+
+/** Check if driver currently has an ongoing trip */
+export async function hasActiveTrip(driverId: string): Promise<boolean> {
+  const { count, error } = await supabase
+    .from('trips')
+    .select('*', { count: 'exact', head: true })
+    .eq('driver_id', driverId)
+    .eq('status', 'ongoing');
+
+  if (error) {
+    handleServiceError('Failed to check active trips:', error);
+    return false;
+  }
+
+  return (count || 0) > 0;
 }
