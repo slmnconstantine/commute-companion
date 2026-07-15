@@ -613,8 +613,6 @@ export default function HomeScreen() {
               backgroundColor={theme.colors.glassBackground}
               borderColor={theme.colors.glassBorder}
               borderRadius={16}
-              tint={mode === 'dark' ? 'dark' : 'light'}
-              intensity={50}
               style={[styles.searchBarGlass, { flex: 1 }]}
             >
               <Pressable
@@ -649,8 +647,6 @@ export default function HomeScreen() {
               backgroundColor={theme.colors.glassBackground}
               borderColor={theme.colors.glassBorder}
               borderRadius={16}
-              tint={mode === 'dark' ? 'dark' : 'light'}
-              intensity={50}
               style={styles.bellGlass}
             >
               <Pressable
@@ -713,8 +709,6 @@ export default function HomeScreen() {
           backgroundColor={theme.colors.glassBackground}
           borderColor={theme.colors.glassBorder}
           borderRadius={24}
-          tint={mode === 'dark' ? 'dark' : 'light'}
-          intensity={60}
           style={styles.bottomCardGlass}
         >
           <Pressable

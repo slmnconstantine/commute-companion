@@ -226,7 +226,7 @@ export default function TripDetailScreen() {
               if (trip) {
                 const seatsBooked = booking.seats_booked || 1;
                 const newAvailableSeats = Math.max(0, trip.available_seats - seatsBooked);
-                
+
                 const updates: any = { available_seats: newAvailableSeats };
                 if (newAvailableSeats <= 0 && trip.status === 'open') {
                   updates.status = 'full';
@@ -315,7 +315,7 @@ export default function TripDetailScreen() {
               if (isAccepted && trip) {
                 const seatsBooked = booking.seats_booked || 1;
                 const newAvailableSeats = trip.available_seats + seatsBooked;
-                
+
                 const updates: any = { available_seats: newAvailableSeats };
                 if (newAvailableSeats > 0 && trip.status === 'full') {
                   updates.status = 'open';
@@ -347,7 +347,7 @@ export default function TripDetailScreen() {
 
   const handleLeaveTrip = async (bookingId: string) => {
     const warning = await getCancellationWarning();
-    const alertBody = warning 
+    const alertBody = warning
       ? `Are you sure you want to remove yourself from this trip?\n\n${warning}`
       : 'Are you sure you want to remove yourself from this trip?';
 
@@ -370,7 +370,7 @@ export default function TripDetailScreen() {
               if (booking && isAccepted && trip) {
                 const seatsBooked = booking.seats_booked || 1;
                 const newAvailableSeats = trip.available_seats + seatsBooked;
-                
+
                 const updates: any = { available_seats: newAvailableSeats };
                 if (newAvailableSeats > 0 && trip.status === 'full') {
                   updates.status = 'open';
@@ -549,7 +549,7 @@ export default function TripDetailScreen() {
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       {/* @ts-ignore */}
       {trip?.status === 'ongoing' && <StatusBar style="light" backgroundColor={theme.colors.success as any} />}
-      
+
       {/* Map Header */}
       <View style={[styles.mapSection, isOngoingActiveUser && styles.mapSectionEnlarged]}>
         <Map
@@ -565,10 +565,20 @@ export default function TripDetailScreen() {
         >
           <Camera
             ref={cameraRef}
-            initialViewState={{
-              center: [(trip.origin_lng + trip.destination_lng) / 2, (trip.origin_lat + trip.destination_lat) / 2],
-              zoom: 10,
+            bounds={[
+              Math.min(trip.origin_lng, trip.destination_lng),
+              Math.min(trip.origin_lat, trip.destination_lat),
+              Math.max(trip.origin_lng, trip.destination_lng),
+              Math.max(trip.origin_lat, trip.destination_lat),
+            ]}
+            padding={{
+              top: 100,
+              bottom: 380, // Accounts for the bottom sheet
+              left: 50,
+              right: 50,
             }}
+            duration={1000}
+            easing="fly"
           />
 
           <Marker id="origin" lngLat={[trip.origin_lng, trip.origin_lat]}>
@@ -612,19 +622,19 @@ export default function TripDetailScreen() {
         )}
         <Pressable
           style={[
-            styles.backBtn, 
-            { 
-              backgroundColor: trip.status === 'ongoing' ? theme.colors.success : theme.colors.surface, 
+            styles.backBtn,
+            {
+              backgroundColor: trip.status === 'ongoing' ? theme.colors.success : theme.colors.surface,
               top: insets.top + 8,
               zIndex: 10,
             }
           ]}
           onPress={() => router.back()}
         >
-          <Ionicons 
-            name="arrow-back" 
-            size={22} 
-            color={trip.status === 'ongoing' ? theme.colors.white : theme.colors.text} 
+          <Ionicons
+            name="arrow-back"
+            size={22}
+            color={trip.status === 'ongoing' ? theme.colors.white : theme.colors.text}
           />
         </Pressable>
 
@@ -659,94 +669,94 @@ export default function TripDetailScreen() {
       {/* Bottom Sheet Content */}
       <BottomSheet
         index={0}
-        snapPoints={['35%', '85%']}
+        snapPoints={['45%', '85%']}
         backgroundStyle={{ backgroundColor: theme.colors.background }}
         handleIndicatorStyle={{ backgroundColor: theme.colors.border }}
       >
         <BottomSheetScrollView contentContainerStyle={styles.contentInner}>
-        {/* Status + Time */}
-        <View style={styles.statusRow}>
-          <Badge label={trip.status} variant={trip.status === 'open' || trip.status === 'full' ? 'pending' : trip.status === 'ongoing' ? 'active' : 'completed'} />
-          <Text style={[styles.timeText, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
-            {formatDepartureTime(trip.departure_time)}
-          </Text>
-        </View>
+          {/* Status + Time */}
+          <View style={styles.statusRow}>
+            <Badge label={trip.status} variant={trip.status === 'open' || trip.status === 'full' ? 'pending' : trip.status === 'ongoing' ? 'active' : 'completed'} />
+            <Text style={[styles.timeText, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
+              {formatDepartureTime(trip.departure_time)}
+            </Text>
+          </View>
 
-        {/* Route */}
-        <View style={[styles.routeCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-          <View style={styles.routeRow}>
-            <View style={[styles.dot, { backgroundColor: theme.colors.primary }]} />
-            <View style={styles.routeInfo}>
-              <Text style={[styles.routeLabel, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>Pickup</Text>
-              <Text style={[styles.routeAddress, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]} numberOfLines={2}>{trip.origin_label}</Text>
+          {/* Route */}
+          <View style={[styles.routeCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+            <View style={styles.routeRow}>
+              <View style={[styles.dot, { backgroundColor: theme.colors.primary }]} />
+              <View style={styles.routeInfo}>
+                <Text style={[styles.routeLabel, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>Pickup</Text>
+                <Text style={[styles.routeAddress, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]} numberOfLines={2}>{trip.origin_label}</Text>
+              </View>
+            </View>
+            <View style={[styles.routeDivider, { borderLeftColor: theme.colors.border }]} />
+            <View style={styles.routeRow}>
+              <View style={[styles.dot, { backgroundColor: theme.colors.accent, borderRadius: 3 }]} />
+              <View style={styles.routeInfo}>
+                <Text style={[styles.routeLabel, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>Drop-off</Text>
+                <Text style={[styles.routeAddress, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]} numberOfLines={2}>{trip.destination_label}</Text>
+              </View>
             </View>
           </View>
-          <View style={[styles.routeDivider, { borderLeftColor: theme.colors.border }]} />
-          <View style={styles.routeRow}>
-            <View style={[styles.dot, { backgroundColor: theme.colors.accent, borderRadius: 3 }]} />
-            <View style={styles.routeInfo}>
-              <Text style={[styles.routeLabel, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>Drop-off</Text>
-              <Text style={[styles.routeAddress, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]} numberOfLines={2}>{trip.destination_label}</Text>
+
+          {/* Driver Info */}
+          <View style={[styles.driverCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+            <Pressable onPress={() => { setSelectedProfileId(trip.driver?.id || null); setProfileModalVisible(true); }}>
+              <Avatar uri={trip.driver?.avatar_url} name={trip.driver?.full_name || ''} size="lg" showBadge={trip.driver?.verified_badge} />
+            </Pressable>
+            <View style={styles.driverInfo}>
+              <Text style={[styles.driverName, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>{trip.driver?.full_name}</Text>
+              <View style={styles.ratingRow}>
+                <Ionicons name="star" size={16} color={theme.colors.accent} />
+                <Text style={[styles.ratingText, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]}>
+                  {trip.driver?.rating_avg?.toFixed(1) || 'New'}
+                </Text>
+                <Text style={[styles.ratingCount, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
+                  ({trip.driver?.total_ratings || 0} ratings)
+                </Text>
+              </View>
+              {trip.vehicle && (
+                <Text style={[styles.vehicleText, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
+                  {trip.vehicle.model} • {trip.vehicle.plate_number}
+                </Text>
+              )}
             </View>
           </View>
-        </View>
 
-        {/* Driver Info */}
-        <View style={[styles.driverCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-          <Pressable onPress={() => { setSelectedProfileId(trip.driver?.id || null); setProfileModalVisible(true); }}>
-            <Avatar uri={trip.driver?.avatar_url} name={trip.driver?.full_name || ''} size="lg" showBadge={trip.driver?.verified_badge} />
-          </Pressable>
-          <View style={styles.driverInfo}>
-            <Text style={[styles.driverName, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>{trip.driver?.full_name}</Text>
-            <View style={styles.ratingRow}>
-              <Ionicons name="star" size={16} color={theme.colors.accent} />
-              <Text style={[styles.ratingText, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]}>
-                {trip.driver?.rating_avg?.toFixed(1) || 'New'}
-              </Text>
-              <Text style={[styles.ratingCount, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
-                ({trip.driver?.total_ratings || 0} ratings)
-              </Text>
-            </View>
-            {trip.vehicle && (
-              <Text style={[styles.vehicleText, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
-                {trip.vehicle.model} • {trip.vehicle.plate_number}
-              </Text>
+          {/* Trip Stats */}
+          <View style={styles.statsRow}>
+            <StatItem icon="people" label="Seats" value={`${trip.available_seats}`} theme={theme} />
+            {isDriver ? (
+              <StatItem
+                icon="wallet"
+                label="Net Earnings"
+                value={formatCurrency(driverPayoutDetails.netPayout)}
+                theme={theme}
+                highlight
+              />
+            ) : (
+              <StatItem icon="cash" label="Per seat" value={trip.fare_per_seat === 0 ? 'FREE' : formatCurrency(trip.fare_per_seat)} theme={theme} highlight />
             )}
           </View>
-        </View>
 
-        {/* Trip Stats */}
-        <View style={styles.statsRow}>
-          <StatItem icon="people" label="Seats" value={`${trip.available_seats}`} theme={theme} />
-          {isDriver ? (
-            <StatItem
-              icon="wallet"
-              label="Net Earnings"
-              value={formatCurrency(driverPayoutDetails.netPayout)}
+          {/* Bookings Section (Driver Only) */}
+          {isDriver && (
+            <DriverBookingsList
+              bookings={bookings}
+              trip={trip}
               theme={theme}
-              highlight
+              processingBookingId={processingBookingId}
+              acceptedBookings={acceptedBookings}
+              driverPayoutDetails={driverPayoutDetails}
+              handleAcceptBooking={handleAcceptBooking}
+              handleRejectBooking={handleRejectBooking}
+              handleRemovePassenger={handleRemovePassenger}
+              handleDriverArrival={handleDriverArrival}
+              onAvatarPress={(userId) => { setSelectedProfileId(userId); setProfileModalVisible(true); }}
             />
-          ) : (
-            <StatItem icon="cash" label="Per seat" value={trip.fare_per_seat === 0 ? 'FREE' : formatCurrency(trip.fare_per_seat)} theme={theme} highlight />
           )}
-        </View>
-
-        {/* Bookings Section (Driver Only) */}
-        {isDriver && (
-          <DriverBookingsList
-            bookings={bookings}
-            trip={trip}
-            theme={theme}
-            processingBookingId={processingBookingId}
-            acceptedBookings={acceptedBookings}
-            driverPayoutDetails={driverPayoutDetails}
-            handleAcceptBooking={handleAcceptBooking}
-            handleRejectBooking={handleRejectBooking}
-            handleRemovePassenger={handleRemovePassenger}
-            handleDriverArrival={handleDriverArrival}
-            onAvatarPress={(userId) => { setSelectedProfileId(userId); setProfileModalVisible(true); }}
-          />
-        )}
         </BottomSheetScrollView>
       </BottomSheet>
 
@@ -769,10 +779,10 @@ export default function TripDetailScreen() {
       />
 
       {/* Modals */}
-      <ProfileCardModal 
-        userId={selectedProfileId} 
-        visible={profileModalVisible} 
-        onClose={() => setProfileModalVisible(false)} 
+      <ProfileCardModal
+        userId={selectedProfileId}
+        visible={profileModalVisible}
+        onClose={() => setProfileModalVisible(false)}
       />
     </View>
   );
@@ -790,8 +800,8 @@ function StatItem({ icon, label, value, theme, highlight }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  mapSection: { width: '100%', height: '45%', position: 'relative' },
-  mapSectionEnlarged: { height: '65%' },
+  mapSection: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  mapSectionEnlarged: {},
   map: { flex: 1, width: '100%', height: '100%' },
   backBtn: { position: 'absolute', left: 16, width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 4 },
   deleteBtn: { position: 'absolute', right: 16, width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 4 },

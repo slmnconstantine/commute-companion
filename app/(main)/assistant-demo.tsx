@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, Pressable, Animated, Easing, Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
+
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
@@ -286,11 +286,7 @@ export default function AssistantDemoScreen() {
 
           {/* Demo assistant sheet */}
           <View style={[styles.demoSheet, { overflow: 'hidden' }]}>
-            <BlurView
-              intensity={mode === 'dark' ? 30 : 50}
-              tint={mode === 'dark' ? 'dark' : 'light'}
-              style={StyleSheet.absoluteFill}
-            />
+
             <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.colors.glassBackground }]} />
 
             {/* Handle */}

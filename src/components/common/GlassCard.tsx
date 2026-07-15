@@ -7,8 +7,9 @@
  */
 
 import React from 'react';
-import { View, StyleSheet, ViewStyle, Platform } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { View, StyleSheet, ViewStyle } from 'react-native';
+import { useTheme } from '@/context/ThemeContext';
+
 
 interface GlassCardProps {
   children: React.ReactNode;
@@ -18,51 +19,26 @@ interface GlassCardProps {
   borderColor?: string;
   /** Custom style overrides */
   style?: ViewStyle | ViewStyle[];
-  /** Blur intensity (0-100) */
-  intensity?: number;
-  /** Blur tint */
-  tint?: 'light' | 'dark' | 'default';
+
   /** Border radius */
   borderRadius?: number;
 }
 
 export default function GlassCard({
   children,
-  backgroundColor = 'rgba(255, 255, 255, 0.75)',
-  borderColor = 'rgba(255, 255, 255, 0.2)',
+  backgroundColor,
+  borderColor,
   style,
-  intensity = 40,
-  tint = 'light',
   borderRadius = 20,
 }: GlassCardProps) {
-  // On Android, BlurView support can be inconsistent, so we use a
-  // semi-transparent fallback with higher opacity for similar effect
-  if (Platform.OS === 'android') {
-    return (
-      <View
-        style={[
-          styles.container,
-          {
-            backgroundColor,
-            borderColor,
-            borderRadius,
-          },
-          style,
-        ]}
-      >
-        {children}
-      </View>
-    );
-  }
-
+  const { theme } = useTheme();
   return (
-    <BlurView
-      intensity={intensity}
-      tint={tint}
+    <View
       style={[
         styles.container,
         {
-          borderColor,
+          backgroundColor: backgroundColor || theme.colors.glassBackground,
+          borderColor: borderColor || theme.colors.glassBorder,
           borderRadius,
           overflow: 'hidden',
         },
@@ -70,7 +46,7 @@ export default function GlassCard({
       ]}
     >
       {children}
-    </BlurView>
+    </View>
   );
 }
 

@@ -8,7 +8,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
-import { BlurView } from 'expo-blur';
+
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/context/ThemeContext';
@@ -100,6 +100,18 @@ export default function TripCard({ trip, onPress, loading = false }: TripCardPro
     }).start();
   };
 
+  const getStatusColor = () => {
+    switch (trip.status) {
+      case 'open': return theme.colors.success;
+      case 'full': return theme.colors.warning;
+      case 'ongoing': return theme.colors.info;
+      case 'completed': return theme.colors.info;
+      case 'cancelled': return theme.colors.error;
+      default: return theme.colors.primary;
+    }
+  };
+  const statusColor = getStatusColor();
+
   return (
     <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: scaleAnim }] }}>
       <Pressable
@@ -108,33 +120,18 @@ export default function TripCard({ trip, onPress, loading = false }: TripCardPro
         style={[
           styles.container,
           {
-            backgroundColor: 'transparent', // BlurView provides background
+            backgroundColor: theme.colors.surface,
             borderColor: theme.colors.border,
+            borderLeftWidth: 3,
+            borderLeftColor: statusColor,
           },
         ]}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         onPress={onPress}
       >
-        <BlurView 
-          intensity={mode === 'dark' ? 40 : 60} 
-          tint={mode === 'dark' ? 'dark' : 'light'} 
-          style={StyleSheet.absoluteFill} 
-        />
+
         <View style={[styles.blurContainer, { backgroundColor: theme.colors.glassBackground }]}>
-          <LinearGradient
-            colors={
-              trip.status === 'open' ? ['#34D39990', '#05966990'] :
-              trip.status === 'full' ? ['#FBBF2490', '#F59E0B90'] :
-              trip.status === 'ongoing' ? ['#60A5FA90', '#3B82F690'] :
-              trip.status === 'completed' ? [`${theme.colors.textMuted}50`, `${theme.colors.textMuted}30`] :
-              trip.status === 'cancelled' ? ['#EF444490', '#DC262690'] :
-              [`${theme.colors.primary}90`, `${theme.colors.accent}90`]
-            }
-            start={{ x: 0, y: 0 }}
-            end={{ x: 0, y: 1 }}
-            style={styles.accentGlow}
-          />
       {/* Driver Info Row */}
       <View style={styles.driverRow}>
         <Avatar

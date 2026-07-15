@@ -134,9 +134,11 @@ export default function VoiceAssistantFab() {
       offsetY.value = translateY.value;
     });
 
-  const tapGesture = Gesture.Tap().onEnd(() => {
-    runOnJS(handlePress)();
-  });
+  const tapGesture = Gesture.Tap()
+    .maxDistance(10)
+    .onEnd(() => {
+      runOnJS(handlePress)();
+    });
 
   const composedGesture = Gesture.Simultaneous(betterPanGesture, tapGesture);
 
@@ -206,7 +208,7 @@ export default function VoiceAssistantFab() {
 const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
-    bottom: 90,
+    bottom: 120,
     right: 20,
     width: 56,
     height: 56,
@@ -227,7 +229,7 @@ const styles = StyleSheet.create({
   },
   glowLayer: {
     position: 'absolute',
-    bottom: 86,
+    bottom: 116,
     right: 16,
     width: 64,
     height: 64,
@@ -236,7 +238,7 @@ const styles = StyleSheet.create({
   },
   activeRing: {
     position: 'absolute',
-    bottom: 83,
+    bottom: 113,
     right: 13,
     width: 70,
     height: 70,

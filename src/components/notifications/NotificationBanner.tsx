@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, View, Text, StyleSheet, Pressable, PanResponder } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
+
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
@@ -123,12 +123,7 @@ export default function NotificationBanner({ activeNotification, slideAnim, hand
         },
       ]}
     >
-      {/* Glassmorphic background */}
-      <BlurView
-        intensity={mode === 'dark' ? 40 : 60}
-        tint={mode === 'dark' ? 'dark' : 'light'}
-        style={styles.blurBackground}
-      />
+
 
       {/* Glass overlay for the card surface */}
       <View style={[styles.glassOverlay, { backgroundColor: theme.colors.glassBackground, borderColor: `${theme.colors.border}` }]} />
