@@ -209,6 +209,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     padding: 16,
+    marginBottom: 14,
     gap: 12,
   },
   header: {
