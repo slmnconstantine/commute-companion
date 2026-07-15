@@ -6,9 +6,9 @@
  * Press feedback uses a subtle scale animation via Animated API.
  */
 
-import React, { useRef } from 'react';
+import React from 'react';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming } from 'react-native-reanimated';
 import {
-  Animated,
   ActivityIndicator,
   Pressable,
   StyleSheet,
@@ -57,29 +57,33 @@ export default function Button({
   style,
 }: ButtonProps) {
   const { theme } = useTheme();
-  const scale = useRef(new Animated.Value(1)).current;
+  const scale = useSharedValue(1);
 
   // ---- press animation helpers ----
   const animateIn = () => {
     if (variant === 'primary' || variant === 'danger') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    Animated.spring(scale, {
-      toValue: 0.97,
-      useNativeDriver: true,
-      speed: 50,
-      bounciness: 4,
-    }).start();
+    scale.value = withSpring(0.96, {
+      damping: 20,
+      stiffness: 300,
+      mass: 0.5,
+    });
   };
 
   const animateOut = () => {
-    Animated.spring(scale, {
-      toValue: 1,
-      useNativeDriver: true,
-      speed: 50,
-      bounciness: 4,
-    }).start();
+    scale.value = withSpring(1, {
+      damping: 20,
+      stiffness: 300,
+      mass: 0.5,
+    });
   };
+
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: scale.value }],
+    };
+  });
 
   // ---- size mapping ----
   const sizeStyles: Record<ButtonSize, { height: number; textStyle: TextStyle }> = {
@@ -134,7 +138,7 @@ export default function Button({
     <Animated.View
       style={[
         styles.wrapper,
-        { transform: [{ scale }] },
+        animatedStyle,
         disabled && styles.disabled,
         style,
       ]}

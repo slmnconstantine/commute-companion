@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Animated, Easing } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withRepeat, withSequence, withDelay, Easing } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
@@ -9,51 +10,39 @@ export default function NotFoundScreen() {
   const { theme } = useTheme();
 
   // Animations
-  const bounceAnim = useRef(new Animated.Value(0)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
+  const bounceAnim = useSharedValue(0);
+  const fadeAnim = useSharedValue(0);
+  const slideAnim = useSharedValue(30);
 
   useEffect(() => {
     // Icon float animation (loops)
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(bounceAnim, {
-          toValue: -12,
-          duration: 1500,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(bounceAnim, {
-          toValue: 0,
-          duration: 1500,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
+    bounceAnim.value = withRepeat(
+      withSequence(
+        withTiming(-12, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0, { duration: 1500, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      true
+    );
 
     // Content fade-in + slide-up
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 600,
-        delay: 200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 600,
-        delay: 200,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-    ]).start();
+    fadeAnim.value = withDelay(200, withTiming(1, { duration: 600 }));
+    slideAnim.value = withDelay(200, withTiming(0, { duration: 600, easing: Easing.out(Easing.cubic) }));
   }, []);
+
+  const iconStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: bounceAnim.value }]
+  }));
+
+  const contentStyle = useAnimatedStyle(() => ({
+    opacity: fadeAnim.value,
+    transform: [{ translateY: slideAnim.value }]
+  }));
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       {/* Floating compass icon */}
-      <Animated.View style={[styles.iconWrapper, { transform: [{ translateY: bounceAnim }] }]}>
+      <Animated.View style={[styles.iconWrapper, iconStyle]}>
         <View style={[styles.iconCircle, { backgroundColor: `${theme.colors.primary}12` }]}>
           <Ionicons name="compass-outline" size={64} color={theme.colors.primary} />
         </View>
@@ -63,10 +52,7 @@ export default function NotFoundScreen() {
       <Animated.View
         style={[
           styles.textContent,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }],
-          },
+          contentStyle,
         ]}
       >
         <Text style={[styles.errorCode, { color: theme.colors.textMuted, fontFamily: 'Inter-Bold' }]}>

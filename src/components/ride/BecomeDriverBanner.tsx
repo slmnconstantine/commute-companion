@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Animated, Easing } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withRepeat, withSequence, Easing, withDelay, interpolate } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/context/ThemeContext';
@@ -11,79 +12,55 @@ export default function BecomeDriverBanner({
   theme: ReturnType<typeof useTheme>['theme'];
   onPress: () => void;
 }) {
-  const carDrift = useRef(new Animated.Value(0)).current;
-  const shimmerPos = useRef(new Animated.Value(-1)).current;
-  const sparkleOpacity = useRef(new Animated.Value(0.6)).current;
+  const carDrift = useSharedValue(0);
+  const shimmerPos = useSharedValue(-1);
+  const sparkleOpacity = useSharedValue(0.6);
 
   useEffect(() => {
     // Car drift animation — gentle left-right
-    const drift = Animated.loop(
-      Animated.sequence([
-        Animated.timing(carDrift, {
-          toValue: 8,
-          duration: 1800,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(carDrift, {
-          toValue: -8,
-          duration: 1800,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-      ])
+    carDrift.value = withRepeat(
+      withSequence(
+        withTiming(8, { duration: 1800, easing: Easing.inOut(Easing.sin) }),
+        withTiming(-8, { duration: 1800, easing: Easing.inOut(Easing.sin) })
+      ),
+      -1,
+      true
     );
-    drift.start();
 
     // Shimmer sweep on CTA button
-    const shimmer = Animated.loop(
-      Animated.sequence([
-        Animated.delay(3000),
-        Animated.timing(shimmerPos, {
-          toValue: 1,
-          duration: 800,
-          useNativeDriver: true,
-          easing: Easing.inOut(Easing.cubic),
-        }),
-        Animated.timing(shimmerPos, {
-          toValue: -1,
-          duration: 0,
-          useNativeDriver: true,
-        }),
-      ])
+    shimmerPos.value = withRepeat(
+      withSequence(
+        withDelay(3000, withTiming(1, { duration: 800, easing: Easing.inOut(Easing.cubic) })),
+        withTiming(-1, { duration: 0 })
+      ),
+      -1,
+      false
     );
-    shimmer.start();
 
     // Sparkle pulse
-    const sparkle = Animated.loop(
-      Animated.sequence([
-        Animated.timing(sparkleOpacity, {
-          toValue: 1,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-        Animated.timing(sparkleOpacity, {
-          toValue: 0.4,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-      ])
+    sparkleOpacity.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 800 }),
+        withTiming(0.4, { duration: 800 })
+      ),
+      -1,
+      true
     );
-    sparkle.start();
-
-    return () => {
-      drift.stop();
-      shimmer.stop();
-      sparkle.stop();
-    };
   }, []);
 
   const gradientColors = theme.colors.gradientPrimary;
 
-  const shimmerTranslate = shimmerPos.interpolate({
-    inputRange: [-1, 1],
-    outputRange: [-200, 200],
-  });
+  const shimmerStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: interpolate(shimmerPos.value, [-1, 1], [-200, 200]) }]
+  }));
+
+  const carStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: carDrift.value }]
+  }));
+
+  const sparkleStyle = useAnimatedStyle(() => ({
+    opacity: sparkleOpacity.value
+  }));
 
   return (
     <Pressable
@@ -109,7 +86,7 @@ export default function BecomeDriverBanner({
       <View style={[StyleSheet.absoluteFill, styles.borderGlow, { borderColor: `${theme.colors.primary}20` }]} />
 
       {/* Sparkle badge */}
-      <Animated.View style={[styles.sparkleBadge, { opacity: sparkleOpacity }]}>
+      <Animated.View style={[styles.sparkleBadge, sparkleStyle]}>
         <View style={[styles.sparkleBg, { backgroundColor: `${theme.colors.accent}20` }]}>
           <Ionicons name="sparkles" size={14} color={theme.colors.accent} />
         </View>
@@ -119,10 +96,8 @@ export default function BecomeDriverBanner({
       <Animated.View
         style={[
           styles.bannerIconContainer,
-          {
-            backgroundColor: `${theme.colors.primary}12`,
-            transform: [{ translateX: carDrift }],
-          },
+          { backgroundColor: `${theme.colors.primary}12` },
+          carStyle,
         ]}
       >
         <View style={[styles.iconGlow, { backgroundColor: `${theme.colors.primary}08` }]} />
@@ -151,9 +126,7 @@ export default function BecomeDriverBanner({
           <Animated.View
             style={[
               styles.shimmer,
-              {
-                transform: [{ translateX: shimmerTranslate }],
-              },
+              shimmerStyle,
             ]}
           />
         </LinearGradient>

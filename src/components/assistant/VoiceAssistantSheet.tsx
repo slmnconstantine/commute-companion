@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, Pressable, Animated, ScrollView, TextInput,
-  Easing, Dimensions,
+  View, Text, StyleSheet, Pressable, ScrollView, TextInput,
+  Dimensions,
 } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, withSequence, withDelay, withRepeat, runOnJS, Easing, interpolate } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -13,40 +15,37 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Thinking dots component
 function ThinkingDots({ color }: { color: string }) {
-  const dot1 = useRef(new Animated.Value(0)).current;
-  const dot2 = useRef(new Animated.Value(0)).current;
-  const dot3 = useRef(new Animated.Value(0)).current;
+  const dot1 = useSharedValue(0);
+  const dot2 = useSharedValue(0);
+  const dot3 = useSharedValue(0);
 
   useEffect(() => {
-    const createDotAnimation = (dot: Animated.Value, delay: number) =>
-      Animated.loop(
-        Animated.sequence([
-          Animated.delay(delay),
-          Animated.timing(dot, { toValue: -8, duration: 300, useNativeDriver: true, easing: Easing.out(Easing.cubic) }),
-          Animated.timing(dot, { toValue: 0, duration: 300, useNativeDriver: true, easing: Easing.in(Easing.cubic) }),
-          Animated.delay(600 - delay),
-        ])
+    const createDotAnimation = (dot: any, delay: number) => {
+      dot.value = withRepeat(
+        withSequence(
+          withDelay(delay, withTiming(-8, { duration: 300, easing: Easing.out(Easing.cubic) })),
+          withTiming(0, { duration: 300, easing: Easing.in(Easing.cubic) }),
+          withDelay(600 - delay, withTiming(0, { duration: 0 }))
+        ),
+        -1,
+        false
       );
+    };
 
-    const a1 = createDotAnimation(dot1, 0);
-    const a2 = createDotAnimation(dot2, 150);
-    const a3 = createDotAnimation(dot3, 300);
-    a1.start(); a2.start(); a3.start();
-
-    return () => { a1.stop(); a2.stop(); a3.stop(); };
+    createDotAnimation(dot1, 0);
+    createDotAnimation(dot2, 150);
+    createDotAnimation(dot3, 300);
   }, []);
+
+  const d1Style = useAnimatedStyle(() => ({ transform: [{ translateY: dot1.value }] }));
+  const d2Style = useAnimatedStyle(() => ({ transform: [{ translateY: dot2.value }] }));
+  const d3Style = useAnimatedStyle(() => ({ transform: [{ translateY: dot3.value }] }));
 
   return (
     <View style={dotStyles.container}>
-      {[dot1, dot2, dot3].map((dot, i) => (
-        <Animated.View
-          key={i}
-          style={[
-            dotStyles.dot,
-            { backgroundColor: color, transform: [{ translateY: dot }] },
-          ]}
-        />
-      ))}
+      <Animated.View style={[dotStyles.dot, { backgroundColor: color }, d1Style]} />
+      <Animated.View style={[dotStyles.dot, { backgroundColor: color }, d2Style]} />
+      <Animated.View style={[dotStyles.dot, { backgroundColor: color }, d3Style]} />
     </View>
   );
 }
@@ -58,45 +57,45 @@ const dotStyles = StyleSheet.create({
 
 // Waveform ring component for recording state
 function WaveformRing({ color }: { color: string }) {
-  const ring1 = useRef(new Animated.Value(0)).current;
-  const ring2 = useRef(new Animated.Value(0)).current;
-  const ring3 = useRef(new Animated.Value(0)).current;
+  const ring1 = useSharedValue(0);
+  const ring2 = useSharedValue(0);
+  const ring3 = useSharedValue(0);
 
   useEffect(() => {
-    const createRing = (anim: Animated.Value, delay: number) =>
-      Animated.loop(
-        Animated.sequence([
-          Animated.delay(delay),
-          Animated.parallel([
-            Animated.timing(anim, { toValue: 1, duration: 1500, useNativeDriver: true, easing: Easing.out(Easing.cubic) }),
-          ]),
-          Animated.timing(anim, { toValue: 0, duration: 0, useNativeDriver: true }),
-        ])
+    const createRing = (anim: any, delay: number) => {
+      anim.value = withRepeat(
+        withSequence(
+          withDelay(delay, withTiming(1, { duration: 1500, easing: Easing.out(Easing.cubic) })),
+          withTiming(0, { duration: 0 })
+        ),
+        -1,
+        false
       );
+    };
 
-    const r1 = createRing(ring1, 0);
-    const r2 = createRing(ring2, 500);
-    const r3 = createRing(ring3, 1000);
-    r1.start(); r2.start(); r3.start();
-
-    return () => { r1.stop(); r2.stop(); r3.stop(); };
+    createRing(ring1, 0);
+    createRing(ring2, 500);
+    createRing(ring3, 1000);
   }, []);
+
+  const r1Style = useAnimatedStyle(() => ({
+    opacity: interpolate(ring1.value, [0, 1], [0.5, 0]),
+    transform: [{ scale: interpolate(ring1.value, [0, 1], [1, 2]) }],
+  }));
+  const r2Style = useAnimatedStyle(() => ({
+    opacity: interpolate(ring2.value, [0, 1], [0.5, 0]),
+    transform: [{ scale: interpolate(ring2.value, [0, 1], [1, 2]) }],
+  }));
+  const r3Style = useAnimatedStyle(() => ({
+    opacity: interpolate(ring3.value, [0, 1], [0.5, 0]),
+    transform: [{ scale: interpolate(ring3.value, [0, 1], [1, 2]) }],
+  }));
 
   return (
     <View style={waveStyles.container}>
-      {[ring1, ring2, ring3].map((ring, i) => (
-        <Animated.View
-          key={i}
-          style={[
-            waveStyles.ring,
-            {
-              borderColor: color,
-              opacity: ring.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0] }),
-              transform: [{ scale: ring.interpolate({ inputRange: [0, 1], outputRange: [1, 2] }) }],
-            },
-          ]}
-        />
-      ))}
+      <Animated.View style={[waveStyles.ring, { borderColor: color }, r1Style]} />
+      <Animated.View style={[waveStyles.ring, { borderColor: color }, r2Style]} />
+      <Animated.View style={[waveStyles.ring, { borderColor: color }, r3Style]} />
     </View>
   );
 }
@@ -122,9 +121,9 @@ export default function VoiceAssistantSheet() {
   const { state, conversation, stopRecording, cancel, confirmAction, processTextInput } = useVoiceAssistant();
 
   const [inputValue, setInputValue] = useState('');
-  const slideAnim = useRef(new Animated.Value(400)).current;
+  const slideAnim = useSharedValue(400);
   const scrollViewRef = useRef<ScrollView>(null);
-  const statePulse = useRef(new Animated.Value(0.5)).current;
+  const statePulse = useSharedValue(0.5);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -140,32 +139,54 @@ export default function VoiceAssistantSheet() {
   // Sheet slide animation
   useEffect(() => {
     if (isVisible) {
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        useNativeDriver: true,
-        tension: 65,
-        friction: 10,
-      }).start();
+      slideAnim.value = withSpring(0, {
+        damping: 15,
+        stiffness: 300,
+        mass: 0.5,
+      });
     } else {
-      Animated.timing(slideAnim, {
-        toValue: 400,
+      slideAnim.value = withTiming(400, {
         duration: 250,
-        useNativeDriver: true,
-      }).start();
+        easing: Easing.in(Easing.cubic),
+      });
     }
   }, [isVisible]);
 
   // State pulse animation
   useEffect(() => {
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(statePulse, { toValue: 1, duration: 800, useNativeDriver: true }),
-        Animated.timing(statePulse, { toValue: 0.5, duration: 800, useNativeDriver: true }),
-      ])
+    statePulse.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 800 }),
+        withTiming(0.5, { duration: 800 })
+      ),
+      -1,
+      true
     );
-    pulse.start();
-    return () => pulse.stop();
   }, [state]);
+
+  const pan = Gesture.Pan()
+    .onChange((event) => {
+      if (event.translationY > 0) {
+        slideAnim.value = event.translationY;
+      } else {
+        slideAnim.value = event.translationY * 0.2; // rubber banding
+      }
+    })
+    .onEnd((event) => {
+      if (event.translationY > 100 || event.velocityY > 500) {
+        runOnJS(cancel)();
+      } else {
+        slideAnim.value = withSpring(0, { damping: 15, stiffness: 300 });
+      }
+    });
+
+  const animatedSheetStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: slideAnim.value }],
+  }));
+
+  const pulseStyle = useAnimatedStyle(() => ({
+    opacity: statePulse.value,
+  }));
 
   if (!isVisible && state !== 'error') return null;
 
@@ -175,33 +196,34 @@ export default function VoiceAssistantSheet() {
 
   return (
     <View style={styles.overlay} pointerEvents="box-none">
-      <Animated.View
-        style={[
-          styles.sheet,
-          { transform: [{ translateY: slideAnim }] },
-        ]}
-      >
-        {/* Blur background */}
-        <BlurView
-          intensity={mode === 'dark' ? 50 : 70}
-          tint={mode === 'dark' ? 'dark' : 'light'}
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.colors.glassBackground }]} />
+      <GestureDetector gesture={pan}>
+        <Animated.View
+          style={[
+            styles.sheet,
+            animatedSheetStyle,
+          ]}
+        >
+          {/* Blur background */}
+          <BlurView
+            intensity={mode === 'dark' ? 50 : 70}
+            tint={mode === 'dark' ? 'dark' : 'light'}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.colors.glassBackground }]} />
 
-        {/* Handle bar */}
-        <View style={[styles.handleBar, { backgroundColor: `${theme.colors.textMuted}30` }]} />
+          {/* Handle bar */}
+          <View style={[styles.handleBar, { backgroundColor: `${theme.colors.textMuted}30` }]} />
 
-        {/* Header */}
-        <View style={styles.header}>
-          {/* Animated state pill */}
-          <View style={[styles.statePill, { backgroundColor: `${stateColor}15` }]}>
-            <Animated.View style={[styles.stateDot, { backgroundColor: stateColor, opacity: statePulse }]} />
-            <Ionicons name={stateConfig.icon as any} size={14} color={stateColor} />
-            <Text style={[styles.stateLabel, { color: stateColor, fontFamily: 'Inter-SemiBold' }]}>
-              {stateConfig.label}
-            </Text>
-          </View>
+          {/* Header */}
+          <View style={styles.header}>
+            {/* Animated state pill */}
+            <View style={[styles.statePill, { backgroundColor: `${stateColor}15` }]}>
+              <Animated.View style={[styles.stateDot, { backgroundColor: stateColor }, pulseStyle]} />
+              <Ionicons name={stateConfig.icon as any} size={14} color={stateColor} />
+              <Text style={[styles.stateLabel, { color: stateColor, fontFamily: 'Inter-SemiBold' }]}>
+                {stateConfig.label}
+              </Text>
+            </View>
 
           <Pressable
             onPress={cancel}
@@ -378,7 +400,8 @@ export default function VoiceAssistantSheet() {
             </View>
           )}
         </View>
-      </Animated.View>
+        </Animated.View>
+      </GestureDetector>
     </View>
   );
 }
