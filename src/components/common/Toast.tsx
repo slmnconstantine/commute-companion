@@ -6,7 +6,9 @@
  */
 
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, Animated, Pressable, Platform } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS, Easing } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -47,86 +49,88 @@ const VARIANT_CONFIG: Record<ToastVariant, { icon: string; colorKey: string; hap
 function ToastItem({ toast, onDismiss }: { toast: ToastData; onDismiss: (id: number) => void }) {
   const { theme, mode } = useTheme();
   const insets = useSafeAreaInsets();
-  const translateY = useRef(new Animated.Value(-100)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useSharedValue(-100);
+  const opacity = useSharedValue(0);
 
   const config = VARIANT_CONFIG[toast.variant];
   const accentColor = (theme.colors as any)[config.colorKey];
 
-  useEffect(() => {
-    // Slide in
-    Animated.parallel([
-      Animated.spring(translateY, {
-        toValue: 0,
-        useNativeDriver: true,
-        tension: 80,
-        friction: 10,
-      }),
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start();
+  const dismiss = useCallback(() => {
+    translateY.value = withTiming(-100, { duration: 250, easing: Easing.in(Easing.cubic) });
+    opacity.value = withTiming(0, { duration: 250, easing: Easing.in(Easing.cubic) }, (finished) => {
+      if (finished) {
+        runOnJS(onDismiss)(toast.id);
+      }
+    });
+  }, [onDismiss, toast.id]);
 
-    // Auto-dismiss
+  useEffect(() => {
+    translateY.value = withSpring(0, { damping: 15, stiffness: 300, mass: 0.5 });
+    opacity.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.cubic) });
+
     const timer = setTimeout(() => {
       dismiss();
     }, toast.duration || 3000);
 
     return () => clearTimeout(timer);
-  }, []);
+  }, [dismiss, toast.duration]);
 
-  const dismiss = () => {
-    Animated.parallel([
-      Animated.timing(translateY, {
-        toValue: -100,
-        duration: 250,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacity, {
-        toValue: 0,
-        duration: 250,
-        useNativeDriver: true,
-      }),
-    ]).start(() => onDismiss(toast.id));
-  };
+  const pan = Gesture.Pan()
+    .onChange((event) => {
+      if (event.translationY < 0) {
+        translateY.value = event.translationY;
+      } else {
+        // Rubber banding when dragging down
+        translateY.value = event.translationY * 0.2;
+      }
+    })
+    .onEnd((event) => {
+      if (event.translationY < -20 || event.velocityY < -500) {
+        runOnJS(dismiss)();
+      } else {
+        translateY.value = withSpring(0, { damping: 15, stiffness: 300 });
+      }
+    });
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+    opacity: opacity.value,
+  }));
 
   return (
-    <Animated.View
-      style={[
-        styles.toastContainer,
-        {
-          transform: [{ translateY }],
-          opacity,
-          top: insets.top + 8,
-        },
-      ]}
-    >
-      <Pressable onPress={dismiss} style={styles.toastPressable}>
-        {Platform.OS === 'ios' ? (
-          <BlurView
-            intensity={80}
-            tint={mode === 'dark' ? 'dark' : 'light'}
-            style={[styles.toastContent, { borderColor: `${accentColor}30` }]}
-          >
-            <ToastInner theme={theme} accentColor={accentColor} config={config} toast={toast} />
-          </BlurView>
-        ) : (
-          <View
-            style={[
-              styles.toastContent,
-              {
-                backgroundColor: mode === 'dark' ? 'rgba(17, 24, 39, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-                borderColor: `${accentColor}30`,
-              },
-            ]}
-          >
-            <ToastInner theme={theme} accentColor={accentColor} config={config} toast={toast} />
-          </View>
-        )}
-      </Pressable>
-    </Animated.View>
+    <GestureDetector gesture={pan}>
+      <Animated.View
+        style={[
+          styles.toastContainer,
+          animatedStyle,
+          { top: insets.top + 8 },
+        ]}
+      >
+        <Pressable onPress={dismiss} style={styles.toastPressable}>
+          {Platform.OS === 'ios' ? (
+            <BlurView
+              intensity={80}
+              tint={mode === 'dark' ? 'dark' : 'light'}
+              style={[styles.toastContent, { borderColor: `${accentColor}30` }]}
+            >
+              <ToastInner theme={theme} accentColor={accentColor} config={config} toast={toast} />
+            </BlurView>
+          ) : (
+            <View
+              style={[
+                styles.toastContent,
+                {
+                  backgroundColor: mode === 'dark' ? 'rgba(17, 24, 39, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+                  borderColor: `${accentColor}30`,
+                },
+              ]}
+            >
+              <ToastInner theme={theme} accentColor={accentColor} config={config} toast={toast} />
+            </View>
+          )}
+        </Pressable>
+      </Animated.View>
+    </GestureDetector>
   );
 }
 

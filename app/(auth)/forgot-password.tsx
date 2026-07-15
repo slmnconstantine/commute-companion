@@ -5,12 +5,12 @@ import {
   TextInput,
   StyleSheet,
   Pressable,
-  Animated,
   Alert,
   KeyboardAvoidingView,
   Platform,
   StatusBar,
 } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, Easing } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -40,7 +40,11 @@ export default function ForgotPasswordScreen() {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
-  const buttonScale = useRef(new Animated.Value(1)).current;
+  const buttonScale = useSharedValue(1);
+
+  const animatedButtonStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: buttonScale.value }]
+  }));
 
   const handleReset = async () => {
     if (!isValidEmail(email)) {
@@ -166,12 +170,12 @@ export default function ForgotPasswordScreen() {
                 {error ? <Text style={styles.errorText}>{error}</Text> : null}
               </View>
 
-              <Animated.View style={{ transform: [{ scale: buttonScale }], marginTop: 8 }}>
+              <Animated.View style={[animatedButtonStyle, { marginTop: 8 }]}>
                 <Pressable
                   style={[styles.button, { opacity: loading ? 0.7 : 1 }]}
                   onPress={handleReset}
-                  onPressIn={() => Animated.spring(buttonScale, { toValue: 0.97, useNativeDriver: true }).start()}
-                  onPressOut={() => Animated.spring(buttonScale, { toValue: 1, friction: 5, useNativeDriver: true }).start()}
+                  onPressIn={() => { buttonScale.value = withTiming(0.97, { duration: 100, easing: Easing.out(Easing.cubic) }) }}
+                  onPressOut={() => { buttonScale.value = withSpring(1, { damping: 15, stiffness: 300, mass: 0.5 }) }}
                   disabled={loading}
                 >
                   <View style={[StyleSheet.absoluteFill, styles.buttonPrimaryGlow]} />
