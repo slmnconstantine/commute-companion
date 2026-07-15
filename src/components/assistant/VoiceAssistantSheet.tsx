@@ -6,7 +6,7 @@ import {
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, withSequence, withDelay, withRepeat, runOnJS, Easing, interpolate } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
+
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/context/ThemeContext';
 import { useVoiceAssistant } from '@/context/VoiceAssistantContext';
@@ -203,12 +203,7 @@ export default function VoiceAssistantSheet() {
             animatedSheetStyle,
           ]}
         >
-          {/* Blur background */}
-          <BlurView
-            intensity={mode === 'dark' ? 50 : 70}
-            tint={mode === 'dark' ? 'dark' : 'light'}
-            style={StyleSheet.absoluteFill}
-          />
+
           <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.colors.glassBackground }]} />
 
           {/* Handle bar */}

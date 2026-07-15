@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, View, Text, StyleSheet, Pressable, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
+
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
@@ -78,15 +78,8 @@ export default function NotificationPopup({ centerPopupNotification, popupScaleA
 
   return (
     <Animated.View style={[styles.popupOverlay, { opacity: fadeAnim }]}>
-      {/* Blur backdrop */}
-      <BlurView
-        intensity={mode === 'dark' ? 50 : 40}
-        tint={mode === 'dark' ? 'dark' : 'default'}
-        style={StyleSheet.absoluteFill}
-      />
-
-      {/* Dim overlay on top of blur */}
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.15)' }]} />
+      {/* Dim overlay without blur */}
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: mode === 'dark' ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.4)' }]} />
 
       <Animated.View
         style={[
@@ -105,12 +98,7 @@ export default function NotificationPopup({ centerPopupNotification, popupScaleA
         >
           {/* Inner card */}
           <View style={[styles.popupCard, { backgroundColor: theme.colors.surface }]}>
-            {/* Blur inside card */}
-            <BlurView
-              intensity={mode === 'dark' ? 20 : 10}
-              tint={mode === 'dark' ? 'dark' : 'light'}
-              style={StyleSheet.absoluteFill}
-            />
+
 
             {/* Animated icon ring */}
             <View style={styles.iconRingContainer}>

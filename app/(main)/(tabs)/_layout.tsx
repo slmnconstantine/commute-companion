@@ -5,7 +5,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNotifications } from '@/context/NotificationContext';
 import { useAuth } from '@/context/AuthContext';
-import { BlurView } from 'expo-blur';
+
 import * as Haptics from 'expo-haptics';
 import React, { useRef, useEffect } from 'react';
 
@@ -87,20 +87,12 @@ export default function TabLayout() {
           paddingTop: 8,
         },
         tabBarBackground: () => (
-          Platform.OS === 'ios' ? (
-            <BlurView
-              intensity={60}
-              tint={mode === 'dark' ? 'dark' : 'light'}
-              style={StyleSheet.absoluteFill}
-            />
-          ) : (
-            <View style={[StyleSheet.absoluteFill, {
-              backgroundColor: mode === 'dark'
-                ? 'rgba(17, 24, 39, 0.95)'
-                : 'rgba(255, 255, 255, 0.95)',
-              borderRadius: 22,
-            }]} />
-          )
+          <View style={[StyleSheet.absoluteFill, {
+            backgroundColor: mode === 'dark'
+              ? '#1A2235'
+              : '#FFFFFF',
+            borderRadius: 22,
+          }]} />
         ),
       }}
       screenListeners={{

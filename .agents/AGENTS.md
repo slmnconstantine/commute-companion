@@ -1,3 +1,4 @@
 # Project Rules
 
-- Do NOT automatically commit and push changes to the GitHub repository. Only push to GitHub when explicitly instructed by the user.
+- Do NOT automatically create git commits. Wait for the user to explicitly say so.
+- Do NOT automatically push changes to the GitHub repository. Only push to GitHub when explicitly instructed by the user.

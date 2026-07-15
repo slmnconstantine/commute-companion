@@ -16,6 +16,7 @@ interface HubPostCardProps {
   onCommentClick?: (post: HubPostWithAuthor) => void;
   onDelete?: (postId: string) => void;
   onEditClick?: (post: HubPostWithAuthor) => void;
+  onAvatarPress?: (userId: string) => void;
   loading?: boolean;
 }
 
@@ -54,6 +55,7 @@ export default function HubPostCard({
   onCommentClick,
   onDelete,
   onEditClick,
+  onAvatarPress,
   loading = false,
 }: HubPostCardProps) {
   const { theme } = useTheme();
@@ -120,7 +122,10 @@ export default function HubPostCard({
       disabled={!onPress}
     >
       <View style={styles.header}>
-        <View style={styles.authorRow}>
+        <Pressable 
+          style={styles.authorRow}
+          onPress={() => onAvatarPress && post.author_id && onAvatarPress(post.author_id)}
+        >
           <Avatar
             uri={post.author?.avatar_url}
             name={post.author?.full_name || 'User'}
@@ -135,7 +140,7 @@ export default function HubPostCard({
               {formatRelativeTime(post.created_at)}
             </Text>
           </View>
-        </View>
+        </Pressable>
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <View style={[styles.tagBadge, { backgroundColor: hexToRgba(tagConfig.color, 0.12) }]}>

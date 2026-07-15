@@ -31,6 +31,7 @@ import GlassCard from '@/components/common/GlassCard';
 import { getPosts, toggleLike, createPost, getComments, createComment, deletePost, updatePost } from '@/services/hub';
 import { HubPostWithAuthor, PostCommentWithAuthor } from '@/types/database';
 import HubPostCard, { STATUS_CONFIG } from '@/components/community/HubPostCard';
+import ProfileCardModal from '@/components/common/ProfileCardModal';
 
 // ── Route Banner ──────────────────────────────────────────────────────────────
 
@@ -112,6 +113,10 @@ export default function CommunityScreen() {
   const [comments, setComments] = useState<PostCommentWithAuthor[]>([]);
   const [newComment, setNewComment] = useState('');
   const [commentsLoading, setCommentsLoading] = useState(false);
+
+  // Profile Modal State
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
+  const [profileModalVisible, setProfileModalVisible] = useState(false);
 
   const loadPosts = useCallback(async () => {
     if (!activeRoute || !activeRoute.route_hash || !profile) {
@@ -346,6 +351,10 @@ export default function CommunityScreen() {
                     setSelectedTag(p.status_tag);
                     setNewPostVisible(true);
                   }}
+                  onAvatarPress={(userId) => {
+                    setSelectedProfileId(userId);
+                    setProfileModalVisible(true);
+                  }}
                 />
               ))
             )}
@@ -354,7 +363,6 @@ export default function CommunityScreen() {
           <GlassCard
             backgroundColor={theme.colors.primary}
             borderColor="transparent"
-            intensity={60}
             borderRadius={18}
             style={styles.fabContainer}
           >
@@ -534,15 +542,22 @@ export default function CommunityScreen() {
               ) : (
                 comments.map(c => (
                   <View key={c.id} style={[styles.commentItem, { borderBottomColor: `${theme.colors.border}40` }]}>
-                    {c.author?.avatar_url ? (
-                      <Image source={{ uri: c.author.avatar_url }} style={styles.commentAvatar} />
-                    ) : (
-                      <View style={[styles.commentAvatar, { backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center' }]}>
-                        <Text style={{ color: theme.colors.white, fontSize: 11, fontFamily: 'Inter-SemiBold' }}>
-                          {c.author?.full_name?.charAt(0).toUpperCase() || '?'}
-                        </Text>
-                      </View>
-                    )}
+                    <Pressable onPress={() => {
+                      if (c.author_id) {
+                        setSelectedProfileId(c.author_id);
+                        setProfileModalVisible(true);
+                      }
+                    }}>
+                      {c.author?.avatar_url ? (
+                        <Image source={{ uri: c.author.avatar_url }} style={styles.commentAvatar} />
+                      ) : (
+                        <View style={[styles.commentAvatar, { backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center' }]}>
+                          <Text style={{ color: theme.colors.white, fontSize: 11, fontFamily: 'Inter-SemiBold' }}>
+                            {c.author?.full_name?.charAt(0).toUpperCase() || '?'}
+                          </Text>
+                        </View>
+                      )}
+                    </Pressable>
                     <View style={styles.commentBubble}>
                       <View style={styles.commentHeaderRow}>
                         <Text style={{ fontFamily: 'Inter-SemiBold', color: theme.colors.text, fontSize: 13 }}>
@@ -596,6 +611,13 @@ export default function CommunityScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Profile Modal */}
+      <ProfileCardModal 
+        userId={selectedProfileId} 
+        visible={profileModalVisible} 
+        onClose={() => setProfileModalVisible(false)} 
+      />
     </SafeAreaView>
   );
 }

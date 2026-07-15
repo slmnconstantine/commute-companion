@@ -11,7 +11,7 @@ import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, run
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
+
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/context/ThemeContext';
 
@@ -107,27 +107,17 @@ function ToastItem({ toast, onDismiss }: { toast: ToastData; onDismiss: (id: num
         ]}
       >
         <Pressable onPress={dismiss} style={styles.toastPressable}>
-          {Platform.OS === 'ios' ? (
-            <BlurView
-              intensity={80}
-              tint={mode === 'dark' ? 'dark' : 'light'}
-              style={[styles.toastContent, { borderColor: `${accentColor}30` }]}
-            >
-              <ToastInner theme={theme} accentColor={accentColor} config={config} toast={toast} />
-            </BlurView>
-          ) : (
-            <View
-              style={[
-                styles.toastContent,
-                {
-                  backgroundColor: mode === 'dark' ? 'rgba(17, 24, 39, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-                  borderColor: `${accentColor}30`,
-                },
-              ]}
-            >
-              <ToastInner theme={theme} accentColor={accentColor} config={config} toast={toast} />
-            </View>
-          )}
+          <View
+            style={[
+              styles.toastContent,
+              {
+                backgroundColor: theme.colors.surfaceElevated,
+                borderColor: `${accentColor}30`,
+              },
+            ]}
+          >
+            <ToastInner theme={theme} accentColor={accentColor} config={config} toast={toast} />
+          </View>
         </Pressable>
       </Animated.View>
     </GestureDetector>
