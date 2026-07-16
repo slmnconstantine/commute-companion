@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { DeviceEventEmitter } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { AssistantCommand } from '@/types/voice';
 import { sendMessage } from '@/services/messages';
@@ -94,12 +95,15 @@ export function useCommandExecutor() {
     } catch (chatErr) {
       console.error('Error setting up chatroom for accepted booking via voice:', chatErr);
     }
+
+    DeviceEventEmitter.emit('refresh_data');
   };
 
   const handleDraftMessage = async (cmd: AssistantCommand, currentContext: any, profile: any) => {
     const chatRoomId = currentContext?.selectedChatRoomId;
     if (chatRoomId && profile?.id) {
       await sendMessage(chatRoomId, profile.id, cmd.params.message);
+      DeviceEventEmitter.emit('refresh_data');
     }
   };
 
@@ -115,6 +119,7 @@ export function useCommandExecutor() {
         route.origin_lng,
         route.origin_label.split(',')[0]
       );
+      DeviceEventEmitter.emit('refresh_data');
       router.push('/(main)/(tabs)/community');
     }
   };
@@ -123,6 +128,7 @@ export function useCommandExecutor() {
     const route = currentContext?.activeRoute;
     if (profile?.id) {
       await deleteAllUserPosts(profile.id, route?.route_hash);
+      DeviceEventEmitter.emit('refresh_data');
       router.push('/(main)/(tabs)/community');
     }
   };

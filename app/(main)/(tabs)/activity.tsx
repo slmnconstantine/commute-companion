@@ -15,6 +15,7 @@ import {
   ScrollView,
   RefreshControl,
   Pressable,
+  DeviceEventEmitter,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -346,6 +347,14 @@ export default function ActivityScreen() {
       refreshCounts(); // refresh badges when tab is opened
     }, [loadData])
   );
+
+  React.useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('refresh_data', () => {
+      loadData();
+      refreshCounts();
+    });
+    return () => sub.remove();
+  }, [loadData, refreshCounts]);
 
   React.useEffect(() => {
     setDriverLimit(5);
