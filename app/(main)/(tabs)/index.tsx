@@ -608,41 +608,7 @@ export default function HomeScreen() {
             </LinearGradient>
           </Pressable>
         ) : (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, width: '100%' }}>
-            <GlassCard
-              backgroundColor={theme.colors.glassBackground}
-              borderColor={theme.colors.glassBorder}
-              borderRadius={16}
-              style={[styles.searchBarGlass, { flex: 1 }]}
-            >
-              <Pressable
-                style={styles.searchBarInner}
-                onPress={() => {
-                  // TODO: navigate to search screen
-                }}
-              >
-                <View style={[styles.searchIconWrap, { backgroundColor: theme.colors.primarySubtle }]}>
-                  <Ionicons name="search" size={18} color={theme.colors.primary} />
-                </View>
-                <Text
-                  style={[
-                    styles.searchPlaceholder,
-                    theme.typography.body,
-                    { color: theme.colors.textMuted },
-                  ]}
-                >
-                  Where are you going?
-                </Text>
-                <View
-                  style={[
-                    styles.searchDivider,
-                    { backgroundColor: theme.colors.border },
-                  ]}
-                />
-                <Ionicons name="time-outline" size={18} color={theme.colors.primary} />
-              </Pressable>
-            </GlassCard>
-
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', width: '100%' }}>
             <GlassCard
               backgroundColor={theme.colors.glassBackground}
               borderColor={theme.colors.glassBorder}
@@ -808,25 +774,6 @@ export default function HomeScreen() {
                   Set Route
                 </Text>
               </Pressable>
-              {([{ icon: 'home', label: 'Home' }, { icon: 'business', label: 'Work' }, { icon: 'star', label: 'Saved' }] as const).map((item) => (
-                <Pressable
-                  key={item.label}
-                  style={({ pressed }) => [
-                    styles.pill,
-                    { backgroundColor: theme.colors.inputBackground, transform: [{ scale: pressed ? 0.95 : 1 }] },
-                  ]}
-                >
-                  <Ionicons name={item.icon as any} size={14} color={theme.colors.textMuted} />
-                  <Text
-                    style={[
-                      theme.typography.small,
-                      { color: theme.colors.text, marginLeft: 4 },
-                    ]}
-                  >
-                    {item.label}
-                  </Text>
-                </Pressable>
-              ))}
             </ScrollView>
           </Pressable>
         </GlassCard>

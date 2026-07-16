@@ -118,7 +118,7 @@ const STATE_CONFIG: Record<string, { label: string; icon: string; color?: string
 
 export default function VoiceAssistantSheet() {
   const { theme, mode } = useTheme();
-  const { state, conversation, stopRecording, cancel, confirmAction, processTextInput } = useVoiceAssistant();
+  const { state, conversation, stopRecording, cancel, confirmAction, processTextInput, startRecording } = useVoiceAssistant();
 
   const [inputValue, setInputValue] = useState('');
   const slideAnim = useSharedValue(400);
@@ -134,7 +134,7 @@ export default function VoiceAssistantSheet() {
     }
   }, [conversation, state]);
 
-  const isVisible = state !== 'idle' && state !== 'error';
+  const isVisible = (state !== 'idle' && state !== 'error') || conversation.length > 0;
 
   // Sheet slide animation
   useEffect(() => {
@@ -190,7 +190,7 @@ export default function VoiceAssistantSheet() {
 
   if (!isVisible && state !== 'error') return null;
 
-  const stateConfig = STATE_CONFIG[state] || { label: state, icon: 'ellipse' };
+  const stateConfig = STATE_CONFIG[state] || { label: state === 'idle' ? 'Conversation' : state, icon: state === 'idle' ? 'chatbubble-ellipses' : 'ellipse' };
   const stateColor = stateConfig.color === 'error' ? theme.colors.error : theme.colors.primary;
   const gradientColors = theme.colors.gradientPrimary;
 
@@ -357,10 +357,21 @@ export default function VoiceAssistantSheet() {
             )}
           </ScrollView>
 
-          {/* Text input fallback */}
-          {['recording', 'speaking', 'confirming', 'thinking', 'error'].includes(state) && (
+          {/* Text input fallback and mic button */}
+          {isVisible && state !== 'recording' && state !== 'confirming' && (
             <View style={[styles.inputContainer, { borderTopColor: `${theme.colors.border}` }]}>
-              <View style={[styles.inputWrapper, { backgroundColor: `${theme.colors.text}06` }]}>
+              <View style={styles.inputActionRow}>
+                <Pressable
+                  onPress={() => startRecording({}, true)}
+                  style={({ pressed }) => [
+                    styles.miniMicBtn,
+                    { backgroundColor: `${theme.colors.primary}15`, opacity: pressed ? 0.7 : 1 }
+                  ]}
+                >
+                  <Ionicons name="mic" size={20} color={theme.colors.primary} />
+                </Pressable>
+                
+                <View style={[styles.inputWrapper, { backgroundColor: `${theme.colors.text}06` }]}>
                 <TextInput
                   value={inputValue}
                   onChangeText={setInputValue}
@@ -393,6 +404,7 @@ export default function VoiceAssistantSheet() {
                 </Pressable>
               </View>
             </View>
+          </View>
           )}
         </View>
         </Animated.View>
@@ -587,7 +599,20 @@ const styles = StyleSheet.create({
     marginTop: 4,
     borderTopWidth: 1,
   },
+  inputActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  miniMicBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   inputWrapper: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 24,

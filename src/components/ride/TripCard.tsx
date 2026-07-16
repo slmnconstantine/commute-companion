@@ -112,6 +112,11 @@ export default function TripCard({ trip, onPress, loading = false }: TripCardPro
   };
   const statusColor = getStatusColor();
 
+  const totalSeatsBooked = trip.bookings ? trip.bookings.filter(b => ['accepted', 'completed', 'dropped_off', 'dropped_off_early'].includes(b.status)).reduce((sum, b) => sum + (b.seats_booked || 1), 0) : 0;
+  const originalSeats = trip.available_seats + totalSeatsBooked;
+  
+  const displaySeats = `${totalSeatsBooked}/${originalSeats} seats filled`;
+
   return (
     <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: scaleAnim }] }}>
       <Pressable
@@ -206,7 +211,7 @@ export default function TripCard({ trip, onPress, loading = false }: TripCardPro
         <View style={styles.infoItem}>
           <Ionicons name="people-outline" size={16} color={theme.colors.textMuted} />
           <Text style={[styles.infoText, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
-            {trip.available_seats} seats
+            {displaySeats}
           </Text>
         </View>
         <View style={styles.infoItem}>

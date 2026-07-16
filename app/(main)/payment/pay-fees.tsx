@@ -273,22 +273,6 @@ export default function PayFeesScreen() {
               <Text style={[styles.methodDesc, { color: theme.colors.textMuted }]}>Settle using your Maya Account balance</Text>
             </View>
           </Pressable>
-
-          <Pressable
-            style={[
-              styles.methodCard,
-              { backgroundColor: theme.colors.surface, borderColor: paymentMethod === 'card' ? theme.colors.primary : theme.colors.border }
-            ]}
-            onPress={() => setPaymentMethod('card')}
-          >
-            <View style={[styles.methodSelector, { borderColor: paymentMethod === 'card' ? theme.colors.primary : theme.colors.textMuted }]}>
-              {paymentMethod === 'card' && <View style={[styles.methodSelectedDot, { backgroundColor: theme.colors.primary }]} />}
-            </View>
-            <View style={styles.methodInfo}>
-              <Text style={[styles.methodName, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>Credit / Debit Card</Text>
-              <Text style={[styles.methodDesc, { color: theme.colors.textMuted }]}>Visa, Mastercard, or JCB cards</Text>
-            </View>
-          </Pressable>
         </View>
 
         {/* Submit */}

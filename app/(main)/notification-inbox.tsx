@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
-import { getUserNotifications, markNotificationAsRead, markAllNotificationsAsRead, AppNotification } from '@/services/notifications';
+import { getUserNotifications, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification, deleteAllNotifications, AppNotification } from '@/services/notifications';
 
 export default function NotificationInboxScreen() {
   const router = useRouter();
@@ -62,6 +62,17 @@ export default function NotificationInboxScreen() {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
   };
 
+  const handleDeleteNotification = async (id: string) => {
+    await deleteNotification(id);
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
+  const handleClearAll = async () => {
+    if (!profile) return;
+    await deleteAllNotifications(profile.id);
+    setNotifications([]);
+  };
+
   const getRelativeTime = (dateStr: string) => {
     const diff = Date.now() - new Date(dateStr).getTime();
     const mins = Math.floor(diff / 60000);
@@ -93,9 +104,14 @@ export default function NotificationInboxScreen() {
           <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
         </Pressable>
         <Text style={[styles.headerTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>Notifications</Text>
-        <Pressable onPress={handleMarkAllRead} style={styles.markReadBtn} disabled={!hasUnread || loading}>
-          <Ionicons name="checkmark-done" size={24} color={hasUnread ? theme.colors.primary : theme.colors.textMuted} />
-        </Pressable>
+        <View style={styles.headerRight}>
+          <Pressable onPress={handleMarkAllRead} style={styles.actionBtn} disabled={!hasUnread || loading}>
+            <Ionicons name="checkmark-done" size={24} color={hasUnread ? theme.colors.primary : theme.colors.textMuted} />
+          </Pressable>
+          <Pressable onPress={handleClearAll} style={styles.actionBtn} disabled={notifications.length === 0 || loading}>
+            <Ionicons name="trash-outline" size={22} color={notifications.length > 0 ? theme.colors.error : theme.colors.textMuted} />
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView
@@ -135,6 +151,13 @@ export default function NotificationInboxScreen() {
                   {notification.body}
                 </Text>
               </View>
+              <Pressable
+                style={styles.deleteBtn}
+                onPress={() => handleDeleteNotification(notification.id)}
+                hitSlop={10}
+              >
+                <Ionicons name="close" size={20} color={theme.colors.textMuted} />
+              </Pressable>
               {!notification.read && <View style={[styles.unreadDot, { backgroundColor: theme.colors.primary }]} />}
             </Pressable>
           ))
@@ -155,7 +178,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  markReadBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  headerRight: { flexDirection: 'row', gap: 4 },
+  actionBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: 18 },
   scrollContent: { padding: 16, gap: 12 },
   notificationCard: {
@@ -185,7 +209,8 @@ const styles = StyleSheet.create({
   title: { fontSize: 15, flex: 1 },
   time: { fontSize: 12 },
   body: { fontSize: 14, lineHeight: 20 },
-  unreadDot: { width: 8, height: 8, borderRadius: 4, marginLeft: 8 },
+  deleteBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', marginLeft: 4 },
+  unreadDot: { width: 8, height: 8, borderRadius: 4, marginLeft: 4 },
   emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: 100 },
   emptyText: { fontSize: 15, textAlign: 'center' },
 });

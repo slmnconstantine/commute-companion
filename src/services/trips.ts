@@ -142,7 +142,7 @@ export async function updateTripStatus(id: string, status: string): Promise<{ er
         bookingsData.forEach((b: any) => {
           const token = b.commuter?.push_token;
           if (token) {
-            sendPushNotification(token, title, body, { type: 'trip_update', tripId: id, status });
+            sendPushNotification(token, title, body, { type: 'trip_update', tripId: id, status }, b.commuter_id);
           }
         });
       }
@@ -229,7 +229,8 @@ export async function notifyMatchingCommuters(trip: Trip): Promise<void> {
             tripId: trip.id,
             origin: trip.origin_label,
             destination: trip.destination_label,
-          }
+          },
+          match.user_id
         );
       }
     }
@@ -262,7 +263,8 @@ export async function deleteTrip(id: string): Promise<{ error: Error | null }> {
           token,
           'Trip Cancelled ❌',
           `We're sorry, your scheduled ride with ${driverName} was cancelled and deleted.`,
-          { type: 'trip_update', tripId: id, status: 'deleted' }
+          { type: 'trip_update', tripId: id, status: 'deleted' },
+          b.commuter_id
         );
       }
     });
