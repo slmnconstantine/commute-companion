@@ -72,7 +72,7 @@ export const toggleLike = async (postId: string, userId: string, currentlyLiked:
     // Send push notification to the post author
     const { data: postData } = await supabase.from('hub_posts').select('author_id').eq('id', postId).single();
     if (postData && postData.author_id !== userId) {
-      const { data: authorData } = await supabase.from('profiles').select('push_token').eq('id', postData.author_id).single();
+      const { data: authorData } = await supabase.from('profiles').select('id, push_token').eq('id', postData.author_id).single();
       const { data: likerData } = await supabase.from('profiles').select('full_name').eq('id', userId).single();
       if (authorData?.push_token && likerData?.full_name) {
         sendPushNotification(authorData.push_token, 'New Like ❤️', `${likerData.full_name} liked your post!`, { type: 'hub_post', postId }, authorData.id);
@@ -122,7 +122,7 @@ export const createComment = async (postId: string, userId: string, content: str
   // Send push notification to the post author
   const { data: postData } = await supabase.from('hub_posts').select('author_id').eq('id', postId).single();
   if (postData && postData.author_id !== userId) {
-    const { data: authorData } = await supabase.from('profiles').select('push_token').eq('id', postData.author_id).single();
+    const { data: authorData } = await supabase.from('profiles').select('id, push_token').eq('id', postData.author_id).single();
     const commenterName = Array.isArray(data.author) ? data.author[0].full_name : data.author.full_name;
     if (authorData?.push_token && commenterName) {
       sendPushNotification(authorData.push_token, 'New Comment 💬', `${commenterName} commented: "${content}"`, { type: 'hub_post', postId }, authorData.id);
@@ -186,7 +186,7 @@ export const createPost = async (
     )).filter(id => id !== userId);
     
     if (userIds.length > 0) {
-      const { data: profilesData } = await supabase.from('profiles').select('push_token').in('id', userIds);
+      const { data: profilesData } = await supabase.from('profiles').select('id, push_token').in('id', userIds);
       
       if (profilesData) {
         profilesData.forEach(p => {
