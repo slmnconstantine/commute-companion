@@ -83,9 +83,12 @@ export default function TripDetailScreen() {
   // A driver is stale if we haven't received a location update in the last 30 seconds
   const isDriverStale = driverLiveLocation ? (now - driverLiveLocation.timestamp > 30000) : false;
 
-  const acceptedBookings = bookings.filter(b => b.status === 'accepted');
-  const totalCollectedFare = acceptedBookings.reduce((sum, b) => sum + (b.fare_paid || 0), 0);
+  const validBookings = bookings.filter(b => ['accepted', 'completed', 'dropped_off', 'dropped_off_early'].includes(b.status));
+  const totalCollectedFare = validBookings.reduce((sum, b) => sum + (b.fare_paid || 0), 0);
   const driverPayoutDetails = getDriverPayout(totalCollectedFare);
+  
+  const totalSeatsBooked = validBookings.reduce((sum, b) => sum + (b.seats_booked || 1), 0);
+  const displaySeats = trip?.status === 'completed' ? totalSeatsBooked : trip?.available_seats;
 
   // Compute ETA & remaining distance during ongoing trips
   const etaInfo = React.useMemo(() => {
@@ -727,7 +730,7 @@ export default function TripDetailScreen() {
 
           {/* Trip Stats */}
           <View style={styles.statsRow}>
-            <StatItem icon="people" label="Seats" value={`${trip.available_seats}`} theme={theme} />
+            <StatItem icon="people" label={trip?.status === 'completed' ? "Filled Seats" : "Seats"} value={`${displaySeats}`} theme={theme} />
             {isDriver ? (
               <StatItem
                 icon="wallet"
@@ -748,7 +751,7 @@ export default function TripDetailScreen() {
               trip={trip}
               theme={theme}
               processingBookingId={processingBookingId}
-              acceptedBookings={acceptedBookings}
+              acceptedBookings={validBookings}
               driverPayoutDetails={driverPayoutDetails}
               handleAcceptBooking={handleAcceptBooking}
               handleRejectBooking={handleRejectBooking}

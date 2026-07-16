@@ -661,7 +661,7 @@ const styles = StyleSheet.create({
 
   // Modals
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
-  modalContent: { height: '55%', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
+  modalContent: { height: '75%', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
   modalHandle: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 12 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, paddingBottom: 10 },
   postButton: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },

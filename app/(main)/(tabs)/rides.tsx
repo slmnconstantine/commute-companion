@@ -149,6 +149,7 @@ export default function RidesScreen() {
   const [filterStatus, setFilterStatus] = useState<'open' | 'all'>('open');
   const [sortBy, setSortBy] = useState<'time' | 'price_asc' | 'price_desc'>('time');
   const [customFareText, setCustomFareText] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Load route coordinates returned from set-route
   useEffect(() => {
@@ -444,9 +445,18 @@ export default function RidesScreen() {
   const filteredAndSortedRides = useMemo(() => {
     let result = [...availableRides];
 
-    // Status Filter: 'open' shows only open rides, 'all' shows open, full, and ongoing
+    // Search Query Filter
+    if (searchQuery.trim().length > 0) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter(trip => 
+        (trip.origin_label && trip.origin_label.toLowerCase().includes(q)) || 
+        (trip.destination_label && trip.destination_label.toLowerCase().includes(q))
+      );
+    }
+
+    // Status Filter: 'open' shows only open rides, plus ongoing rides if they still have available seats. 'all' shows open, full, and ongoing
     if (filterStatus === 'open') {
-      result = result.filter(trip => trip.status === 'open');
+      result = result.filter(trip => trip.status === 'open' || (trip.status === 'ongoing' && trip.available_seats > 0));
     }
 
     // Max Fare Filter
@@ -469,7 +479,7 @@ export default function RidesScreen() {
     });
 
     return result;
-  }, [availableRides, filterStatus, filterMaxFare, sortBy]);
+  }, [availableRides, filterStatus, filterMaxFare, sortBy, searchQuery]);
 
   useFocusEffect(
     useCallback(() => {
@@ -501,23 +511,6 @@ export default function RidesScreen() {
         <Text style={[theme.typography.heading, { color: theme.colors.text }]}>
           Rides
         </Text>
-        <Pressable
-          style={({ pressed }) => [
-            styles.filterBtn,
-            {
-              backgroundColor: theme.colors.glassBackground,
-              borderColor: theme.colors.glassBorder,
-              borderWidth: 1,
-              transform: [{ scale: pressed ? 0.93 : 1 }],
-            },
-          ]}
-          onPress={() => setShowFilterModal(true)}
-        >
-          <Ionicons name="options-outline" size={20} color={theme.colors.text} />
-          {(filterMaxFare !== null || filterStatus !== 'open' || sortBy !== 'time') && (
-            <View style={[styles.filterIndicator, { backgroundColor: theme.colors.primary }]} />
-          )}
-        </Pressable>
       </View>
 
       {/* Segmented control — visible to ALL users */}
@@ -546,8 +539,40 @@ export default function RidesScreen() {
       >
         {activeSegment === 'Search Rides' ? (
           /* ─── Search Rides Section ─── */
-          availableRides.length > 0 || activeRoute ? (
+          availableRides.length > 0 || activeRoute || searchQuery.length > 0 ? (
             <>
+              {/* Search Bar */}
+              <View style={[styles.searchBarWrapper, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.border }]}>
+                <Ionicons name="search" size={20} color={theme.colors.textMuted} />
+                <TextInput
+                  style={[styles.searchInput, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]}
+                  placeholder="Search for a location..."
+                  placeholderTextColor={theme.colors.textMuted}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                />
+                {searchQuery.length > 0 && (
+                  <Pressable onPress={() => setSearchQuery('')}>
+                    <Ionicons name="close-circle" size={20} color={theme.colors.textMuted} />
+                  </Pressable>
+                )}
+                <Pressable
+                  style={({ pressed }) => [
+                    {
+                      transform: [{ scale: pressed ? 0.93 : 1 }],
+                      padding: 4,
+                      marginLeft: 4,
+                    },
+                  ]}
+                  onPress={() => setShowFilterModal(true)}
+                >
+                  <Ionicons name="options-outline" size={22} color={theme.colors.text} />
+                  {(filterMaxFare !== null || filterStatus !== 'open' || sortBy !== 'time') && (
+                    <View style={[styles.filterIndicator, { backgroundColor: theme.colors.primary, right: 2, top: 2 }]} />
+                  )}
+                </Pressable>
+              </View>
+
               {/* Active Route Summary */}
               {activeRoute ? (
                 <View style={{ marginBottom: 16 }}>
@@ -949,6 +974,20 @@ function RequestSkeletonCard({ theme }: { theme: any }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  searchBarWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 16,
+    gap: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
   },
 
   /* Header */

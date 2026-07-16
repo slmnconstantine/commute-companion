@@ -14,7 +14,7 @@ import { useSegments, usePathname } from 'expo-router';
 
 export default function VoiceAssistantFab() {
   const { theme } = useTheme();
-  const { startRecording, state } = useVoiceAssistant();
+  const { startRecording, state, conversation } = useVoiceAssistant();
   const { activeRoute } = useRoute();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
@@ -171,23 +171,23 @@ export default function VoiceAssistantFab() {
 
   if (!inMainGroup) return null;
 
-  const isActive = state !== 'idle' && state !== 'error';
+  const isSheetVisible = (state !== 'idle' && state !== 'error') || conversation.length > 0;
   const gradientColors = theme.colors.gradientPrimary;
 
   return (
     <>
       {/* Glow shadow layer */}
-      <Animated.View style={[styles.glowLayer, { backgroundColor: theme.colors.primary }, glowStyle]} />
+      <Animated.View style={[styles.glowLayer, { backgroundColor: theme.colors.primary }, glowStyle, isSheetVisible && { opacity: 0 }]} />
 
       {/* Active processing ring */}
-      <Animated.View style={[styles.activeRing, { borderColor: theme.colors.primary }, ringStyle]} />
+      <Animated.View style={[styles.activeRing, { borderColor: theme.colors.primary }, ringStyle, isSheetVisible && { opacity: 0 }]} />
 
       {/* Main FAB */}
       <GestureDetector gesture={composedGesture}>
         <Animated.View
           style={[
             styles.fab,
-            isActive && { opacity: 0 },
+            isSheetVisible && { opacity: 0 },
             animatedStyle,
           ]}
         >

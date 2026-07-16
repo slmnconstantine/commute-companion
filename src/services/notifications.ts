@@ -44,6 +44,22 @@ export async function markAllNotificationsAsRead(userId: string): Promise<void> 
   }
 }
 
+export async function deleteNotification(id: string): Promise<void> {
+  try {
+    await supabase.from('notifications').delete().eq('id', id);
+  } catch (err) {
+    console.error('Failed to delete notification:', err);
+  }
+}
+
+export async function deleteAllNotifications(userId: string): Promise<void> {
+  try {
+    await supabase.from('notifications').delete().eq('user_id', userId);
+  } catch (err) {
+    console.error('Failed to clear notifications:', err);
+  }
+}
+
 export async function createNotification(
   userId: string,
   title: string,

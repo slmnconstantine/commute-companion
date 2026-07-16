@@ -410,28 +410,10 @@ export default function ActivityScreen() {
       style={[styles.container, { backgroundColor: theme.colors.background }]}
       edges={['top']}
     >
-      {/* Header */}
       <View style={styles.header}>
         <Text style={[theme.typography.heading, { color: theme.colors.text }]}>
           Activity
         </Text>
-        {activeSegment === 'Past' && (
-          <Pressable 
-            onPress={() => {
-              if (profile?.role === 'driver') {
-                exportTripsAsCSV(driverTrips.filter((t: any) => ['completed', 'cancelled'].includes(t.status)), 'driver');
-              } else {
-                exportTripsAsCSV(bookings.filter((b: any) => b.trip && ['completed', 'cancelled'].includes(b.trip.status)), 'commuter');
-              }
-            }}
-            style={styles.exportBtn}
-          >
-            <Ionicons name="download-outline" size={20} color={theme.colors.primary} />
-            <Text style={[theme.typography.caption, { color: theme.colors.primary, fontFamily: 'Inter-Medium', marginLeft: 4 }]}>
-              Export
-            </Text>
-          </Pressable>
-        )}
       </View>
 
       {/* Segmented control */}
