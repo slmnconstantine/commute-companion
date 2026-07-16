@@ -18,6 +18,7 @@ import {
   Platform,
   TextInput,
   Alert,
+  DeviceEventEmitter,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -475,6 +476,13 @@ export default function RidesScreen() {
       loadData();
     }, [loadData, activeSegment])
   );
+
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('refresh_data', () => {
+      loadData();
+    });
+    return () => sub.remove();
+  }, [loadData]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

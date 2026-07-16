@@ -18,6 +18,7 @@ import {
   Image,
   Alert,
   Animated,
+  DeviceEventEmitter,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -130,6 +131,13 @@ export default function CommunityScreen() {
 
   useEffect(() => {
     loadPosts();
+  }, [loadPosts]);
+
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('refresh_data', () => {
+      loadPosts();
+    });
+    return () => sub.remove();
   }, [loadPosts]);
 
   const onRefresh = async () => {
