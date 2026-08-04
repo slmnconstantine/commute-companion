@@ -44,8 +44,35 @@ export default function BookRideScreen() {
 
   const handleBook = async () => {
     if (!trip || !profile) return;
+
+    if (trip.driver_id === profile.id) {
+      Alert.alert('Invalid Booking', 'You cannot book a seat on your own ride.');
+      return;
+    }
+
     setBooking(true);
     try {
+      // 1. Verify trip is still open with available seats
+      const freshTrip = await getTripById(trip.id);
+      if (!freshTrip || freshTrip.status !== 'open' || freshTrip.available_seats < seats) {
+        Alert.alert('Unavailable', 'This ride is no longer available or does not have enough seats.');
+        return;
+      }
+
+      // 2. Check for existing active booking by this commuter on this trip
+      const { data: existingBooking } = await supabase
+        .from('bookings')
+        .select('id')
+        .eq('trip_id', trip.id)
+        .eq('commuter_id', profile.id)
+        .in('status', ['pending', 'accepted'])
+        .maybeSingle();
+
+      if (existingBooking) {
+        Alert.alert('Already Booked', 'You already have an active booking request for this ride.');
+        return;
+      }
+
       const fareEst = trip.fare_per_seat * seats;
       const commuterPlatformFee = Math.round(fareEst * PLATFORM_FEE_RATE * 100) / 100;
       const driverPlatformFee = Math.round(fareEst * PLATFORM_FEE_RATE * 100) / 100;

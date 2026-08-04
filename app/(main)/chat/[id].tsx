@@ -31,6 +31,8 @@ function shouldShowDateSeparator(messages: MessageWithSender[], index: number): 
   return current.toDateString() !== previous.toDateString();
 }
 
+import { getChatRoomWithTrip } from '@/services/chatRooms';
+
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -39,6 +41,7 @@ export default function ChatScreen() {
   const { profile } = useAuth();
 
   const [messages, setMessages] = useState<MessageWithSender[]>([]);
+  const [chatRoomData, setChatRoomData] = useState<any>(null);
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
   const flatListRef = useRef<FlatList>(null);
@@ -47,6 +50,7 @@ export default function ChatScreen() {
   useEffect(() => {
     if (!id) return;
     loadMessages();
+    loadRoomDetails();
 
     // Realtime subscription
     const channel = supabase
@@ -72,6 +76,16 @@ export default function ChatScreen() {
     return () => { supabase.removeChannel(channel); };
   }, [id]);
 
+  const loadRoomDetails = async () => {
+    if (!id) return;
+    try {
+      const room = await getChatRoomWithTrip(id);
+      setChatRoomData(room);
+    } catch (e) {
+      console.error('Failed to load room details:', e);
+    }
+  };
+
   const loadMessages = async () => {
     if (!id) return;
     try {
@@ -81,6 +95,30 @@ export default function ChatScreen() {
       console.error('Failed to load messages:', e);
     }
   };
+
+  const isTripCompleted = chatRoomData?.trip?.status === 'completed';
+
+  const completionRefTime = useMemo(() => {
+    if (!chatRoomData?.trip) return 0;
+    // Prefer completion alert message timestamp for accurate post-ride 24h calculation
+    const completionAlert = messages.find(m => m.is_alert && m.content.includes('Ride Completed'));
+    if (completionAlert) {
+      return new Date(completionAlert.created_at).getTime();
+    }
+    const timeStr = chatRoomData.created_at || chatRoomData.trip.departure_time;
+    return new Date(timeStr).getTime();
+  }, [chatRoomData, messages]);
+
+  const isChatExpired = useMemo(() => {
+    if (!isTripCompleted || !completionRefTime) return false;
+    return (Date.now() - completionRefTime) > (24 * 60 * 60 * 1000);
+  }, [isTripCompleted, completionRefTime]);
+
+  const hoursRemaining = useMemo(() => {
+    if (!isTripCompleted || !completionRefTime || isChatExpired) return 0;
+    const diffMs = (24 * 60 * 60 * 1000) - (Date.now() - completionRefTime);
+    return Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60)));
+  }, [isTripCompleted, completionRefTime, isChatExpired]);
 
   const handleSend = async () => {
     if (!newMessage.trim() || !profile || !id) return;
@@ -184,6 +222,38 @@ export default function ChatScreen() {
         <View style={styles.headerBtn} />
       </View>
 
+      {/* 24-Hour Grace Period Banner for Completed Rides */}
+      {isTripCompleted && (
+        <View
+          style={[
+            styles.banner,
+            {
+              backgroundColor: isChatExpired ? `${theme.colors.textMuted}15` : `${theme.colors.primary}18`,
+              borderColor: isChatExpired ? theme.colors.border : `${theme.colors.primary}40`,
+            },
+          ]}
+        >
+          <Ionicons
+            name={isChatExpired ? 'lock-closed' : 'time-outline'}
+            size={16}
+            color={isChatExpired ? theme.colors.textMuted : theme.colors.primary}
+          />
+          <Text
+            style={[
+              styles.bannerText,
+              {
+                color: isChatExpired ? theme.colors.textMuted : theme.colors.text,
+                fontFamily: 'Inter-Medium',
+              },
+            ]}
+          >
+            {isChatExpired
+              ? 'This group chat closed 24 hours after ride completion.'
+              : `Ride Completed — Chat open for ${hoursRemaining}h more for lost items & concerns.`}
+          </Text>
+        </View>
+      )}
+
       <FlatList
         ref={flatListRef}
         data={messages}
@@ -194,25 +264,34 @@ export default function ChatScreen() {
         ListEmptyComponent={renderEmptyChat}
       />
 
-      <View style={[styles.inputBar, { backgroundColor: theme.colors.surface, paddingBottom: insets.bottom + 8, borderTopColor: theme.colors.border }]}>
-        <TextInput
-          value={newMessage}
-          onChangeText={setNewMessage}
-          placeholder="Type a message..."
-          placeholderTextColor={theme.colors.textMuted}
-          style={[styles.textInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text, fontFamily: 'Inter-Regular' }]}
-          multiline
-        />
-        <Animated.View style={{ transform: [{ scale: sendScale }] }}>
-          <Pressable
-            style={[styles.sendBtn, { backgroundColor: theme.colors.primary, opacity: !newMessage.trim() || sending ? 0.5 : 1 }]}
-            onPress={handleSend}
-            disabled={!newMessage.trim() || sending}
-          >
-            <Ionicons name="send" size={20} color="#fff" />
-          </Pressable>
-        </Animated.View>
-      </View>
+      {isChatExpired ? (
+        <View style={[styles.disabledInputBar, { backgroundColor: theme.colors.surface, paddingBottom: Math.max(insets.bottom, 12), borderTopColor: theme.colors.border }]}>
+          <Ionicons name="lock-closed-outline" size={18} color={theme.colors.textMuted} />
+          <Text style={[{ color: theme.colors.textMuted, fontFamily: 'Inter-Medium', fontSize: 13 }]}>
+            Chat is closed (24h post-ride window expired)
+          </Text>
+        </View>
+      ) : (
+        <View style={[styles.inputBar, { backgroundColor: theme.colors.surface, paddingBottom: insets.bottom + 8, borderTopColor: theme.colors.border }]}>
+          <TextInput
+            value={newMessage}
+            onChangeText={setNewMessage}
+            placeholder="Type a message..."
+            placeholderTextColor={theme.colors.textMuted}
+            style={[styles.textInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text, fontFamily: 'Inter-Regular' }]}
+            multiline
+          />
+          <Animated.View style={{ transform: [{ scale: sendScale }] }}>
+            <Pressable
+              style={[styles.sendBtn, { backgroundColor: theme.colors.primary, opacity: !newMessage.trim() || sending ? 0.5 : 1 }]}
+              onPress={handleSend}
+              disabled={!newMessage.trim() || sending}
+            >
+              <Ionicons name="send" size={20} color="#fff" />
+            </Pressable>
+          </Animated.View>
+        </View>
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -234,6 +313,9 @@ const styles = StyleSheet.create({
   messageText: { fontSize: 15, lineHeight: 22 },
   timeText: { fontSize: 11, marginTop: 4, alignSelf: 'flex-end' },
   inputBar: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 16, paddingTop: 12, borderTopWidth: 1, gap: 10 },
+  disabledInputBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, paddingTop: 14, borderTopWidth: 1, gap: 8 },
+  banner: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1 },
+  bannerText: { fontSize: 12, flex: 1, lineHeight: 16 },
   textInput: { flex: 1, borderRadius: 22, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 10, fontSize: 15, maxHeight: 100 },
   sendBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
 

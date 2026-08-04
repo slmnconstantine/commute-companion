@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import SafeLottieView from '@/components/common/SafeLottieView';
 import { useTheme } from '@/context/ThemeContext';
 import { HubPostWithAuthor } from '@/types/database';
 import { formatRelativeTime } from '@/utils/dateFormatter';
@@ -122,7 +123,7 @@ export default function HubPostCard({
       disabled={!onPress}
     >
       <View style={styles.header}>
-        <Pressable 
+        <Pressable
           style={styles.authorRow}
           onPress={() => onAvatarPress && post.author_id && onAvatarPress(post.author_id)}
         >
@@ -183,18 +184,29 @@ export default function HubPostCard({
           {onLike && (
             <Pressable style={styles.actionBtn} onPress={handleLikePress} hitSlop={8}>
               <Animated.View style={{ transform: [{ scale: likeScale }] }}>
-                <Ionicons
-                  name={post.user_has_liked ? "heart" : "heart-outline"}
-                  size={18}
-                  color={post.user_has_liked ? theme.colors.error : theme.colors.textMuted}
-                />
+                {post.user_has_liked ? (
+                  <SafeLottieView
+                    source={require('../../../assets/animations/micro-heart.json')}
+                    autoPlay
+                    loop={false}
+                    fallbackIcon="heart"
+                    fallbackColor={theme.colors.error}
+                    style={{ width: 22, height: 22 }}
+                  />
+                ) : (
+                  <Ionicons
+                    name="heart-outline"
+                    size={18}
+                    color={theme.colors.textMuted}
+                  />
+                )}
               </Animated.View>
               <Text style={[styles.actionText, { color: post.user_has_liked ? theme.colors.error : theme.colors.textMuted }]}>
                 {post.likes_count || 0}
               </Text>
             </Pressable>
           )}
-          
+
           {onCommentClick && (
             <Pressable style={styles.actionBtn} onPress={() => onCommentClick(post)} hitSlop={8}>
               <Ionicons name="chatbubble-outline" size={16} color={theme.colors.textMuted} />

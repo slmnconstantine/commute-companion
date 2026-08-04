@@ -9,12 +9,15 @@
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, Text, View, Animated, Easing } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import SafeLottieView from './SafeLottieView';
 import { useTheme } from '@/context/ThemeContext';
 import Button from './Button';
 
 interface EmptyStateProps {
   /** Ionicons icon name rendered at the top */
-  icon: React.ComponentProps<typeof Ionicons>['name'];
+  icon?: React.ComponentProps<typeof Ionicons>['name'];
+  /** Optional Lottie animation source JSON */
+  lottieSource?: any;
   /** Primary headline */
   title: string;
   /** Supporting description */
@@ -26,7 +29,8 @@ interface EmptyStateProps {
 }
 
 export default function EmptyState({
-  icon,
+  icon = 'car-outline',
+  lottieSource,
   title,
   message,
   actionLabel,
@@ -87,14 +91,24 @@ export default function EmptyState({
       ]}
     >
       <Animated.View style={{ transform: [{ translateY: floatAnim }] }}>
-        <View style={[styles.iconCircle, { backgroundColor: `${theme.colors.primary}12` }]}>
-          <Ionicons
-            name={icon}
-            size={56}
-            color={`${theme.colors.primary}60`}
-            style={styles.icon}
+        {lottieSource ? (
+          <SafeLottieView
+            source={lottieSource}
+            autoPlay
+            loop
+            fallbackIcon={icon}
+            style={{ width: 140, height: 140, marginBottom: 12 }}
           />
-        </View>
+        ) : (
+          <View style={[styles.iconCircle, { backgroundColor: `${theme.colors.primary}12` }]}>
+            <Ionicons
+              name={icon}
+              size={56}
+              color={`${theme.colors.primary}60`}
+              style={styles.icon}
+            />
+          </View>
+        )}
       </Animated.View>
 
       <Text

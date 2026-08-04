@@ -27,6 +27,26 @@ export async function runSelfHealing(): Promise<void> {
         }
       }
     }
+
+    // 2. Auto-cancel stale open/full trips whose departure time was > 24 hours ago
+    const { data: staleTrips } = await supabase
+      .from('trips')
+      .select('id, departure_time')
+      .in('status', ['open', 'full']);
+
+    if (staleTrips) {
+      for (const trip of staleTrips) {
+        const departureTime = new Date(trip.departure_time);
+        const diffMs = Date.now() - departureTime.getTime();
+
+        if (diffMs >= 24 * 60 * 60 * 1000) {
+          console.log(`[Self-Healing] Stale open/full trip ${trip.id} departure was >24h ago. Auto-cancelling...`);
+          await updateTripStatus(trip.id, 'cancelled').catch(err => {
+            console.error(`Failed to cancel stale trip ${trip.id}:`, err);
+          });
+        }
+      }
+    }
   } catch (error) {
     console.error('Self-healing failed:', error);
   }

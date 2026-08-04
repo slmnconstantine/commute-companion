@@ -18,11 +18,15 @@
       }
     },
     "android": {
+      "backgroundColor": "#6B1D2C",
+      "androidNavigationBar": {
+        "backgroundColor": "#6B1D2C",
+        "barStyle": "light-content"
+      },
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "backgroundColor": "#0D9488",
+        "backgroundColor": "#D9C7A3",
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "package": "com.commutecompanion.app",
@@ -67,7 +71,7 @@
         "expo-notifications",
         {
           "icon": "./assets/icon.png",
-          "color": "#0D9488"
+          "color": "#6B1D2C"
         }
       ],
       "expo-splash-screen",

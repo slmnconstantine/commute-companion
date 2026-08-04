@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Alert, Image, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -70,27 +70,46 @@ export default function UploadIdScreen() {
               style={[styles.preview, { borderColor: theme.colors.border }]}
               resizeMode="contain"
             />
+            {uploading && (
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', borderRadius: 16 }]}>
+                <ActivityIndicator size="large" color="#fff" />
+              </View>
+            )}
             <Pressable onPress={() => setImageBase64(null)} style={[styles.removeBtn, { backgroundColor: theme.colors.error }]}>
               <Ionicons name="close" size={18} color="#fff" />
             </Pressable>
           </View>
         ) : (
-          <View style={styles.uploadOptions}>
-            <Pressable style={[styles.uploadOption, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]} onPress={handleTakePhoto}>
-              <View style={[styles.uploadIconCircle, { backgroundColor: `${theme.colors.primary}15` }]}>
-                <Ionicons name="camera" size={32} color={theme.colors.primary} />
-              </View>
-              <Text style={[styles.uploadOptionTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>Take Photo</Text>
-              <Text style={[styles.uploadOptionDesc, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>Use your camera</Text>
-            </Pressable>
+          <View style={{ alignItems: 'center', gap: 16 }}>
+            <View
+              style={{
+                width: 80,
+                height: 80,
+                borderRadius: 40,
+                backgroundColor: `${theme.colors.primary}15`,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Ionicons name="card-outline" size={40} color={theme.colors.primary} />
+            </View>
+            <View style={styles.uploadOptions}>
+              <Pressable style={[styles.uploadOption, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]} onPress={handleTakePhoto}>
+                <View style={[styles.uploadIconCircle, { backgroundColor: `${theme.colors.primary}15` }]}>
+                  <Ionicons name="camera" size={32} color={theme.colors.primary} />
+                </View>
+                <Text style={[styles.uploadOptionTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>Take Photo</Text>
+                <Text style={[styles.uploadOptionDesc, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>Use your camera</Text>
+              </Pressable>
 
-            <Pressable style={[styles.uploadOption, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]} onPress={handlePickImage}>
-              <View style={[styles.uploadIconCircle, { backgroundColor: `${theme.colors.accent}15` }]}>
-                <Ionicons name="images" size={32} color={theme.colors.accent} />
-              </View>
-              <Text style={[styles.uploadOptionTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>From Gallery</Text>
-              <Text style={[styles.uploadOptionDesc, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>Choose a photo</Text>
-            </Pressable>
+              <Pressable style={[styles.uploadOption, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]} onPress={handlePickImage}>
+                <View style={[styles.uploadIconCircle, { backgroundColor: `${theme.colors.accent}15` }]}>
+                  <Ionicons name="images" size={32} color={theme.colors.accent} />
+                </View>
+                <Text style={[styles.uploadOptionTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>From Gallery</Text>
+                <Text style={[styles.uploadOptionDesc, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>Choose a photo</Text>
+              </Pressable>
+            </View>
           </View>
         )}
 

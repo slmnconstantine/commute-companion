@@ -13,6 +13,8 @@ import { DEFAULT_DELTA } from '@/lib/constants';
 import { getRoute } from '@/services/routing';
 import { searchPlaces, GeocodingResult, reverseGeocode } from '@/services/geocoding';
 import { createTrip } from '@/services/trips';
+import { getVehicles } from '@/services/vehicles';
+import { Vehicle } from '@/types/database';
 import { calculateFare, formatCurrency } from '@/utils/fareCalculator';
 import DatePickerModal from '@/components/ride/DatePickerModal';
 import TimePickerModal from '@/components/ride/TimePickerModal';
@@ -99,6 +101,18 @@ export default function CreateRideScreen() {
   const [searchResults, setSearchResults] = useState<GeocodingResult[]>([]);
   const [searching, setSearching] = useState(false);
 
+  // Vehicle and Fare
+  const [vehicle, setVehicle] = useState<Vehicle | null>(null);
+  const [manualFare, setManualFare] = useState('');
+
+  useEffect(() => {
+    if (profile?.id) {
+      getVehicles(profile.id).then(v => {
+        if (v.length > 0) setVehicle(v[0]);
+      });
+    }
+  }, [profile?.id]);
+
   // Map pin mode: which location the next map tap will set
   const [pinMode, setPinMode] = useState<'origin' | 'destination'>('origin');
   const [reverseGeocoding, setReverseGeocoding] = useState(false);
@@ -118,9 +132,16 @@ export default function CreateRideScreen() {
     }
   }, [location, params.origin_lat, params.destination_lat]);
 
-  const fareBreakdown = routeInfo 
-    ? calculateFare(routeInfo.distanceKm, routeInfo.durationMin, availableSeats)
-    : null;
+  const fareBreakdown = useMemo(() => {
+    if (!routeInfo) return null;
+    return calculateFare(routeInfo.distanceKm, routeInfo.durationMin, availableSeats);
+  }, [routeInfo, availableSeats]);
+
+  const finalFarePerSeat = useMemo(() => {
+    if (isFree) return 0;
+    if (vehicle?.type === 'private') return parseFloat(manualFare) || 0;
+    return fareBreakdown?.totalPerSeat || 0;
+  }, [isFree, vehicle, manualFare, fareBreakdown]);
 
   // ── Auto-Geocode from Voice Assistant Params ──
   useEffect(() => {
@@ -260,7 +281,7 @@ export default function CreateRideScreen() {
     try {
       const { data, error } = await createTrip({
         driver_id: profile.id,
-        vehicle_id: null as any, // No vehicle selected yet — null avoids UUID parse error
+        vehicle_id: vehicle?.id || null as any,
         origin_lat: origin.lat,
         origin_lng: origin.lng,
         origin_label: origin.label,
@@ -270,7 +291,7 @@ export default function CreateRideScreen() {
         route_polyline: routeInfo.polyline,
         departure_time: depTime,
         available_seats: availableSeats,
-        fare_per_seat: isFree ? 0 : fareBreakdown.totalPerSeat,
+        fare_per_seat: finalFarePerSeat,
         status: 'open',
       });
 
@@ -594,21 +615,32 @@ export default function CreateRideScreen() {
             />
           </Pressable>
 
-          {fareBreakdown && (
+          {vehicle?.type === 'private' && !isFree && (
+            <View style={{ marginTop: 16 }}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>Set Fare (per seat)</Text>
+              <TextInput
+                style={[styles.fareInput, { backgroundColor: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }]}
+                keyboardType="numeric"
+                placeholder="Enter amount (e.g. 50)"
+                placeholderTextColor={theme.colors.textMuted}
+                value={manualFare}
+                onChangeText={setManualFare}
+              />
+            </View>
+          )}
+
+          {fareBreakdown && vehicle?.type !== 'private' && (
             <>
-              <Text style={[styles.sectionTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', marginTop: 24 }]}>Fare Estimate</Text>
+              <Text style={[styles.sectionTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', marginTop: 24 }]}>Fare Estimate (Automatic Tariff)</Text>
               <View style={[styles.fareCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, opacity: isFree ? 0.6 : 1 }]}>
                 <FareLine label="Base fare" amount={isFree ? 0 : fareBreakdown.baseFare} theme={theme} />
                 <FareLine label={`Distance (${routeInfo?.distanceKm} km)`} amount={isFree ? 0 : fareBreakdown.distanceCost} theme={theme} />
                 <FareLine label={`Duration (${routeInfo?.durationMin} min)`} amount={isFree ? 0 : fareBreakdown.timeCost} theme={theme} />
                 <View style={[styles.fareDivider, { backgroundColor: theme.colors.border }]} />
-                <FareLine label="Per seat" amount={isFree ? 0 : fareBreakdown.costPerSeat} theme={theme} />
-                <FareLine label="Platform fee (10%)" amount={isFree ? 0 : Math.round(fareBreakdown.totalPerSeat * 0.10 * 100) / 100} theme={theme} />
-                <View style={[styles.fareDivider, { backgroundColor: theme.colors.border }]} />
                 <View style={styles.fareRow}>
                   <Text style={[styles.fareTotalLabel, { color: theme.colors.text, fontFamily: 'Inter-Bold' }]}>Total per seat</Text>
                   <Text style={[styles.fareTotalAmount, { color: isFree ? theme.colors.success : theme.colors.primary, fontFamily: 'Inter-Bold' }]}>
-                    {isFree ? 'FREE' : formatCurrency(fareBreakdown.totalPerSeat)}
+                    {isFree ? 'FREE' : formatCurrency(finalFarePerSeat)}
                   </Text>
                 </View>
               </View>
@@ -644,7 +676,7 @@ export default function CreateRideScreen() {
               <Text style={[styles.confirmText, { color: theme.colors.textMuted }]}>Departure: {displayDate} at {displayTime}</Text>
             )}
             <Text style={[styles.confirmText, { color: isFree ? theme.colors.success : theme.colors.primary, fontFamily: 'Inter-Bold', fontSize: 18, marginTop: 8 }]}>
-              {isFree ? 'FREE' : (fareBreakdown ? formatCurrency(fareBreakdown.totalPerSeat) : '—')} per seat
+              {isFree ? 'FREE' : formatCurrency(finalFarePerSeat)} per seat
             </Text>
           </View>
 
@@ -790,6 +822,7 @@ const styles = StyleSheet.create({
   confirmText: { flex: 1, fontSize: 14, fontFamily: 'Inter-Regular' },
   publishButton: { height: 56, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 8, shadowColor: '#0D9488', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
   publishText: { color: '#fff', fontSize: 16, fontFamily: 'Inter-SemiBold' },
+  fareInput: { height: 52, borderWidth: 1, borderRadius: 14, paddingHorizontal: 16, fontSize: 16, fontFamily: 'Inter-Medium' },
 });
 
 // ══════════════════════════════════════════════════════════════════════════════

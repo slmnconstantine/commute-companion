@@ -155,6 +155,19 @@ export default function TripBottomActions({
         </View>
       )}
 
+      {/* Completed Trip Chat CTA (Driver & Passengers - 24h Lost Items Window) */}
+      {showChatButton && trip.status === 'completed' && (
+        <View style={[styles.bottomCTA, { backgroundColor: theme.colors.surface, paddingBottom: insets.bottom + 16, borderTopColor: theme.colors.border }]}>
+          <Pressable
+            style={[styles.ctaButton, { backgroundColor: theme.colors.primary, flex: 1, flexDirection: 'row', gap: 8 }]}
+            onPress={() => router.push(`/(main)/chat/${chatRoomId}`)}
+          >
+            <Ionicons name="chatbubbles" size={20} color="#fff" />
+            <Text style={styles.ctaButtonText}>Group Chat (Lost Items & Concerns)</Text>
+          </Pressable>
+        </View>
+      )}
+
       {/* Driver Controls */}
       {isDriver && trip.status !== 'completed' && trip.status !== 'cancelled' && (
         <View style={[styles.bottomCTA, { backgroundColor: theme.colors.surface, paddingBottom: insets.bottom + 16, borderTopColor: theme.colors.border, flexDirection: 'column', gap: 12, alignItems: 'stretch' }]}>

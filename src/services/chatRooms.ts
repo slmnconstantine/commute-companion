@@ -12,6 +12,16 @@ export async function getChatRoom(tripId: string, type: string = 'group'): Promi
   return data as ChatRoom | null;
 }
 
+/** Get chat room with associated trip data */
+export async function getChatRoomWithTrip(chatRoomId: string) {
+  const { data } = await supabase
+    .from('chat_rooms')
+    .select('*, trip:trips!trip_id(*)')
+    .eq('id', chatRoomId)
+    .single();
+  return data as (ChatRoom & { trip?: any }) | null;
+}
+
 /** Get or create chat room for a trip */
 export async function getOrCreateChatRoom(tripId: string, type: string = 'group'): Promise<ChatRoom | null> {
   // Try to get existing
