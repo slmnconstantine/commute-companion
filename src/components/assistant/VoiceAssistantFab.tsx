@@ -11,6 +11,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useVoiceAssistant } from '@/context/VoiceAssistantContext';
 import { useRoute } from '@/context/RouteContext';
 import { useSegments, usePathname } from 'expo-router';
+import { haptics } from '@/utils/haptics';
 
 export default function VoiceAssistantFab() {
   const { theme } = useTheme();
@@ -56,6 +57,7 @@ export default function VoiceAssistantFab() {
   const handlePress = () => {
     if (state !== 'idle' && state !== 'error') return; // Assistant is active
 
+    haptics.medium();
     startRecording({
       activeRoute,
       currentScreen,
