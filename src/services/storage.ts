@@ -52,7 +52,10 @@ export async function uploadImage(
       .getPublicUrl(data.path);
     return urlData.publicUrl;
   } catch (error) {
-    handleServiceError('Upload error:', error);
+    handleServiceError('Upload error (using fallback data URI):', error);
+    if (base64Data) {
+      return `data:${contentType};base64,${base64Data}`;
+    }
     return null;
   }
 }
@@ -66,5 +69,11 @@ export async function uploadAvatar(userId: string, base64Data: string): Promise<
 /** Upload government ID image */
 export async function uploadGovernmentId(userId: string, base64Data: string): Promise<string | null> {
   const path = `${userId}/gov_id_${Date.now()}.jpg`;
+  return uploadImage(DOCUMENTS_BUCKET, path, base64Data);
+}
+
+/** Upload driver document (vehicle photo, OR/CR, driver license) */
+export async function uploadDriverDocument(userId: string, base64Data: string, docType: string): Promise<string | null> {
+  const path = `${userId}/${docType}_${Date.now()}.jpg`;
   return uploadImage(DOCUMENTS_BUCKET, path, base64Data);
 }
