@@ -1,9 +1,9 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
 import { formatCurrency } from '@/utils/fareCalculator';
 import { BookingWithCommuter, TripWithDriver } from '@/types/database';
+import BouncyPressable from '@/components/common/BouncyPressable';
 
 interface TripBottomActionsProps {
   trip: TripWithDriver;
@@ -51,15 +51,15 @@ export default function TripBottomActions({
               <Text style={[styles.ctaPerSeat, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>per seat</Text>
             )}
           </View>
-          <Pressable
+          <BouncyPressable
             style={[styles.ctaButton, { backgroundColor: theme.colors.primary }]}
+            hapticType="medium"
             onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               router.push(`/(main)/ride/book/${id}`);
             }}
           >
             <Text style={styles.ctaButtonText}>Book Seat</Text>
-          </Pressable>
+          </BouncyPressable>
         </View>
       )}
 

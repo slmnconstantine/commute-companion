@@ -6,6 +6,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import EmptyState from '@/components/common/EmptyState';
+import NotificationSkeleton from '@/components/common/NotificationSkeleton';
+import BouncyPressable from '@/components/common/BouncyPressable';
+import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { getUserNotifications, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification, deleteAllNotifications, AppNotification } from '@/services/notifications';
 
 export default function NotificationInboxScreen() {
@@ -120,7 +123,11 @@ export default function NotificationInboxScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}
       >
         {loading ? (
-          <Text style={[styles.emptyText, { color: theme.colors.textMuted }]}>Loading...</Text>
+          <>
+            {[1, 2, 3, 4, 5].map((i) => (
+              <NotificationSkeleton key={i} />
+            ))}
+          </>
         ) : notifications.length === 0 ? (
           <EmptyState
             icon="notifications-off-outline"
@@ -129,39 +136,51 @@ export default function NotificationInboxScreen() {
           />
         ) : (
           notifications.map(notification => (
-            <Pressable
+            <Swipeable
               key={notification.id}
-              style={[
-                styles.notificationCard,
-                { backgroundColor: notification.read ? theme.colors.surface : theme.colors.primary + '10', borderColor: theme.colors.border }
-              ]}
-              onPress={() => handleNotificationPress(notification)}
+              renderRightActions={() => (
+                <Pressable
+                  style={[styles.swipeDeleteBtn, { backgroundColor: theme.colors.error }]}
+                  onPress={() => handleDeleteNotification(notification.id)}
+                >
+                  <Ionicons name="trash-outline" size={20} color="#fff" />
+                </Pressable>
+              )}
             >
-              <View style={[styles.iconContainer, { backgroundColor: theme.colors.primary + '20' }]}>
-                <Ionicons name={getIconForType(notification.type)} size={20} color={theme.colors.primary} />
-              </View>
-              <View style={styles.contentContainer}>
-                <View style={styles.titleRow}>
-                  <Text style={[styles.title, { color: theme.colors.text, fontFamily: notification.read ? 'Inter-Medium' : 'Inter-Bold' }]} numberOfLines={1}>
-                    {notification.title}
-                  </Text>
-                  <Text style={[styles.time, { color: theme.colors.textMuted }]}>
-                    {getRelativeTime(notification.created_at)}
+              <BouncyPressable
+                style={[
+                  styles.notificationCard,
+                  { backgroundColor: notification.read ? theme.colors.surface : theme.colors.primary + '10', borderColor: theme.colors.border }
+                ]}
+                hapticType="light"
+                onPress={() => handleNotificationPress(notification)}
+              >
+                <View style={[styles.iconContainer, { backgroundColor: theme.colors.primary + '20' }]}>
+                  <Ionicons name={getIconForType(notification.type)} size={20} color={theme.colors.primary} />
+                </View>
+                <View style={styles.contentContainer}>
+                  <View style={styles.titleRow}>
+                    <Text style={[styles.title, { color: theme.colors.text, fontFamily: notification.read ? 'Inter-Medium' : 'Inter-Bold' }]} numberOfLines={1}>
+                      {notification.title}
+                    </Text>
+                    <Text style={[styles.time, { color: theme.colors.textMuted }]}>
+                      {getRelativeTime(notification.created_at)}
+                    </Text>
+                  </View>
+                  <Text style={[styles.body, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]} numberOfLines={2}>
+                    {notification.body}
                   </Text>
                 </View>
-                <Text style={[styles.body, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]} numberOfLines={2}>
-                  {notification.body}
-                </Text>
-              </View>
-              <Pressable
-                style={styles.deleteBtn}
-                onPress={() => handleDeleteNotification(notification.id)}
-                hitSlop={10}
-              >
-                <Ionicons name="close" size={20} color={theme.colors.textMuted} />
-              </Pressable>
-              {!notification.read && <View style={[styles.unreadDot, { backgroundColor: theme.colors.primary }]} />}
-            </Pressable>
+                <Pressable
+                  style={styles.deleteBtn}
+                  onPress={() => handleDeleteNotification(notification.id)}
+                  hitSlop={10}
+                >
+                  <Ionicons name="close" size={20} color={theme.colors.textMuted} />
+                </Pressable>
+                {!notification.read && <View style={[styles.unreadDot, { backgroundColor: theme.colors.primary }]} />}
+              </BouncyPressable>
+            </Swipeable>
           ))
         )}
       </ScrollView>
@@ -212,6 +231,7 @@ const styles = StyleSheet.create({
   time: { fontSize: 12 },
   body: { fontSize: 14, lineHeight: 20 },
   deleteBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', marginLeft: 4 },
+  swipeDeleteBtn: { width: 64, height: '100%', borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginLeft: 8 },
   unreadDot: { width: 8, height: 8, borderRadius: 4, marginLeft: 4 },
   emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: 100 },
   emptyText: { fontSize: 15, textAlign: 'center' },

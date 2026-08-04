@@ -29,6 +29,7 @@ import { useRoute } from '@/context/RouteContext';
 import { useAuth } from '@/context/AuthContext';
 import EmptyState from '@/components/common/EmptyState';
 import GlassCard from '@/components/common/GlassCard';
+import HubPostSkeleton from '@/components/common/HubPostSkeleton';
 import { getPosts, toggleLike, createPost, getComments, createComment, deletePost, updatePost } from '@/services/hub';
 import { HubPostWithAuthor, PostCommentWithAuthor } from '@/types/database';
 import HubPostCard, { STATUS_CONFIG } from '@/components/community/HubPostCard';
@@ -323,19 +324,7 @@ export default function CommunityScreen() {
             {loading ? (
               <>
                 {[1, 2, 3].map((i) => (
-                  <View key={i} style={[styles.postCard, { backgroundColor: theme.colors.surface, shadowColor: theme.colors.shadow }]}>
-                    <View style={styles.authorRow}>
-                      <View style={[styles.avatar, { backgroundColor: theme.colors.border }]} />
-                      <View style={styles.authorInfo}>
-                        <View style={{ width: 100, height: 14, backgroundColor: theme.colors.border, borderRadius: 4, marginBottom: 6 }} />
-                        <View style={{ width: 60, height: 10, backgroundColor: theme.colors.border, borderRadius: 4 }} />
-                      </View>
-                    </View>
-                    <View style={{ marginTop: 14 }}>
-                      <View style={{ width: '90%', height: 12, backgroundColor: theme.colors.border, borderRadius: 4, marginBottom: 8 }} />
-                      <View style={{ width: '70%', height: 12, backgroundColor: theme.colors.border, borderRadius: 4 }} />
-                    </View>
-                  </View>
+                  <HubPostSkeleton key={i} />
                 ))}
               </>
             ) : posts.length === 0 ? (

@@ -49,31 +49,44 @@ export default function CreateRideScreen() {
     origin?: string;
     destination?: string;
     origin_lat?: string;
+    originLat?: string;
     origin_lng?: string;
+    originLng?: string;
     origin_label?: string;
+    originLabel?: string;
     destination_lat?: string;
+    destLat?: string;
     destination_lng?: string;
+    destLng?: string;
     destination_label?: string;
+    destLabel?: string;
     seats?: string;
+    fare?: string;
   }>();
 
   const [origin, setOrigin] = useState<LocationData | null>(() => {
-    if (params.origin_lat && params.origin_lng && params.origin_label) {
+    const lat = params.origin_lat || params.originLat;
+    const lng = params.origin_lng || params.originLng;
+    const label = params.origin_label || params.originLabel;
+    if (lat && lng && label) {
       return {
-        lat: parseFloat(params.origin_lat),
-        lng: parseFloat(params.origin_lng),
-        label: params.origin_label,
+        lat: parseFloat(lat),
+        lng: parseFloat(lng),
+        label,
       };
     }
     return null;
   });
 
   const [destination, setDestination] = useState<LocationData | null>(() => {
-    if (params.destination_lat && params.destination_lng && params.destination_label) {
+    const lat = params.destination_lat || params.destLat;
+    const lng = params.destination_lng || params.destLng;
+    const label = params.destination_label || params.destLabel;
+    if (lat && lng && label) {
       return {
-        lat: parseFloat(params.destination_lat),
-        lng: parseFloat(params.destination_lng),
-        label: params.destination_label,
+        lat: parseFloat(lat),
+        lng: parseFloat(lng),
+        label,
       };
     }
     return null;
@@ -92,7 +105,7 @@ export default function CreateRideScreen() {
 
   const [departureDate, setDepartureDate] = useState(params.date || '');
   const [departureTime, setDepartureTime] = useState(params.time || '');
-  const [isFree, setIsFree] = useState(false);
+  const [isFree, setIsFree] = useState(params.fare === '0' || params.fare === '0.00');
   const [loading, setLoading] = useState(false);
 
   // Search state
@@ -103,7 +116,7 @@ export default function CreateRideScreen() {
 
   // Vehicle and Fare
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
-  const [manualFare, setManualFare] = useState('');
+  const [manualFare, setManualFare] = useState(params.fare && params.fare !== '0' ? params.fare : '');
 
   useEffect(() => {
     if (profile?.id) {
@@ -126,11 +139,11 @@ export default function CreateRideScreen() {
 
   // Fly camera to user's real GPS location once it's loaded
   useEffect(() => {
-    const hasPrefilledRoute = !!(params.origin_lat && params.destination_lat);
+    const hasPrefilledRoute = !!((params.origin_lat || params.originLat) && (params.destination_lat || params.destLat));
     if (location && cameraRef.current && !hasPrefilledRoute) {
       cameraRef.current.flyTo({ center: [location.longitude, location.latitude], zoom: 14, duration: 1000 });
     }
-  }, [location, params.origin_lat, params.destination_lat]);
+  }, [location, params.origin_lat, params.originLat, params.destination_lat, params.destLat]);
 
   const fareBreakdown = useMemo(() => {
     if (!routeInfo) return null;

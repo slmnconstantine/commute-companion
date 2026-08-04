@@ -105,6 +105,8 @@ const heroStyles = StyleSheet.create({
   pillText: { fontSize: 12 },
 });
 
+import BouncyPressable from '@/components/common/BouncyPressable';
+
 export default function OnboardingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -114,10 +116,9 @@ export default function OnboardingScreen() {
 
   const handleNext = async () => {
     if (currentIndex < SLIDES.length - 1) {
-      const nextIndex = currentIndex + 1;
-      flatListRef.current?.scrollToIndex({ index: nextIndex, animated: true });
+      flatListRef.current?.scrollToIndex({ index: currentIndex + 1 });
     } else {
-      await AsyncStorage.setItem('@onboarding_complete', 'true');
+      await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
       router.replace('/(auth)/welcome');
     }
   };
@@ -179,15 +180,16 @@ export default function OnboardingScreen() {
         </View>
 
         <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 20) + 24 }]}>
-          <Pressable
+          <BouncyPressable
             style={[styles.nextBtn, { backgroundColor: theme.colors.primary }]}
+            hapticType="medium"
             onPress={handleNext}
           >
             <Text style={[styles.nextBtnText, { fontFamily: 'Inter-SemiBold' }]}>
               {currentIndex === SLIDES.length - 1 ? 'Get Started' : 'Next'}
             </Text>
             <Ionicons name="arrow-forward" size={20} color="#fff" style={{ marginLeft: 8 }} />
-          </Pressable>
+          </BouncyPressable>
         </View>
       </View>
     </View>

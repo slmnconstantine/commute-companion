@@ -747,14 +747,14 @@ export default function RidesScreen() {
                         }}
                         onPress={() => {
                           const params = {
-                            originLat: trip.origin_lat,
-                            originLng: trip.origin_lng,
-                            originLabel: trip.origin_label,
-                            destLat: trip.destination_lat,
-                            destLng: trip.destination_lng,
-                            destLabel: trip.destination_label,
-                            fare: trip.fare_per_seat,
-                            seats: trip.available_seats
+                            origin_lat: String(trip.origin_lat),
+                            origin_lng: String(trip.origin_lng),
+                            origin_label: trip.origin_label,
+                            destination_lat: String(trip.destination_lat),
+                            destination_lng: String(trip.destination_lng),
+                            destination_label: trip.destination_label,
+                            fare: String(trip.fare_per_seat),
+                            seats: String(trip.available_seats)
                           };
                           router.push({ pathname: '/(main)/ride/create', params });
                         }}
