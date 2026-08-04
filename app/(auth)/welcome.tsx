@@ -8,6 +8,7 @@ import {
   StatusBar,
   Pressable,
   ScrollView,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -120,7 +121,11 @@ export default function WelcomeScreen() {
         <View style={styles.header}>
           <View style={styles.logoGlassWrapper}>
             <View style={styles.logoGlass}>
-              <Ionicons name="car-sport" size={42} color={COLORS.primary} />
+              <Image
+                source={require('../../assets/logo.png')}
+                style={{ width: 64, height: 64, borderRadius: 16 }}
+                resizeMode="cover"
+              />
             </View>
           </View>
           <Text style={styles.appName}>{APP_NAME}</Text>

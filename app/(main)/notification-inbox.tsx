@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
+import EmptyState from '@/components/common/EmptyState';
 import { getUserNotifications, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification, deleteAllNotifications, AppNotification } from '@/services/notifications';
 
 export default function NotificationInboxScreen() {
@@ -121,10 +122,11 @@ export default function NotificationInboxScreen() {
         {loading ? (
           <Text style={[styles.emptyText, { color: theme.colors.textMuted }]}>Loading...</Text>
         ) : notifications.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Ionicons name="notifications-off-outline" size={48} color={theme.colors.textMuted} />
-            <Text style={[styles.emptyText, { color: theme.colors.textMuted, marginTop: 12 }]}>No notifications yet.</Text>
-          </View>
+          <EmptyState
+            icon="notifications-off-outline"
+            title="No Notifications Yet"
+            message="You're all caught up! Updates regarding your rides and requests will appear here."
+          />
         ) : (
           notifications.map(notification => (
             <Pressable

@@ -92,6 +92,8 @@ function RootLayoutNav() {
   );
 }
 
+import { CustomAlertProvider } from '@/context/CustomAlertContext';
+
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -118,17 +120,19 @@ export default function RootLayout() {
     <GestureHandlerRootView style={styles.container}>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
-          <ToastProvider>
-          <AuthProvider>
-            <RouteProvider>
-              <VoiceAssistantProvider>
-                <RootLayoutNav />
-                <VoiceAssistantFab />
-                <VoiceAssistantSheet />
-              </VoiceAssistantProvider>
-            </RouteProvider>
-          </AuthProvider>
-          </ToastProvider>
+          <CustomAlertProvider>
+            <ToastProvider>
+            <AuthProvider>
+              <RouteProvider>
+                <VoiceAssistantProvider>
+                  <RootLayoutNav />
+                  <VoiceAssistantFab />
+                  <VoiceAssistantSheet />
+                </VoiceAssistantProvider>
+              </RouteProvider>
+            </AuthProvider>
+            </ToastProvider>
+          </CustomAlertProvider>
         </ThemeProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>

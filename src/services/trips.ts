@@ -3,6 +3,9 @@ import { Trip, TripWithDriver } from '@/types/database';
 import { sendPushNotification } from './pushNotifications';
 import { handleServiceError } from '@/utils/errorHelper';
 import { generateRouteHash, isJsonLabel } from '@/utils/routeHash';
+import { getChatRoom } from './chatRooms';
+import { sendMessage } from './messages';
+import { cancelRideReminder } from './rideReminders';
 
 /** Create a new trip */
 export async function createTrip(tripData: Omit<Trip, 'id' | 'created_at'>): Promise<{ data: Trip | null; error: Error | null }> {
@@ -69,6 +72,20 @@ export async function updateTripStatus(id: string, status: string): Promise<{ er
   if (!error) {
     if (status === 'completed') {
       try {
+        // Send automated system alert to chat room about 24h grace window for lost items
+        const room = await getChatRoom(id);
+        if (room) {
+          const { data: trip } = await supabase.from('trips').select('driver_id').eq('id', id).single();
+          if (trip?.driver_id) {
+            await sendMessage(
+              room.id,
+              trip.driver_id,
+              '🏁 Ride Completed! This group chat will remain open for 24 hours in case any passenger has concerns or left an item behind.',
+              true
+            );
+          }
+        }
+
         // Fetch accepted/completed bookings for this trip to sum their platform fees
         const { data: bookings } = await supabase
           .from('bookings')
@@ -172,7 +189,7 @@ export async function searchNearbyTrips(
     .gte('origin_lng', lng - lngDelta)
     .lte('origin_lng', lng + lngDelta)
     .gte('departure_time', new Date().toISOString())
-    .in('status', ['open', 'full', 'ongoing'])
+    .in('status', ['open', 'full'])
     .order('departure_time', { ascending: true });
 
   if (error) throw error;
@@ -241,6 +258,11 @@ export async function notifyMatchingCommuters(trip: Trip): Promise<void> {
 
 /** Delete a trip and cancel all bookings related to it */
 export async function deleteTrip(id: string): Promise<{ error: Error | null }> {
+  // Cancel any scheduled local ride reminders for this trip
+  await cancelRideReminder(id).catch(err => {
+    console.error('Error cancelling ride reminders on deleteTrip:', err);
+  });
+
   // Fetch accepted/pending bookings before deletion to notify commuters
   const { data: bookingsData } = await supabase
     .from('bookings')
@@ -270,7 +292,19 @@ export async function deleteTrip(id: string): Promise<{ error: Error | null }> {
     });
   }
 
-  // First, delete bookings related to this trip
+  // Delete chat room, members, and messages for this trip
+  try {
+    const room = await getChatRoom(id);
+    if (room) {
+      await supabase.from('messages').delete().eq('chat_room_id', room.id);
+      await supabase.from('chat_members').delete().eq('chat_room_id', room.id);
+      await supabase.from('chat_rooms').delete().eq('id', room.id);
+    }
+  } catch (chatErr) {
+    console.error('Error cleaning up chat data on deleteTrip:', chatErr);
+  }
+
+  // Delete bookings related to this trip
   const { error: bookingsError } = await supabase
     .from('bookings')
     .delete()
@@ -281,7 +315,7 @@ export async function deleteTrip(id: string): Promise<{ error: Error | null }> {
     return { error: bookingsError as unknown as Error };
   }
 
-  // Next, delete the trip itself
+  // Delete the trip itself
   const { error } = await supabase
     .from('trips')
     .delete()

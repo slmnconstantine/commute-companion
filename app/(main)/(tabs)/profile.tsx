@@ -23,6 +23,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import Constants from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
+import SafeLottieView from '@/components/common/SafeLottieView';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import Avatar from '@/components/common/Avatar';
@@ -298,6 +299,45 @@ export default function ProfileScreen() {
               ]}
             >
               Member Since
+            </Text>
+          </View>
+        </View>
+
+        {/* ── Eco Carbon Saved Card ──────────────────────────────── */}
+        <View
+          style={[
+            styles.balanceCard,
+            {
+              backgroundColor: `${theme.colors.success || '#10B981'}10`,
+              borderColor: `${theme.colors.success || '#10B981'}30`,
+              borderWidth: 1,
+              marginTop: 16,
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingHorizontal: 16,
+              paddingVertical: 12,
+              borderRadius: 16,
+            },
+          ]}
+        >
+          <View
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              backgroundColor: `${theme.colors.success || '#10B981'}20`,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Ionicons name="leaf" size={24} color={theme.colors.success || '#10B981'} />
+          </View>
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={[{ color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 14 }]}>
+              Eco Commuter Impact
+            </Text>
+            <Text style={[{ color: theme.colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 12 }]}>
+              Estimated 14.8 kg CO₂ emissions saved by carpooling
             </Text>
           </View>
         </View>

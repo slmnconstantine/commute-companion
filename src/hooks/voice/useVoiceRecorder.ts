@@ -1,4 +1,4 @@
-import { useAudioRecorder, RecordingPresets, requestRecordingPermissionsAsync } from 'expo-audio';
+import { useAudioRecorder, RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync } from 'expo-audio';
 import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '@/lib/supabase';
 
@@ -10,6 +10,12 @@ export function useVoiceRecorder() {
     if (!permission.granted) {
       throw new Error('Microphone permission denied');
     }
+    try {
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+        interruptionMode: 'doNotMix',
+      } as any);
+    } catch {}
     await recorder.prepareToRecordAsync();
     recorder.record();
   };

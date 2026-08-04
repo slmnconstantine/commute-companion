@@ -37,10 +37,10 @@ export function calculateFare(
   // Calculate time cost based on durationMin * COST_PER_MIN
   const timeCost = Math.round(durationMin * COST_PER_MIN * 100) / 100;
   const subtotal = baseFare + distanceCost + timeCost;
-  const costPerSeat = subtotal / Math.max(1, passengers);
-  // Calculate platform fee using PLATFORM_FEE_RATE
+  const costPerSeat = Math.ceil(subtotal / Math.max(1, passengers));
+  // 10% platform fee applied per seat booking
   const platformFee = Math.round(costPerSeat * PLATFORM_FEE_RATE * 100) / 100;
-  const totalPerSeat = Math.ceil(costPerSeat + platformFee);
+  const totalPerSeat = costPerSeat + platformFee;
 
   return { baseFare, distanceCost, timeCost, subtotal, costPerSeat, platformFee, totalPerSeat };
 }
@@ -56,13 +56,9 @@ export function formatCurrency(amount: number): string {
  * the driver owes to the platform (since they collect the total in cash).
  */
 export function getDriverPayout(totalFare: number): { netPayout: number; platformFee: number } {
-  // totalFare includes commuter platform fee (10% on top of base fare)
-  const baseFare = Math.round((totalFare / (1 + PLATFORM_FEE_RATE)) * 100) / 100;
-  const commuterFee = Math.round((totalFare - baseFare) * 100) / 100;
-  const driverFee = Math.round(baseFare * PLATFORM_FEE_RATE * 100) / 100;
-  
-  const platformFee = Math.round((commuterFee + driverFee) * 100) / 100;
-  const netPayout = Math.round((baseFare - driverFee) * 100) / 100;
+  // Only drivers get charged a 10% platform fee from their earnings
+  const platformFee = Math.round(totalFare * PLATFORM_FEE_RATE * 100) / 100;
+  const netPayout = Math.round((totalFare - platformFee) * 100) / 100;
   
   return { netPayout, platformFee };
 }

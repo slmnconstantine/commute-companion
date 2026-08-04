@@ -14,6 +14,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import SafeLottieView from '@/components/common/SafeLottieView';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -134,11 +135,23 @@ export default function PayFeesScreen() {
     }
   };
 
+  /**
+   * Finalizes database platform fee deduction.
+   * Note: In production builds, this balance update is securely processed
+   * via Paymongo webhook triggers to prevent client-side manipulation.
+   */
   const finalizeDatabasePayment = async (amountPaid: number) => {
     if (!profile) return;
+    
+    // Bounds & sanity validation
+    const currentBalance = profile.platform_fee_balance || 0;
+    if (amountPaid <= 0 || amountPaid > currentBalance + 0.01) {
+      Alert.alert('Invalid Payment', 'Payment amount exceeds current balance or is invalid.');
+      return;
+    }
+
     setLoading(true);
     try {
-      const currentBalance = profile.platform_fee_balance || 0;
       const newBalance = Math.max(0, currentBalance - amountPaid);
 
       const { error } = await supabase

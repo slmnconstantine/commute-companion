@@ -7,6 +7,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { updateProfile, updateVerification } from '@/services/profiles';
 import { pickImage, takePhoto, uploadGovernmentId } from '@/services/storage';
+import { addVehicle, getVehicles, deleteVehicle } from '@/services/vehicles';
 
 export default function VerificationScreen() {
   const router = useRouter();
@@ -52,20 +53,82 @@ export default function VerificationScreen() {
 
   const handleDemoOverride = async () => {
     if (!profile) return;
+    
+    if (isVerified) {
+      // Just unverify
+      setSubmitting(true);
+      try {
+        const { error } = await updateVerification(profile.id, false);
+        if (error) throw error;
+        
+        // Optionally clean up vehicles
+        const existing = await getVehicles(profile.id);
+        for (const v of existing) {
+          await deleteVehicle(v.id);
+        }
+        
+        await refreshProfile();
+        Alert.alert('Demo Override Success', 'Your verification status has been reset.');
+      } catch (e: any) {
+        Alert.alert('Error', e.message || 'Demo override failed.');
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
+    // If not verified, ask for vehicle type
+    Alert.alert(
+      'Select Vehicle Type',
+      'What type of vehicle do you drive?',
+      [
+        {
+          text: 'Tricycle',
+          onPress: () => processOverride('tricycle'),
+        },
+        {
+          text: 'Private Vehicle (Car)',
+          onPress: () => processOverride('private'),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        }
+      ]
+    );
+  };
+
+  const processOverride = async (vehicleType: string) => {
+    if (!profile) return;
     setSubmitting(true);
     try {
-      const nextStatus = !isVerified;
-      const { error } = await updateVerification(profile.id, nextStatus);
-      if (error) throw error;
+      // 1. Update verification state in profiles first
+      const { error: verError } = await updateVerification(profile.id, true);
+      if (verError) throw verError;
+
+      // 2. Update role to driver so RLS checks pass for vehicle insertion
+      await updateProfile(profile.id, { role: 'driver', is_verified: true } as any);
+
+      // 3. Insert mock vehicle gracefully
+      try {
+        await addVehicle(
+          profile.id,
+          `DEMO-${Math.floor(100 + Math.random() * 900)}`,
+          vehicleType,
+          vehicleType === 'tricycle' ? 'Tricycle Model' : 'Sedan Model',
+          vehicleType === 'tricycle' ? '3' : '4'
+        );
+      } catch (vErr) {
+        console.warn('Note: Mock vehicle insertion skipped:', vErr);
+      }
+
       await refreshProfile();
       Alert.alert(
-        'Demo Override Success',
-        nextStatus 
-          ? 'Your profile is now verified! The badge is active.'
-          : 'Your verification status has been reset.'
+        'Verification Success! 🎉',
+        'Your profile is now verified! The verified badge is active and driver status is enabled.'
       );
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Demo override failed.');
+      Alert.alert('Verification Error', e.message || 'Demo override failed.');
     } finally {
       setSubmitting(false);
     }

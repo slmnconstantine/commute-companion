@@ -5,7 +5,6 @@ import { useTheme } from '@/context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNotifications } from '@/context/NotificationContext';
 import { useAuth } from '@/context/AuthContext';
-
 import * as Haptics from 'expo-haptics';
 import React, { useRef, useEffect } from 'react';
 
@@ -18,29 +17,32 @@ function AnimatedTabIcon({ name, focused, color }: { name: string; focused: bool
         Animated.spring(scale, {
           toValue: 1.2,
           useNativeDriver: true,
-          speed: 60,
-          bounciness: 15,
+          speed: 50,
+          bounciness: 12,
         }),
         Animated.spring(scale, {
           toValue: 1.05,
           useNativeDriver: true,
-          speed: 40,
-          bounciness: 8,
+          speed: 30,
+          bounciness: 6,
         }),
       ]).start();
     } else {
       Animated.spring(scale, {
         toValue: 1,
         useNativeDriver: true,
-        speed: 40,
-        bounciness: 8,
+        speed: 30,
+        bounciness: 6,
       }).start();
     }
   }, [focused]);
 
   return (
-    <Animated.View style={{ transform: [{ scale }] }}>
+    <Animated.View style={{ alignItems: 'center', justifyContent: 'center', transform: [{ scale }] }}>
       <Ionicons name={name as any} size={22} color={color} />
+      {focused && (
+        <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: color, marginTop: 2 }} />
+      )}
     </Animated.View>
   );
 }
@@ -126,7 +128,7 @@ export default function TabLayout() {
         options={{
           title: 'Hub',
           tabBarIcon: ({ color, focused }) => (
-            <AnimatedTabIcon name={focused ? 'people' : 'people-outline'} focused={focused} color={color} />
+            <AnimatedTabIcon name={focused ? 'chatbubbles' : 'chatbubbles-outline'} focused={focused} color={color} />
           ),
         }}
       />

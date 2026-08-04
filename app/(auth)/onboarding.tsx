@@ -5,6 +5,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, withSequence, Easing } from 'react-native-reanimated';
 
 const { width } = Dimensions.get('window');
 
@@ -13,21 +15,95 @@ const SLIDES = [
     id: '1',
     title: 'Welcome to Commute Companion',
     description: 'The smartest way to share rides, reduce traffic, and save money on your daily commute.',
-    icon: 'car-sport-outline',
+    icon: 'car-sport',
+    badge: 'Carpool Ecosystem',
   },
   {
     id: '2',
     title: 'Find Your Perfect Ride',
     description: 'Set your regular commute route and we will match you with drivers going the same way.',
-    icon: 'map-outline',
+    icon: 'map',
+    badge: 'Route Matching',
   },
   {
     id: '3',
     title: 'Safe & Verified Community',
     description: 'All users are verified with government IDs to ensure a secure environment for everyone.',
-    icon: 'shield-checkmark-outline',
+    icon: 'shield-checkmark',
+    badge: 'ID Verified Safety',
   },
 ];
+
+function OnboardingHeroGraphic({ icon, badge }: { icon: string; badge: string }) {
+  const { theme } = useTheme();
+  const floatAnim = useSharedValue(0);
+  const pulseAnim = useSharedValue(1);
+
+  React.useEffect(() => {
+    floatAnim.value = withRepeat(
+      withSequence(
+        withTiming(-12, { duration: 1800, easing: Easing.inOut(Easing.sin) }),
+        withTiming(0, { duration: 1800, easing: Easing.inOut(Easing.sin) })
+      ),
+      -1,
+      true
+    );
+    pulseAnim.value = withRepeat(
+      withSequence(
+        withTiming(1.15, { duration: 2000, easing: Easing.inOut(Easing.cubic) }),
+        withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.cubic) })
+      ),
+      -1,
+      true
+    );
+  }, []);
+
+  const floatStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: floatAnim.value }],
+  }));
+
+  const pulseStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pulseAnim.value }],
+    opacity: 0.25,
+  }));
+
+  return (
+    <View style={heroStyles.wrapper}>
+      {/* Outer Pulse Ring */}
+      <Animated.View style={[heroStyles.pulseRing, { backgroundColor: theme.colors.primary }, pulseStyle]} />
+
+      {/* Floating Glassmorphism Hero Badge */}
+      <Animated.View style={[heroStyles.heroCard, floatStyle]}>
+        <LinearGradient
+          colors={[`${theme.colors.primary}30`, `${theme.colors.primary}10`]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={heroStyles.heroGradient}
+        >
+          <View style={[heroStyles.iconCircle, { backgroundColor: theme.colors.primary }]}>
+            <Ionicons name={icon as any} size={64} color="#FFF" />
+          </View>
+          <View style={[heroStyles.pillBadge, { backgroundColor: `${theme.colors.primary}20`, borderColor: `${theme.colors.primary}40` }]}>
+            <Ionicons name="sparkles" size={12} color={theme.colors.primary} />
+            <Text style={[heroStyles.pillText, { color: theme.colors.primary, fontFamily: 'Inter-SemiBold' }]}>
+              {badge}
+            </Text>
+          </View>
+        </LinearGradient>
+      </Animated.View>
+    </View>
+  );
+}
+
+const heroStyles = StyleSheet.create({
+  wrapper: { alignItems: 'center', justifyContent: 'center', width: 260, height: 260 },
+  pulseRing: { position: 'absolute', width: 220, height: 220, borderRadius: 110 },
+  heroCard: { width: 200, height: 200, borderRadius: 100, overflow: 'hidden', elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.2, shadowRadius: 16 },
+  heroGradient: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', gap: 14, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.2)', borderRadius: 100 },
+  iconCircle: { width: 96, height: 96, borderRadius: 48, alignItems: 'center', justifyContent: 'center', elevation: 4 },
+  pillBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, borderWidth: 1 },
+  pillText: { fontSize: 12 },
+});
 
 export default function OnboardingScreen() {
   const router = useRouter();
@@ -58,7 +134,7 @@ export default function OnboardingScreen() {
     return (
       <View style={{ width, flex: 1 }}>
         <View style={[styles.imageContainer, { backgroundColor: theme.colors.primary + '10' }]}>
-          <Ionicons name={item.icon as any} size={120} color={theme.colors.primary} />
+          <OnboardingHeroGraphic icon={item.icon} badge={item.badge} />
         </View>
         <View style={styles.contentContainer}>
           <Text style={[styles.title, { color: theme.colors.text, fontFamily: 'Inter-Bold' }]}>

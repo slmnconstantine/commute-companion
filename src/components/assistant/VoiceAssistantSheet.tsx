@@ -8,6 +8,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 
 import { LinearGradient } from 'expo-linear-gradient';
+import SafeLottieView from '@/components/common/SafeLottieView';
 import { useTheme } from '@/context/ThemeContext';
 import { useVoiceAssistant } from '@/context/VoiceAssistantContext';
 
@@ -308,7 +309,7 @@ export default function VoiceAssistantSheet() {
                     <Ionicons name="stop" size={28} color="#fff" />
                   </LinearGradient>
                 </Pressable>
-                <Text style={[styles.recordHint, { color: theme.colors.textMuted, fontFamily: 'Inter-Medium' }]}>
+                <Text style={[styles.recordHint, { color: theme.colors.textMuted, fontFamily: 'Inter-Medium', marginTop: 12 }]}>
                   Tap to stop recording
                 </Text>
               </View>

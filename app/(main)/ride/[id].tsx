@@ -75,7 +75,7 @@ export default function TripDetailScreen() {
   const cameraRef = useRef<CameraRef>(null);
 
   const userBooking = bookings.find(b => b.commuter_id === profile?.id);
-  const isConfirmedPassenger = userBooking?.status === 'accepted';
+  const isConfirmedPassenger = !!(userBooking && ['accepted', 'completed', 'dropped_off_early'].includes(userBooking.status));
   const isDriver = profile?.id === trip?.driver_id;
   const isOngoingDriver = !!(isDriver && trip && trip.status === 'ongoing');
   const isOngoingActiveUser = !!(trip && trip.status === 'ongoing' && (isDriver || isConfirmedPassenger));
@@ -224,14 +224,19 @@ export default function TripDetailScreen() {
           onPress: async () => {
             setProcessingBookingId(booking.id);
             try {
-              await updateBookingStatus(booking.id, 'accepted');
-
               if (trip) {
+                const latestTrip = await getTripById(trip.id);
                 const seatsBooked = booking.seats_booked || 1;
-                const newAvailableSeats = Math.max(0, trip.available_seats - seatsBooked);
+                if (!latestTrip || latestTrip.available_seats < seatsBooked) {
+                  Alert.alert('Cannot Accept', 'Not enough available seats remaining on this trip.');
+                  return;
+                }
 
+                await updateBookingStatus(booking.id, 'accepted');
+
+                const newAvailableSeats = Math.max(0, latestTrip.available_seats - seatsBooked);
                 const updates: any = { available_seats: newAvailableSeats };
-                if (newAvailableSeats <= 0 && trip.status === 'open') {
+                if (newAvailableSeats <= 0 && (latestTrip.status === 'open' || latestTrip.status === 'full')) {
                   updates.status = 'full';
                 }
 
@@ -241,6 +246,8 @@ export default function TripDetailScreen() {
                   .eq('id', trip.id);
 
                 setTrip(prev => prev ? { ...prev, ...updates } : null);
+              } else {
+                await updateBookingStatus(booking.id, 'accepted');
               }
 
               let room = await getChatRoom(id);
