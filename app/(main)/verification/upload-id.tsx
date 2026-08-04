@@ -33,9 +33,9 @@ export default function UploadIdScreen() {
     try {
       const url = await uploadGovernmentId(profile.id, imageBase64);
       if (!url) throw new Error('Upload failed');
-      await updateProfile(profile.id, { government_id_url: url });
+      await updateProfile(profile.id, { government_id_url: url, is_verified: false } as any);
       await refreshProfile();
-      Alert.alert('Submitted!', 'Your ID has been submitted for verification.', [
+      Alert.alert('Submitted! ⏳', 'Your ID has been submitted and is pending admin review.', [
         { text: 'OK', onPress: () => router.back() },
       ]);
     } catch (e: any) {

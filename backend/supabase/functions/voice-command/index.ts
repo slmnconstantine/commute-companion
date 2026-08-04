@@ -150,7 +150,7 @@ Map their request to one of the following commands:
 1. SEARCH_RIDES: user wants to find a ride. Extracts: destination, origin, date, time.
 2. SUMMARIZE_ACTIVITY: user wants to know their upcoming trips or bookings.
 3. DRAFT_MESSAGE: user wants to send a chat message. Extracts: message (the actual text), target (who to send it to).
-4. DRAFT_COMMUNITY_POST: user wants to post an update to the route community. Extracts: message (the text to post).
+4. DRAFT_COMMUNITY_POST: user wants to post an update to the route community. Extracts: message (the text to post), status_tag (must be one of: 'traffic', 'tip', 'alert', 'question', 'delay', 'full', 'clear', 'other'). Analyze the post message or explicit user instruction to select the matching status_tag (e.g. mentions of heavy traffic/jam/congestion -> 'traffic', warnings/floods/accidents/hazards/police -> 'alert', shortcuts/advice/routing -> 'tip', questions/inquiries -> 'question', delays/standstill -> 'delay', full/crowded/long line -> 'full', clear road/smooth -> 'clear', default -> 'other').
 5. PREPARE_BOOKING: user wants to book a ride. Extracts: trip_id (if clear), or details about the ride.
 6. NAVIGATE: user wants to go to a specific screen (e.g. Activity, Home, Hub, Set Route). Extracts: screen.
 7. CLARIFY: the user's intent is unclear or ambiguous. You must ask a single clarifying question. Extracts: question.
@@ -181,7 +181,8 @@ Rules for requiresConfirmation:
 - False for others.
 
 For spokenReply:
-- If confirming an action, ask for confirmation (e.g. "Do you want me to post this message?").
+- If confirming a DRAFT_COMMUNITY_POST action, include the tag label (e.g. "Do you want me to post this Traffic update to the route community: \"[message]\"?").
+- If confirming another action, ask for confirmation clearly.
 - If navigating or searching, say "Sure, looking for rides to BGC."
 - Always keep it short.
       `;

@@ -18,6 +18,7 @@ export default function VerificationScreen() {
   const [idImage, setIdImage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const isVerified = !!(profile?.is_verified && profile?.verified_badge);
+  const isPending = !!(profile?.government_id_url && !profile?.is_verified);
 
   const handlePickImage = async () => {
     const base64 = await pickImage();
@@ -37,13 +38,16 @@ export default function VerificationScreen() {
       const url = await uploadGovernmentId(profile.id, idImage);
       if (!url) throw new Error("Failed to upload ID image.");
 
-      const { error } = await updateVerification(profile.id, true, url);
+      // Set is_verified to false so account status remains PENDING for admin review
+      const { error } = await updateVerification(profile.id, false, url);
       if (error) throw error;
       
       await refreshProfile();
-      Alert.alert('Verification Submitted', 'Your ID has been verified! You now have the verified badge on your profile.', [
-        { text: 'OK', onPress: () => router.back() }
-      ]);
+      Alert.alert(
+        'Verification Submitted ⏳', 
+        'Your ID image has been submitted successfully and is now pending admin review.', 
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Failed to submit verification.');
     } finally {
@@ -54,12 +58,13 @@ export default function VerificationScreen() {
   const handleDemoOverride = async () => {
     if (!profile) return;
     
-    if (isVerified) {
-      // Just unverify
+    if (isVerified || isPending) {
+      // Just unverify / reset
       setSubmitting(true);
       try {
         const { error } = await updateVerification(profile.id, false);
         if (error) throw error;
+        await updateProfile(profile.id, { government_id_url: null, verified_badge: false } as any);
         
         // Optionally clean up vehicles
         const existing = await getVehicles(profile.id);
@@ -107,7 +112,7 @@ export default function VerificationScreen() {
       if (verError) throw verError;
 
       // 2. Update role to driver so RLS checks pass for vehicle insertion
-      await updateProfile(profile.id, { role: 'driver', is_verified: true } as any);
+      await updateProfile(profile.id, { role: 'driver', is_verified: true, verified_badge: true } as any);
 
       // 3. Insert mock vehicle gracefully
       try {
@@ -147,22 +152,24 @@ export default function VerificationScreen() {
       <View style={styles.content}>
         <View style={styles.iconContainer}>
           <Ionicons 
-            name={isVerified ? "shield-checkmark" : "shield-half"} 
+            name={isVerified ? "shield-checkmark" : isPending ? "time-outline" : "shield-half"} 
             size={64} 
-            color={isVerified ? theme.colors.success : theme.colors.primary} 
+            color={isVerified ? theme.colors.success : isPending ? theme.colors.warning : theme.colors.primary} 
           />
         </View>
 
         <Text style={[styles.title, { color: theme.colors.text, fontFamily: 'Inter-Bold' }]}>
-          {isVerified ? 'You are Verified!' : 'Verify Your Identity'}
+          {isVerified ? 'You are Verified!' : isPending ? 'Verification Pending Review ⏳' : 'Verify Your Identity'}
         </Text>
         <Text style={[styles.subtitle, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
           {isVerified 
             ? 'Your government ID has been securely verified. The verified badge is now displayed on your profile.' 
+            : isPending
+            ? 'Your government ID has been submitted and is currently pending review by our admin team. You will be notified once approved.'
             : 'To ensure a safe commuting environment for everyone, we require all users to upload a valid Government ID.'}
         </Text>
 
-        {!isVerified && (
+        {!isVerified && !isPending && (
           <View style={styles.uploadSection}>
             {idImage ? (
               <View style={styles.imagePreviewContainer}>
@@ -196,6 +203,15 @@ export default function VerificationScreen() {
             >
               <Text style={styles.submitBtnText}>{submitting ? 'Submitting...' : 'Submit Verification'}</Text>
             </Pressable>
+          </View>
+        )}
+
+        {isPending && (
+          <View style={[styles.pendingCard, { backgroundColor: `${theme.colors.warning}15`, borderColor: `${theme.colors.warning}40` }]}>
+            <Ionicons name="hourglass-outline" size={20} color={theme.colors.warning} />
+            <Text style={[styles.pendingText, { color: theme.colors.text }]}>
+              Submitted ID document is queued for admin review.
+            </Text>
           </View>
         )}
 
@@ -252,5 +268,21 @@ const styles = StyleSheet.create({
   },
   overrideText: {
     fontSize: 14,
+  },
+  pendingCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    width: '100%',
+    marginBottom: 20,
+  },
+  pendingText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    lineHeight: 20,
   },
 });

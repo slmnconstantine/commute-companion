@@ -7,6 +7,7 @@ import { getOrCreateChatRoom, joinChatRoom, getChatRoom } from '@/services/chatR
 import { createPost, deleteAllUserPosts } from '@/services/hub';
 import { getTripBookings, updateBookingStatus } from '@/services/bookings';
 import { getTripById } from '@/services/trips';
+import { resolveStatusTag } from '@/utils/statusTag';
 
 export function useCommandExecutor() {
   const router = useRouter();
@@ -110,10 +111,11 @@ export function useCommandExecutor() {
   const handleDraftCommunityPost = async (cmd: AssistantCommand, currentContext: any, profile: any) => {
     const route = currentContext?.activeRoute;
     if (route && profile?.id) {
+      const statusTag = resolveStatusTag(cmd.params.status_tag || cmd.params.tag, cmd.params.message);
       await createPost(
         profile.id,
         route.route_hash,
-        'other',
+        statusTag,
         cmd.params.message,
         route.origin_lat,
         route.origin_lng,

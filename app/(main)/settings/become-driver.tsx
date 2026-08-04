@@ -17,24 +17,27 @@ import {
   Animated,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
+import { pickImage, uploadDriverDocument } from '@/services/storage';
 
 export default function BecomeDriverScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { updateProfile } = useAuth();
+  const { profile, updateProfile } = useAuth();
 
   const [vehicleModel, setVehicleModel] = useState('');
   const [plateNumber, setPlateNumber] = useState('');
   const [vehicleType, setVehicleType] = useState<'sedan' | 'suv' | 'van' | 'motorcycle'>('sedan');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [docUrls, setDocUrls] = useState<Record<string, string>>({});
 
   const buttonScale = useRef(new Animated.Value(1)).current;
 
@@ -57,17 +60,21 @@ export default function BecomeDriverScreen() {
     if (!validate()) return;
     setLoading(true);
     try {
-      const { error } = await updateProfile({
+      const updates: Record<string, any> = {
         role: 'driver',
         is_verified: false, // Requires manual verification
-      });
+      };
+      if (docUrls.license) {
+        updates.government_id_url = docUrls.license;
+      }
+      const { error } = await updateProfile(updates);
 
       if (error) {
         Alert.alert('Error', error.message || 'Failed to submit application.');
       } else {
         Alert.alert(
           'Application Submitted! 🎉',
-          'Your driver application has been submitted. Your documents will be reviewed shortly. You can now start posting rides!',
+          'Your driver application and documents have been uploaded for review. You can now start posting rides!',
           [{ text: 'OK', onPress: () => router.back() }]
         );
       }
@@ -217,18 +224,27 @@ export default function BecomeDriverScreen() {
           title="Vehicle Photo"
           description="Take or upload a clear photo of your vehicle"
           theme={theme}
+          docType="vehicle_photo"
+          userId={profile?.id}
+          onUploadSuccess={(url) => setDocUrls(prev => ({ ...prev, vehicle_photo: url }))}
         />
         <UploadCard
           icon="document-attach-outline"
           title="Vehicle Registration (OR/CR)"
           description="Upload your Official Receipt and Certificate of Registration"
           theme={theme}
+          docType="or_cr"
+          userId={profile?.id}
+          onUploadSuccess={(url) => setDocUrls(prev => ({ ...prev, or_cr: url }))}
         />
         <UploadCard
           icon="id-card-outline"
           title="Driver's License"
           description="Upload a valid Philippine driver's license"
           theme={theme}
+          docType="license"
+          userId={profile?.id}
+          onUploadSuccess={(url) => setDocUrls(prev => ({ ...prev, license: url }))}
         />
 
         {/* Submit Button */}
@@ -262,39 +278,83 @@ export default function BecomeDriverScreen() {
   );
 }
 
-function UploadCard({ icon, title, description, theme }: { icon: string; title: string; description: string; theme: any }) {
-  const [uploaded, setUploaded] = useState(false);
+function UploadCard({
+  icon,
+  title,
+  description,
+  theme,
+  docType,
+  userId,
+  onUploadSuccess
+}: {
+  icon: string;
+  title: string;
+  description: string;
+  theme: any;
+  docType: string;
+  userId?: string;
+  onUploadSuccess?: (url: string) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
+
+  const handlePick = async () => {
+    if (!userId) {
+      Alert.alert('Error', 'Please log in to upload documents.');
+      return;
+    }
+    const base64 = await pickImage();
+    if (!base64) return;
+
+    setUploading(true);
+    try {
+      const url = await uploadDriverDocument(userId, base64, docType);
+      if (url) {
+        setUploadedUrl(url);
+        if (onUploadSuccess) onUploadSuccess(url);
+      }
+    } catch (e) {
+      console.error('Document upload error:', e);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   return (
     <Pressable
       style={[
         styles.uploadCard,
         {
-          backgroundColor: uploaded ? `${theme.colors.success}08` : theme.colors.surface,
-          borderColor: uploaded ? theme.colors.success : theme.colors.border,
+          backgroundColor: uploadedUrl ? `${theme.colors.success}08` : theme.colors.surface,
+          borderColor: uploadedUrl ? theme.colors.success : theme.colors.border,
         },
       ]}
-      onPress={() => setUploaded(!uploaded)}
+      onPress={handlePick}
+      disabled={uploading}
     >
-      <View style={[styles.uploadIcon, { backgroundColor: uploaded ? `${theme.colors.success}15` : `${theme.colors.primary}10` }]}>
-        <Ionicons
-          name={uploaded ? 'checkmark-circle' : (icon as any)}
-          size={24}
-          color={uploaded ? theme.colors.success : theme.colors.primary}
-        />
+      <View style={[styles.uploadIcon, { backgroundColor: uploadedUrl ? `${theme.colors.success}15` : `${theme.colors.primary}10` }]}>
+        {uploading ? (
+          <ActivityIndicator size="small" color={theme.colors.primary} />
+        ) : (
+          <Ionicons
+            name={uploadedUrl ? 'checkmark-circle' : (icon as any)}
+            size={24}
+            color={uploadedUrl ? theme.colors.success : theme.colors.primary}
+          />
+        )}
       </View>
       <View style={styles.uploadInfo}>
         <Text style={[styles.uploadTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>
           {title}
         </Text>
         <Text style={[styles.uploadDesc, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
-          {uploaded ? 'Document uploaded ✓' : description}
+          {uploading ? 'Uploading to documents bucket...' : uploadedUrl ? 'Document uploaded & saved ✓' : description}
         </Text>
       </View>
       <Ionicons
-        name={uploaded ? 'checkmark-circle' : 'cloud-upload-outline'}
+        name={uploadedUrl ? 'checkmark-circle' : 'cloud-upload-outline'}
         size={22}
-        color={uploaded ? theme.colors.success : theme.colors.textMuted}
+        color={uploadedUrl ? theme.colors.success : theme.colors.textMuted}
       />
     </Pressable>
   );

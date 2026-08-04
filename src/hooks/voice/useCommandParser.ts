@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { AssistantCommand } from '@/types/voice';
+import { resolveStatusTag, getStatusTagLabel } from '@/utils/statusTag';
 
 interface IntentPattern {
   pattern: RegExp;
@@ -43,6 +44,27 @@ const INTENTS: IntentPattern[] = [
       ? `Accepting the booking request for ${params.commuter_name}.`
       : "Accepting the booking request.",
     requiresConfirmation: false
+  },
+  {
+    pattern: /(?:post|share|publish)\s+(?:a\s+|an\s+)?(?:community\s+|hub\s+)?(?:post|update|status|traffic\s+update|tip|alert|question)(?:\s+(?:to|in|on)\s+(?:the\s+)?(?:community|hub))?\s*(?::|about|that|saying)?\s*(.+)/i,
+    command: 'DRAFT_COMMUNITY_POST',
+    params: (match) => {
+      const fullPhrase = match[0];
+      const message = match[1]?.trim() || fullPhrase;
+      let explicitTag: string | null = null;
+      if (/\btraffic\b/i.test(fullPhrase)) explicitTag = 'traffic';
+      else if (/\btip\b/i.test(fullPhrase)) explicitTag = 'tip';
+      else if (/\balert\b/i.test(fullPhrase)) explicitTag = 'alert';
+      else if (/\bquestion\b/i.test(fullPhrase)) explicitTag = 'question';
+      
+      const status_tag = resolveStatusTag(explicitTag, message);
+      return { message, status_tag };
+    },
+    spokenReply: (match, params) => {
+      const tagLabel = getStatusTagLabel(params.status_tag);
+      return `Do you want me to post this ${tagLabel} update to the community: "${params.message}"?`;
+    },
+    requiresConfirmation: true
   },
   {
     pattern: /(?:post|create|offer)\s+(?:a\s+)?ride/i,
