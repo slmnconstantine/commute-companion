@@ -22,7 +22,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/context/ThemeContext';
 import { useRoute } from '@/context/RouteContext';
@@ -97,6 +97,7 @@ export default function CommunityScreen() {
   const { profile } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { mention } = useLocalSearchParams<{ mention?: string }>();
 
   const [posts, setPosts] = useState<HubPostWithAuthor[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -119,6 +120,15 @@ export default function CommunityScreen() {
   // Profile Modal State
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
+
+  // Listen for incoming mention from navigation
+  useEffect(() => {
+    if (mention) {
+      setNewPostMessage(`${mention} `);
+      setEditingPostId(null);
+      setNewPostVisible(true);
+    }
+  }, [mention]);
 
   const loadPosts = useCallback(async () => {
     if (!activeRoute || !activeRoute.route_hash || !profile) {
@@ -613,7 +623,14 @@ export default function CommunityScreen() {
       <ProfileCardModal 
         userId={selectedProfileId} 
         visible={profileModalVisible} 
-        onClose={() => setProfileModalVisible(false)} 
+        onClose={() => setProfileModalVisible(false)}
+        onMention={(handle) => {
+          setSelectedProfileId(null);
+          setProfileModalVisible(false);
+          setNewPostMessage(`${handle} `);
+          setEditingPostId(null);
+          setNewPostVisible(true);
+        }}
       />
     </SafeAreaView>
   );

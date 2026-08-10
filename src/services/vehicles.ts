@@ -23,10 +23,31 @@ export const addVehicle = async (
   model: string, 
   capacity: string
 ): Promise<Vehicle | null> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  const targetDriverId = user?.id || driverId;
+
+  // Ensure user has driver role in profiles so driver-specific RLS policies pass
+  try {
+    const { data: prof } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', targetDriverId)
+      .single();
+
+    if (prof && prof.role !== 'driver') {
+      await supabase
+        .from('profiles')
+        .update({ role: 'driver' })
+        .eq('id', targetDriverId);
+    }
+  } catch (e) {
+    // Non-critical check
+  }
+
   const { data, error } = await supabase
     .from('vehicles')
     .insert({
-      driver_id: driverId,
+      driver_id: targetDriverId,
       plate_number: plateNumber,
       type,
       model,

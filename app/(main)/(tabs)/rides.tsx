@@ -40,6 +40,7 @@ import AnimatedListItem from '@/components/common/AnimatedListItem';
 import DatePickerModal from '@/components/ride/DatePickerModal';
 import TimePickerModal from '@/components/ride/TimePickerModal';
 import BecomeDriverBanner from '@/components/ride/BecomeDriverBanner';
+import DriverUnderReviewCard from '@/components/ride/DriverUnderReviewCard';
 import CustomRefreshControl from '@/components/common/CustomRefreshControl';
 import TripFiltersModal from '@/components/ride/TripFiltersModal';
 import CommuterRequestModal from '@/components/ride/CommuterRequestModal';
@@ -104,7 +105,9 @@ export default function RidesScreen() {
   const { activeRoute, setActiveRoute } = useRoute();
   const { driverPendingCount, refreshCounts } = useNotifications();
   const router = useRouter();
-  const isDriver = profile?.role === 'driver';
+  const isVerifiedDriver = Boolean(profile?.role === 'driver' && profile?.is_verified && profile?.verified_badge);
+  const isDriverPending = Boolean(profile?.role === 'driver' && (!profile?.is_verified || !profile?.verified_badge));
+  const isDriver = isVerifiedDriver;
 
   const params = useLocalSearchParams<{
     from_set_route?: string;
@@ -853,6 +856,12 @@ export default function RidesScreen() {
                 </Text>
               )}
             </>
+          ) : isDriverPending ? (
+            /* Driver Application Under Review */
+            <DriverUnderReviewCard
+              theme={theme}
+              onViewStatus={() => router.push('/(main)/verification' as any)}
+            />
           ) : (
             /* Commuter — Become a Driver Banner */
             <BecomeDriverBanner

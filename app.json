@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "scheme": "commute-companion",
     "ios": {
       "supportsTablet": true,
@@ -18,14 +18,14 @@
       }
     },
     "android": {
-      "backgroundColor": "#6B1D2C",
+      "backgroundColor": "#F8F7F4",
       "androidNavigationBar": {
-        "backgroundColor": "#6B1D2C",
-        "barStyle": "light-content"
+        "backgroundColor": "#F8F7F4",
+        "barStyle": "dark-content"
       },
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "backgroundColor": "#D9C7A3",
+        "backgroundColor": "#F8F7F4",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
@@ -71,7 +71,7 @@
         "expo-notifications",
         {
           "icon": "./assets/icon.png",
-          "color": "#6B1D2C"
+          "color": "#0057FF"
         }
       ],
       "expo-splash-screen",

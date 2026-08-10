@@ -14,6 +14,8 @@ export interface LocationCoords {
   longitude: number;
 }
 
+const addressCache = new Map<string, string>();
+
 export function useLocation() {
   const [location, setLocation] = useState<LocationCoords>({
     latitude: DEFAULT_LATITUDE,
@@ -24,7 +26,6 @@ export function useLocation() {
   const [error, setError] = useState<string | null>(null);
 
   const fetchLocation = useCallback(async () => {
-    setLoading(true);
     setError(null);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -34,6 +35,27 @@ export function useLocation() {
         return;
       }
 
+      // 1. Instant cache hit from OS location cache (< 10ms)
+      try {
+        const lastKnown = await Location.getLastKnownPositionAsync();
+        if (lastKnown) {
+          setLocation({
+            latitude: lastKnown.coords.latitude,
+            longitude: lastKnown.coords.longitude,
+          });
+          setLoading(false);
+
+          // Check if reverse geocode is already cached
+          const cacheKey = `${lastKnown.coords.latitude.toFixed(3)},${lastKnown.coords.longitude.toFixed(3)}`;
+          if (addressCache.has(cacheKey)) {
+            setAddress(addressCache.get(cacheKey)!);
+          }
+        }
+      } catch {
+        // Fall through to fresh position
+      }
+
+      // 2. Fetch fresh position
       const loc = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
@@ -43,18 +65,25 @@ export function useLocation() {
         longitude: loc.coords.longitude,
       });
 
-      try {
-        const [addr] = await Location.reverseGeocodeAsync({
-          latitude: loc.coords.latitude,
-          longitude: loc.coords.longitude,
-        });
-        if (addr) {
-          setAddress(
-            [addr.street, addr.district, addr.city].filter(Boolean).join(', ')
-          );
+      const cacheKey = `${loc.coords.latitude.toFixed(3)},${loc.coords.longitude.toFixed(3)}`;
+      if (addressCache.has(cacheKey)) {
+        setAddress(addressCache.get(cacheKey)!);
+      } else {
+        try {
+          const [addr] = await Location.reverseGeocodeAsync({
+            latitude: loc.coords.latitude,
+            longitude: loc.coords.longitude,
+          });
+          if (addr) {
+            const formatted = [addr.street, addr.district, addr.city].filter(Boolean).join(', ');
+            if (formatted) {
+              addressCache.set(cacheKey, formatted);
+              setAddress(formatted);
+            }
+          }
+        } catch {
+          // Non-critical
         }
-      } catch {
-        // Non-critical
       }
     } catch (e: any) {
       setError(e.message);

@@ -29,6 +29,7 @@ import { useAuth } from '@/context/AuthContext';
 import Avatar from '@/components/common/Avatar';
 import Badge from '@/components/common/Badge';
 import ThemeToggle from '@/components/common/ThemeToggle';
+import BouncyPressable from '@/components/common/BouncyPressable';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -344,14 +345,12 @@ export default function ProfileScreen() {
                 ₱{profile?.platform_fee_balance !== undefined ? profile.platform_fee_balance.toFixed(2) : '0.00'}
               </Text>
             </View>
-            <Pressable
-              style={({ pressed }) => [
+            <BouncyPressable
+              scaleTo={0.97}
+              hapticType="medium"
+              style={[
                 styles.payButton,
-                {
-                  backgroundColor: theme.colors.primary,
-                  opacity: pressed ? 0.9 : 1,
-                  transform: [{ scale: pressed ? 0.98 : 1 }],
-                },
+                { backgroundColor: theme.colors.primary },
               ]}
               onPress={() => router.push('/(main)/payment/pay-fees')}
             >
@@ -369,13 +368,15 @@ export default function ProfileScreen() {
                 color={theme.colors.white}
                 style={{ marginLeft: 4 }}
               />
-            </Pressable>
+            </BouncyPressable>
           </View>
         )}
 
         {/* ── Become a Driver Card (Commuters only) ────────────────── */}
         {!isDriver && (
-          <Pressable
+          <BouncyPressable
+            scaleTo={0.98}
+            hapticType="light"
             style={[styles.upgradeCard, { backgroundColor: theme.colors.surface, shadowColor: theme.colors.shadow }]}
             onPress={() => router.push('/(main)/settings/become-driver' as any)}
           >
@@ -393,7 +394,7 @@ export default function ProfileScreen() {
             <View style={[styles.upgradeArrow, { backgroundColor: theme.colors.primary }]}>
               <Ionicons name="arrow-forward" size={18} color={theme.colors.white} />
             </View>
-          </Pressable>
+          </BouncyPressable>
         )}
 
         {/* ── Menu Sections ───────────────────────────────────────── */}
@@ -426,8 +427,10 @@ export default function ProfileScreen() {
             >
               {section.items.map((item, idx) => (
                 <React.Fragment key={item.label}>
-                  <Pressable
-                    style={({ pressed }) => [
+                  <BouncyPressable
+                    scaleTo={0.98}
+                    hapticType="light"
+                    style={({ pressed }: any) => [
                       styles.menuItem,
                       pressed && { backgroundColor: theme.colors.primarySubtle },
                     ]}
@@ -463,7 +466,7 @@ export default function ProfileScreen() {
                         color={theme.colors.textMuted}
                       />
                     )}
-                  </Pressable>
+                  </BouncyPressable>
 
                   {/* Divider (skip last) */}
                   {idx < section.items.length - 1 && (
@@ -501,7 +504,9 @@ export default function ProfileScreen() {
         </View>
 
         {/* ── Sign Out ────────────────────────────────────────────── */}
-        <Pressable
+        <BouncyPressable
+          scaleTo={0.98}
+          hapticType="medium"
           style={[
             styles.signOutBtn,
             {
@@ -524,7 +529,7 @@ export default function ProfileScreen() {
           >
             Sign Out
           </Text>
-        </Pressable>
+        </BouncyPressable>
 
         {/* Version info */}
         <Text

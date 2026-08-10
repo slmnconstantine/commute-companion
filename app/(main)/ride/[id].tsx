@@ -31,6 +31,7 @@ import ProfileCardModal from '@/components/common/ProfileCardModal';
 import ETAOverlay from '@/components/ride/ETAOverlay';
 import SOSButton from '@/components/ride/SOSButton';
 import { recordCancellation, getCancellationWarning } from '@/utils/cancellationTracker';
+import { useLocation } from '@/hooks/useLocation';
 
 // Haversine formula to calculate distance in km
 const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -52,6 +53,7 @@ export default function TripDetailScreen() {
   const insets = useSafeAreaInsets();
   const { theme, mode } = useTheme();
   const { profile } = useAuth();
+  const { location } = useLocation();
 
   const [trip, setTrip] = useState<TripWithDriver | null>(null);
   const [loading, setLoading] = useState(true);
@@ -73,6 +75,32 @@ export default function TripDetailScreen() {
   const [profileModalVisible, setProfileModalVisible] = useState(false);
 
   const cameraRef = useRef<CameraRef>(null);
+
+  const handleCenterMap = () => {
+    if (driverLiveLocation) {
+      cameraRef.current?.easeTo({
+        center: [driverLiveLocation.longitude, driverLiveLocation.latitude],
+        zoom: 15,
+        duration: 600,
+      });
+    } else if (location?.latitude && location?.longitude) {
+      cameraRef.current?.easeTo({
+        center: [location.longitude, location.latitude],
+        zoom: 15,
+        duration: 600,
+      });
+    } else if (trip) {
+      cameraRef.current?.fitBounds(
+        [
+          Math.min(trip.origin_lng, trip.destination_lng),
+          Math.min(trip.origin_lat, trip.destination_lat),
+          Math.max(trip.origin_lng, trip.destination_lng),
+          Math.max(trip.origin_lat, trip.destination_lat),
+        ],
+        { padding: { top: 100, bottom: 380, left: 50, right: 50 }, duration: 600 }
+      );
+    }
+  };
 
   const userBooking = bookings.find(b => b.commuter_id === profile?.id);
   const isConfirmedPassenger = !!(userBooking && ['accepted', 'completed', 'dropped_off_early'].includes(userBooking.status));
@@ -592,10 +620,10 @@ export default function TripDetailScreen() {
           />
 
           <Marker id="origin" lngLat={[trip.origin_lng, trip.origin_lat]}>
-            <AnimatedMarker variant="origin" label="Pickup" color={theme.colors.primary} />
+            <AnimatedMarker variant="origin" label="Pickup" color={theme.colors.success} />
           </Marker>
           <Marker id="destination" lngLat={[trip.destination_lng, trip.destination_lat]}>
-            <AnimatedMarker variant="destination" label="Drop-off" color={theme.colors.accent} />
+            <AnimatedMarker variant="destination" label="Drop-off" color={theme.colors.error} />
           </Marker>
 
           {driverLiveLocation && (
@@ -645,6 +673,28 @@ export default function TripDetailScreen() {
             name="arrow-back"
             size={22}
             color={trip.status === 'ongoing' ? theme.colors.white : theme.colors.text}
+          />
+        </Pressable>
+
+        {/* Focus / Re-center map button */}
+        <Pressable
+          style={({ pressed }) => [
+            styles.focusBtn,
+            {
+              backgroundColor: trip.status === 'ongoing' ? theme.colors.success : theme.colors.surface,
+              borderColor: trip.status === 'ongoing' ? 'transparent' : theme.colors.border,
+              top: insets.top + 8,
+              right: (isDriver && trip.status === 'open') ? 64 : 16,
+              zIndex: 10,
+              transform: [{ scale: pressed ? 0.9 : 1 }],
+            },
+          ]}
+          onPress={handleCenterMap}
+        >
+          <Ionicons
+            name="locate"
+            size={20}
+            color={trip.status === 'ongoing' ? theme.colors.white : theme.colors.primary}
           />
         </Pressable>
 
@@ -813,8 +863,9 @@ const styles = StyleSheet.create({
   mapSection: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   mapSectionEnlarged: {},
   map: { flex: 1, width: '100%', height: '100%' },
-  backBtn: { position: 'absolute', left: 16, width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 4 },
-  deleteBtn: { position: 'absolute', right: 16, width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 4 },
+  backBtn: { position: 'absolute', left: 16, width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 4, zIndex: 10 },
+  deleteBtn: { position: 'absolute', right: 16, width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 4, zIndex: 10 },
+  focusBtn: { position: 'absolute', width: 40, height: 40, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 4, zIndex: 10 },
   content: { flex: 1 },
   contentInner: { padding: 20, gap: 16, paddingBottom: 120 },
   statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

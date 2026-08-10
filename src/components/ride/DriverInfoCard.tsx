@@ -24,7 +24,7 @@ interface DriverInfoCardProps {
   loading?: boolean;
 }
 
-export default function DriverInfoCard({ driver, vehicle, loading = false }: DriverInfoCardProps) {
+function DriverInfoCard({ driver, vehicle, loading = false }: DriverInfoCardProps) {
   const { theme } = useTheme();
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -313,3 +313,5 @@ const styles = StyleSheet.create({
     marginLeft: 18,
   },
 });
+
+export default React.memo(DriverInfoCard);

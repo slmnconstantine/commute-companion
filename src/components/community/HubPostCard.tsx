@@ -47,7 +47,25 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-export default function HubPostCard({
+function renderMessageWithMentions(text: string, primaryColor: string) {
+  if (!text) return null;
+  const parts = text.split(/(@[\w.-]+)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith('@')) {
+      return (
+        <Text
+          key={index}
+          style={{ color: primaryColor, fontFamily: 'Inter-Bold' }}
+        >
+          {part}
+        </Text>
+      );
+    }
+    return part;
+  });
+}
+
+function HubPostCard({
   post,
   locationLabel,
   currentUserId,
@@ -169,7 +187,7 @@ export default function HubPostCard({
       </View>
 
       <Text style={[styles.message, { color: theme.colors.text, fontFamily: 'Inter-Regular' }]}>
-        {post.message}
+        {renderMessageWithMentions(post.message, theme.colors.primary)}
       </Text>
 
       <View style={styles.locationRow}>
@@ -293,3 +311,5 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
   },
 });
+
+export default React.memo(HubPostCard);

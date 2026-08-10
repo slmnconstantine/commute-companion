@@ -45,7 +45,7 @@ function getInitials(name: string): string {
     .join('');
 }
 
-export default function Avatar({
+function Avatar({
   uri,
   name,
   size = 'md',
@@ -185,3 +185,5 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
 });
+
+export default React.memo(Avatar);

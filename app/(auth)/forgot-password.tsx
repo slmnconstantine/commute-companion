@@ -14,27 +14,26 @@ import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, Eas
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Map, Camera, type CameraRef } from '@maplibre/maplibre-react-native';
+import { useTheme } from '@/context/ThemeContext';
 import { resetPassword } from '@/services/auth';
 import { isValidEmail } from '@/utils/validators';
+import AuthBackground from '@/components/common/AuthBackground';
 
-// Premium Dark Theme Colors
 const COLORS = {
-  primary: '#0D9488',
-  primaryGlow: 'rgba(13, 148, 136, 0.4)',
-  surface: 'rgba(0, 0, 0, 0.45)',
-  surfaceBorder: 'rgba(255, 255, 255, 0.1)',
-  text: '#FFFFFF',
-  textMuted: 'rgba(255, 255, 255, 0.6)',
-  background: '#000000',
+  primary: '#0057FF',
   error: '#EF4444',
-  success: '#10B981',
+  text: '#0F172A',
+  textMuted: '#64748B',
+  surface: '#FFFFFF',
+  surfaceBorder: '#E8E6DF',
+  background: '#F8F7F4',
 };
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const cameraRef = useRef<CameraRef>(null);
+  const { mode } = useTheme();
+  const isLight = mode === 'light';
 
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
@@ -67,133 +66,174 @@ export default function ForgotPasswordScreen() {
     }
   };
 
+  const textColor = isLight ? '#0F172A' : '#FFFFFF';
+  const textMutedColor = isLight ? '#64748B' : 'rgba(248, 247, 244, 0.7)';
+  const inputBgColor = isLight ? '#F0EFEA' : 'rgba(0, 0, 0, 0.35)';
+  const inputBorderColor = isLight ? '#E8E6DF' : 'rgba(255, 255, 255, 0.1)';
+
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+    <AuthBackground>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <StatusBar
+          barStyle={isLight ? 'dark-content' : 'light-content'}
+          translucent
+          backgroundColor="transparent"
+        />
 
-      {/* MapLibre Animated Background */}
-      <View style={StyleSheet.absoluteFill}>
-        <Map
-          style={styles.map}
-          mapStyle="https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json"
-          logo={false}
-          attribution={false}
-          compass={false}
-          dragPan={false}
-          touchZoom={false}
-          doubleTapZoom={false}
-          doubleTapHoldZoom={false}
-          touchPitch={false}
-          touchRotate={false}
-        >
-          <Camera
-            ref={cameraRef}
-            initialViewState={{
-              center: [123.891, 10.315], // Cebu City
-              zoom: 13,
-              pitch: 65,
-              bearing: 0,
+        <View style={[styles.content, { paddingTop: insets.top + 16 }]}>
+          {/* Back Button */}
+          <Pressable
+            style={[styles.backButton, { marginTop: 8 }]}
+            onPress={() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/');
+              }
             }}
-          />
-        </Map>
-        
-        {/* Deep Gradient Overlay */}
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)' }]} />
-      </View>
+          >
+            <View
+              style={[
+                styles.backButtonBackground,
+                {
+                  backgroundColor: isLight ? '#FFFFFF' : 'rgba(0, 0, 0, 0.35)',
+                  borderColor: isLight ? '#E8E6DF' : 'rgba(255, 255, 255, 0.08)',
+                },
+              ]}
+            />
+            <Ionicons name="arrow-back" size={22} color={textColor} />
+          </Pressable>
 
-      <View style={[styles.content, { paddingTop: insets.top + 16 }]}>
-        {/* Back Button */}
-        <Pressable 
-          style={[styles.backButton, { marginTop: 8 }]} 
-          onPress={() => {
-            if (router.canGoBack()) {
-              router.back();
-            } else {
-              router.replace('/');
-            }
-          }}
-        >
-          <View style={styles.backButtonBackground} />
-          <Ionicons name="arrow-back" size={22} color={COLORS.text} />
-        </Pressable>
-
-        {sent ? (
-          <View style={styles.sentContainer}>
-            <View style={styles.glassCard}>
-              <View style={styles.iconCircle}>
-                <Ionicons name="mail-open" size={44} color={COLORS.primary} />
-              </View>
-              <Text style={styles.sentTitle}>Check your email</Text>
-              <Text style={styles.sentSubtitle}>
-                We've sent password reset instructions to {'\n'}
-                <Text style={{ color: COLORS.text, fontFamily: 'Inter-SemiBold' }}>{email}</Text>
-              </Text>
-              
-              <Pressable
-                style={styles.button}
-                onPress={() => router.replace('/(auth)/sign-in')}
+          {sent ? (
+            <View style={styles.sentContainer}>
+              <View
+                style={[
+                  styles.glassCard,
+                  {
+                    backgroundColor: isLight ? '#FFFFFF' : 'rgba(15, 23, 42, 0.65)',
+                    borderColor: isLight ? '#E8E6DF' : 'rgba(255, 255, 255, 0.1)',
+                    shadowColor: isLight ? '#0057FF' : '#000',
+                    shadowOpacity: isLight ? 0.06 : 0.3,
+                  },
+                ]}
               >
-                <View style={[StyleSheet.absoluteFill, styles.buttonPrimaryGlow]} />
-                <Text style={styles.buttonText}>Back to Sign In</Text>
-              </Pressable>
-            </View>
-          </View>
-        ) : (
-          <>
-            <View style={styles.header}>
-              <Text style={styles.title}>Forgot password?</Text>
-              <Text style={styles.subtitle}>
-                Enter your email and we'll send you a link to reset your password.
-              </Text>
-            </View>
-
-            <View style={styles.glassCard}>
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Email</Text>
-                <View style={[styles.inputContainer, {
-                  borderColor: error ? COLORS.error : COLORS.surfaceBorder,
-                }]}>
-                  <Ionicons name="mail-outline" size={20} color={COLORS.textMuted} style={{ marginLeft: 12 }} />
-                  <TextInput
-                    value={email}
-                    onChangeText={(t) => { setEmail(t); setError(''); }}
-                    placeholder="Enter your email"
-                    placeholderTextColor={COLORS.textMuted}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    style={[styles.textInput, { color: COLORS.text }]}
-                  />
+                <View
+                  style={[
+                    styles.iconCircle,
+                    {
+                      backgroundColor: isLight ? '#EBF2FF' : 'rgba(0, 87, 255, 0.15)',
+                    },
+                  ]}
+                >
+                  <Ionicons name="mail-open" size={44} color="#0057FF" />
                 </View>
-                {error ? <Text style={styles.errorText}>{error}</Text> : null}
+                <Text style={[styles.sentTitle, { color: textColor }]}>Check your email</Text>
+                <Text style={[styles.sentSubtitle, { color: textMutedColor }]}>
+                  We've sent password reset instructions to {'\n'}
+                  <Text style={{ color: textColor, fontFamily: 'Inter-SemiBold' }}>{email}</Text>
+                </Text>
+
+                <Pressable
+                  style={styles.button}
+                  onPress={() => router.replace('/(auth)/sign-in')}
+                >
+                  <Text style={styles.buttonText}>Back to Sign In</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            <>
+              <View style={styles.header}>
+                <Text style={[styles.title, { color: textColor }]}>Forgot password?</Text>
+                <Text style={[styles.subtitle, { color: textMutedColor }]}>
+                  Enter your email and we'll send you a link to reset your password.
+                </Text>
               </View>
 
-              <Animated.View style={[animatedButtonStyle, { marginTop: 8 }]}>
-                <Pressable
-                  style={[styles.button, { opacity: loading ? 0.7 : 1 }]}
-                  onPress={handleReset}
-                  onPressIn={() => { buttonScale.value = withTiming(0.97, { duration: 100, easing: Easing.out(Easing.cubic) }) }}
-                  onPressOut={() => { buttonScale.value = withSpring(1, { damping: 15, stiffness: 300, mass: 0.5 }) }}
-                  disabled={loading}
-                >
-                  <View style={[StyleSheet.absoluteFill, styles.buttonPrimaryGlow]} />
-                  <Text style={styles.buttonText}>{loading ? 'Sending...' : 'Send Reset Link'}</Text>
-                </Pressable>
-              </Animated.View>
-            </View>
-          </>
-        )}
-      </View>
-    </KeyboardAvoidingView>
+              <View
+                style={[
+                  styles.glassCard,
+                  {
+                    backgroundColor: isLight ? '#FFFFFF' : 'rgba(15, 23, 42, 0.65)',
+                    borderColor: isLight ? '#E8E6DF' : 'rgba(255, 255, 255, 0.1)',
+                    shadowColor: isLight ? '#0057FF' : '#000',
+                    shadowOpacity: isLight ? 0.06 : 0.3,
+                  },
+                ]}
+              >
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.label, { color: textColor }]}>Email</Text>
+                  <View
+                    style={[
+                      styles.inputContainer,
+                      {
+                        backgroundColor: inputBgColor,
+                        borderColor: error ? '#EF4444' : inputBorderColor,
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name="mail-outline"
+                      size={20}
+                      color={textMutedColor}
+                      style={{ marginLeft: 12 }}
+                    />
+                    <TextInput
+                      value={email}
+                      onChangeText={(t) => {
+                        setEmail(t);
+                        setError('');
+                      }}
+                      placeholder="Enter your email"
+                      placeholderTextColor={textMutedColor}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      style={[styles.textInput, { color: textColor }]}
+                    />
+                  </View>
+                  {error ? <Text style={styles.errorText}>{error}</Text> : null}
+                </View>
+
+                <Animated.View style={[animatedButtonStyle, { marginTop: 8 }]}>
+                  <Pressable
+                    style={[styles.button, { opacity: loading ? 0.7 : 1 }]}
+                    onPress={handleReset}
+                    onPressIn={() => {
+                      buttonScale.value = withTiming(0.97, {
+                        duration: 100,
+                        easing: Easing.out(Easing.cubic),
+                      });
+                    }}
+                    onPressOut={() => {
+                      buttonScale.value = withSpring(1, {
+                        damping: 15,
+                        stiffness: 300,
+                        mass: 0.5,
+                      });
+                    }}
+                    disabled={loading}
+                  >
+                    <Text style={styles.buttonText}>
+                      {loading ? 'Sending...' : 'Send Reset Link'}
+                    </Text>
+                  </Pressable>
+                </Animated.View>
+              </View>
+            </>
+          )}
+        </View>
+      </KeyboardAvoidingView>
+    </AuthBackground>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: 'transparent',
   },
   map: {
     flex: 1,

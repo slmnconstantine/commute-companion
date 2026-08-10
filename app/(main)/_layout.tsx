@@ -32,7 +32,7 @@ export default function MainLayout() {
         <Stack.Screen name="hub" />
         <Stack.Screen name="chat" />
         <Stack.Screen name="verification" />
-        <Stack.Screen name="settings" options={{ animation: 'fade' }} />
+        <Stack.Screen name="settings" />
         <Stack.Screen name="assistant-demo" />
       </Stack>
     </NotificationProvider>

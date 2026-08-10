@@ -45,6 +45,7 @@ import Avatar from '@/components/common/Avatar';
 import RouteLayer from '@/components/common/RouteLayer';
 import AnimatedMarker from '@/components/common/AnimatedMarker';
 import GlassCard from '@/components/common/GlassCard';
+import ProfileCardModal from '@/components/common/ProfileCardModal';
 
 
 
@@ -99,6 +100,7 @@ export default function HomeScreen() {
   const [routeVisible, setRouteVisible] = React.useState(false);
   const [routeMembers, setRouteMembers] = React.useState<Record<string, RouteLocationPayload>>({});
   const [driverLiveLocation, setDriverLiveLocation] = React.useState<{ latitude: number; longitude: number; timestamp: number } | null>(null);
+  const [selectedMemberId, setSelectedMemberId] = React.useState<string | null>(null);
   const [now, setNow] = React.useState(Date.now());
 
   // Pulsing animation for the ongoing trip banner dot
@@ -373,16 +375,14 @@ export default function HomeScreen() {
   }, []);
 
   const toggleRouteVisibility = () => {
-    setRouteVisible(prev => {
-      const next = !prev;
-      Alert.alert(
-        next ? 'Visibility Enabled 👁️' : 'Visibility Disabled 🙈',
-        next
-          ? 'Your location is now visible to other members commuting on this route.'
-          : 'Your location is no longer shared with this route community.'
-      );
-      return next;
-    });
+    const next = !routeVisible;
+    setRouteVisible(next);
+    Alert.alert(
+      next ? 'Visibility Enabled 👁️' : 'Visibility Disabled 🙈',
+      next
+        ? 'Your location is now visible to other members commuting on this route.'
+        : 'Your location is no longer shared with this route community.'
+    );
   };
 
   React.useEffect(() => {
@@ -463,6 +463,23 @@ export default function HomeScreen() {
 
   const isDriver = profile?.role === 'driver';
   const displayedRoute = activeOngoingTrip || activeRoute;
+  const hasAutoCenteredRef = useRef(false);
+
+  // Auto-focus camera to user's location as soon as GPS coordinates resolve
+  useEffect(() => {
+    if (location.latitude && location.longitude && !locationLoading && !displayedRoute) {
+      if (!hasAutoCenteredRef.current) {
+        hasAutoCenteredRef.current = true;
+        setTimeout(() => {
+          cameraRef.current?.easeTo({
+            center: [location.longitude, location.latitude],
+            zoom: 14,
+            duration: 800,
+          });
+        }, 300);
+      }
+    }
+  }, [location.latitude, location.longitude, locationLoading, displayedRoute]);
 
   const region = useMemo(
     () => ({
@@ -539,7 +556,11 @@ export default function HomeScreen() {
         {/* Driver live location marker for commuter */}
         {driverLiveLocation && (
           <Marker id="driver-location" lngLat={[driverLiveLocation.longitude, driverLiveLocation.latitude]}>
-            <AnimatedMarker variant="driver" isStale={isDriverStale} primaryColor={theme.colors.primary} />
+            <Pressable
+              onPress={() => activeOngoingTrip?.driver_id && setSelectedMemberId(activeOngoingTrip.driver_id)}
+            >
+              <AnimatedMarker variant="driver" isStale={isDriverStale} primaryColor={theme.colors.primary} />
+            </Pressable>
           </Marker>
         )}
 
@@ -555,7 +576,13 @@ export default function HomeScreen() {
               lngLat={[member.longitude, member.latitude]}
               anchor="bottom"
             >
-              <View style={styles.memberMarker}>
+              <Pressable
+                onPress={() => setSelectedMemberId(member.userId)}
+                style={({ pressed }) => [
+                  styles.memberMarker,
+                  { transform: [{ scale: pressed ? 0.92 : 1 }] },
+                ]}
+              >
                 <Avatar
                   uri={member.avatarUrl}
                   name={member.fullName}
@@ -567,7 +594,7 @@ export default function HomeScreen() {
                     {member.fullName.split(' ')[0]} ({member.role})
                   </Text>
                 </View>
-              </View>
+              </Pressable>
             </Marker>
           );
         })}
@@ -634,10 +661,11 @@ export default function HomeScreen() {
             style={({ pressed }) => [
               styles.fab,
               {
-                backgroundColor: routeVisible ? theme.colors.success : theme.colors.glassBackground,
-                borderColor: routeVisible ? theme.colors.success : theme.colors.glassBorder,
+                backgroundColor: routeVisible ? theme.colors.primary : theme.colors.glassBackground,
+                borderColor: routeVisible ? theme.colors.primary : theme.colors.glassBorder,
                 borderWidth: 1,
-                shadowColor: routeVisible ? theme.colors.success : theme.colors.shadow,
+                shadowColor: routeVisible ? theme.colors.primary : theme.colors.shadow,
+                shadowOpacity: routeVisible ? 0.35 : 0.1,
                 transform: [{ scale: pressed ? 0.9 : 1 }],
               },
             ]}
@@ -646,7 +674,7 @@ export default function HomeScreen() {
             <Ionicons
               name={routeVisible ? "eye" : "eye-off"}
               size={20}
-              color={routeVisible ? '#fff' : theme.colors.textMuted}
+              color={routeVisible ? theme.colors.white : theme.colors.textMuted}
             />
           </Pressable>
         )}
@@ -778,6 +806,13 @@ export default function HomeScreen() {
           </Pressable>
         </GlassCard>
       </View>
+
+      {/* ── User Information Pop-up Modal ───────────────────────── */}
+      <ProfileCardModal
+        userId={selectedMemberId}
+        visible={!!selectedMemberId}
+        onClose={() => setSelectedMemberId(null)}
+      />
     </View>
   );
 }
@@ -923,7 +958,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   pillPrimary: {
-    shadowColor: '#10B981',
+    shadowColor: '#0057FF',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 6,

@@ -9,6 +9,18 @@ export interface RouteResult {
   encodedPolyline: string;
 }
 
+const routeCache = new Map<string, RouteResult>();
+const polylineCache = new Map<string, { latitude: number; longitude: number }[]>();
+const MAX_CACHE_SIZE = 100;
+
+function setBoundedCache<K, V>(map: Map<K, V>, key: K, value: V) {
+  if (map.size >= MAX_CACHE_SIZE) {
+    const firstKey = map.keys().next().value;
+    if (firstKey !== undefined) map.delete(firstKey);
+  }
+  map.set(key, value);
+}
+
 /** Get driving route between two points using OSRM */
 export async function getRoute(
   originLat: number,
@@ -16,6 +28,11 @@ export async function getRoute(
   destLat: number,
   destLng: number
 ): Promise<RouteResult | null> {
+  const cacheKey = `${originLat.toFixed(4)},${originLng.toFixed(4)}->${destLat.toFixed(4)},${destLng.toFixed(4)}`;
+  if (routeCache.has(cacheKey)) {
+    return routeCache.get(cacheKey)!;
+  }
+
   try {
     const url = `${OSRM_BASE_URL}/${originLng},${originLat};${destLng},${destLat}?overview=full&geometries=polyline`;
     const res = await fetch(url);
@@ -26,7 +43,7 @@ export async function getRoute(
     const route = data.routes[0];
     const decoded = polyline.decode(route.geometry);
 
-    return {
+    const result: RouteResult = {
       coordinates: decoded.map(([lat, lng]: [number, number]) => ({
         latitude: lat,
         longitude: lng,
@@ -35,6 +52,9 @@ export async function getRoute(
       durationMin: Math.round(route.duration / 60),
       encodedPolyline: route.geometry,
     };
+
+    setBoundedCache(routeCache, cacheKey, result);
+    return result;
   } catch (error) {
     handleServiceError('Routing error:', error);
     return null;
@@ -43,8 +63,15 @@ export async function getRoute(
 
 /** Decode an encoded polyline string to coordinates */
 export function decodePolyline(encoded: string): { latitude: number; longitude: number }[] {
-  return polyline.decode(encoded).map(([lat, lng]: [number, number]) => ({
+  if (!encoded) return [];
+  if (polylineCache.has(encoded)) {
+    return polylineCache.get(encoded)!;
+  }
+
+  const result = polyline.decode(encoded).map(([lat, lng]: [number, number]) => ({
     latitude: lat,
     longitude: lng,
   }));
+  setBoundedCache(polylineCache, encoded, result);
+  return result;
 }

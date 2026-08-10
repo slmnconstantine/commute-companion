@@ -11,29 +11,27 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Map, Camera, type CameraRef } from '@maplibre/maplibre-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/context/AuthContext';
+import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
-
-// Premium Dark Theme Colors
+import AuthBackground from '@/components/common/AuthBackground';
 const COLORS = {
-  primary: '#0D9488',
-  primaryGlow: 'rgba(13, 148, 136, 0.4)',
-  surface: 'rgba(0, 0, 0, 0.45)',
-  surfaceBorder: 'rgba(255, 255, 255, 0.1)',
-  text: '#FFFFFF',
-  textMuted: 'rgba(255, 255, 255, 0.6)',
-  background: '#000000',
+  primary: '#0057FF',
   error: '#EF4444',
-  success: '#10B981',
+  text: '#0F172A',
+  textMuted: '#64748B',
+  surface: '#FFFFFF',
+  surfaceBorder: '#E8E6DF',
+  background: '#F8F7F4',
 };
 
 export default function VerifyEmailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const cameraRef = useRef<CameraRef>(null);
   const { session, signOut } = useAuth();
+  const { mode } = useTheme();
+  const isLight = mode === 'light';
   
   const [loading, setLoading] = useState(false);
   const primaryButtonScale = useRef(new Animated.Value(1)).current;
@@ -84,51 +82,45 @@ export default function VerifyEmailScreen() {
     await signOut();
   };
 
-  return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+  const textColor = isLight ? '#0F172A' : '#FFFFFF';
+  const textMutedColor = isLight ? '#64748B' : 'rgba(248, 247, 244, 0.7)';
 
-      {/* MapLibre Animated Background */}
-      <View style={StyleSheet.absoluteFill}>
-        <Map
-          style={styles.map}
-          mapStyle="https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json"
-          logo={false}
-          attribution={false}
-          compass={false}
-          dragPan={false}
-          touchZoom={false}
-          doubleTapZoom={false}
-          doubleTapHoldZoom={false}
-          touchPitch={false}
-          touchRotate={false}
-        >
-          <Camera
-            ref={cameraRef}
-            initialViewState={{
-              center: [123.891, 10.315], // Cebu City
-              zoom: 13,
-              pitch: 65,
-              bearing: 0,
-            }}
-          />
-        </Map>
-        
-        {/* Deep Gradient Overlay */}
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)' }]} />
-      </View>
+  return (
+    <AuthBackground>
+      <StatusBar
+        barStyle={isLight ? 'dark-content' : 'light-content'}
+        translucent
+        backgroundColor="transparent"
+      />
 
       <View style={[styles.content, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 24 }]}>
         
         <View style={styles.sentContainer}>
-          <View style={styles.glassCard}>
-            <View style={styles.iconCircle}>
-              <Ionicons name="mail-unread" size={44} color={COLORS.primary} />
+          <View
+            style={[
+              styles.glassCard,
+              {
+                backgroundColor: isLight ? '#FFFFFF' : 'rgba(15, 23, 42, 0.65)',
+                borderColor: isLight ? '#E8E6DF' : 'rgba(255, 255, 255, 0.1)',
+                shadowColor: isLight ? '#0057FF' : '#000',
+                shadowOpacity: isLight ? 0.06 : 0.3,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.iconCircle,
+                {
+                  backgroundColor: isLight ? '#EBF2FF' : 'rgba(0, 87, 255, 0.15)',
+                },
+              ]}
+            >
+              <Ionicons name="mail-unread" size={44} color="#0057FF" />
             </View>
-            <Text style={styles.title}>Verify your email</Text>
-            <Text style={styles.subtitle}>
+            <Text style={[styles.title, { color: textColor }]}>Verify your email</Text>
+            <Text style={[styles.subtitle, { color: textMutedColor }]}>
               We sent a verification link to {'\n'}
-              <Text style={{ color: COLORS.text, fontFamily: 'Inter-SemiBold' }}>{session?.user?.email || 'your email'}</Text>
+              <Text style={{ color: textColor, fontFamily: 'Inter-SemiBold' }}>{session?.user?.email || 'your email'}</Text>
             </Text>
             
             {/* Primary Action */}
@@ -142,7 +134,6 @@ export default function VerifyEmailScreen() {
                 onPressOut={() => Animated.spring(primaryButtonScale, { toValue: 1, friction: 5, useNativeDriver: true }).start()}
                 disabled={loading}
               >
-                <View style={[StyleSheet.absoluteFill, styles.buttonPrimaryGlow]} />
                 <Text style={styles.buttonText}>{loading ? 'Checking...' : "I've Verified My Email"}</Text>
               </Pressable>
             </Animated.View>
@@ -152,13 +143,17 @@ export default function VerifyEmailScreen() {
               <Pressable
                 accessibilityLabel="Skip email verification for now"
                 accessibilityRole="button"
-                style={styles.buttonGlass}
+                style={[
+                  styles.buttonGlass,
+                  isLight
+                    ? { backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: '#D0D7E5' }
+                    : { backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
+                ]}
                 onPress={handleSkip}
                 onPressIn={() => Animated.spring(skipButtonScale, { toValue: 0.97, useNativeDriver: true }).start()}
                 onPressOut={() => Animated.spring(skipButtonScale, { toValue: 1, friction: 5, useNativeDriver: true }).start()}
               >
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.05)' }]} />
-                <Text style={styles.buttonTextGlass}>Skip for now</Text>
+                <Text style={[styles.buttonTextGlass, { color: isLight ? '#0057FF' : '#FFFFFF' }]}>Skip for now</Text>
               </Pressable>
             </Animated.View>
 
@@ -186,14 +181,14 @@ export default function VerifyEmailScreen() {
         </View>
 
       </View>
-    </View>
+    </AuthBackground>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: 'transparent',
   },
   map: {
     flex: 1,

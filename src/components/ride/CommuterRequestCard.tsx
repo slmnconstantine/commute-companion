@@ -23,7 +23,7 @@ interface CommuterRequestCardProps {
   onOfferRide: () => void;
 }
 
-export default function CommuterRequestCard({
+function CommuterRequestCard({
   theme,
   commuterName,
   commuterAvatarUrl,
@@ -166,3 +166,5 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
   },
 });
+
+export default React.memo(CommuterRequestCard);

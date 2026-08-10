@@ -26,7 +26,7 @@ interface TripCardProps {
   loading?: boolean;
 }
 
-export default function TripCard({ trip, onPress, loading = false }: TripCardProps) {
+function TripCard({ trip, onPress, loading = false }: TripCardProps) {
   const { theme, mode } = useTheme();
   const { profile } = useAuth();
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -348,3 +348,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 });
+
+export default React.memo(TripCard);

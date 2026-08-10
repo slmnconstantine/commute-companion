@@ -91,7 +91,7 @@ export default function CustomAlertModal({
   };
 
   const activeButtons: AlertButton[] = buttons && buttons.length > 0 ? buttons : [{ text: 'OK', style: 'default' }];
-  const isMultiButton = activeButtons.length > 1;
+  const isVerticalStack = activeButtons.length > 2 || activeButtons.some(b => (b.text || '').length > 12);
 
   return (
     <Modal transparent visible={visible} animationType="none" onRequestClose={onClose}>
@@ -107,7 +107,7 @@ export default function CustomAlertModal({
             styles.card,
             {
               backgroundColor: mode === 'dark' ? '#1A2235' : '#FFFFFF',
-              borderColor: mode === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
+              borderColor: mode === 'dark' ? 'rgba(255, 255, 255, 0.12)' : '#E8E6DF',
               transform: [{ scale: scaleAnim }],
               opacity: opacityAnim,
             },
@@ -129,17 +129,26 @@ export default function CustomAlertModal({
           ) : null}
 
           {/* Action Buttons */}
-          <View style={[styles.buttonsContainer, isMultiButton && styles.multiButtonsRow]}>
+          <View
+            style={[
+              styles.buttonsContainer,
+              !isVerticalStack && activeButtons.length === 2 && styles.multiButtonsRow,
+            ]}
+          >
             {activeButtons.map((btn, index) => {
               const isCancel = btn.style === 'cancel';
               const isDestructive = btn.style === 'destructive';
 
               let btnBg = theme.colors.primary;
               let textColor = '#FFFFFF';
+              let borderWidth = 0;
+              let borderColor = 'transparent';
 
               if (isCancel) {
-                btnBg = mode === 'dark' ? 'rgba(255, 255, 255, 0.08)' : '#F1F5F9';
-                textColor = theme.colors.text;
+                btnBg = mode === 'dark' ? 'rgba(255, 255, 255, 0.08)' : '#F0EFEA';
+                textColor = mode === 'dark' ? '#94A3B8' : '#475569';
+                borderWidth = mode === 'dark' ? 0 : 1;
+                borderColor = mode === 'dark' ? 'transparent' : '#E8E6DF';
               } else if (isDestructive) {
                 btnBg = theme.colors.error || '#EF4444';
                 textColor = '#FFFFFF';
@@ -150,9 +159,10 @@ export default function CustomAlertModal({
                   key={index.toString()}
                   style={({ pressed }) => [
                     styles.button,
-                    isMultiButton && { flex: 1 },
-                    { backgroundColor: btnBg },
-                    pressed && { opacity: 0.82, transform: [{ scale: 0.98 }] },
+                    !isVerticalStack && activeButtons.length === 2 ? { flex: 1 } : { width: '100%' },
+                    { backgroundColor: btnBg, borderWidth, borderColor },
+                    !isCancel && !isDestructive && styles.primaryButtonShadow,
+                    pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
                   ]}
                   onPress={() => handleButtonPress(btn)}
                 >
@@ -161,6 +171,7 @@ export default function CustomAlertModal({
                       styles.buttonText,
                       { color: textColor, fontFamily: isCancel ? 'Inter-Medium' : 'Inter-SemiBold' },
                     ]}
+                    numberOfLines={1}
                   >
                     {btn.text}
                   </Text>
@@ -183,7 +194,7 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
   },
   card: {
     width: Math.min(width - 48, 360),
@@ -196,7 +207,7 @@ const styles = StyleSheet.create({
     elevation: 24,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.35,
+    shadowOpacity: 0.25,
     shadowRadius: 28,
   },
   iconCircle: {
@@ -217,12 +228,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 21,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   buttonsContainer: {
     width: '100%',
     gap: 10,
-    marginTop: 8,
+    marginTop: 4,
   },
   multiButtonsRow: {
     flexDirection: 'row',
@@ -235,7 +246,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 16,
   },
+  primaryButtonShadow: {
+    shadowColor: '#0057FF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.28,
+    shadowRadius: 8,
+    elevation: 4,
+  },
   buttonText: {
     fontSize: 15,
+    textAlign: 'center',
   },
 });
