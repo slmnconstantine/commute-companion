@@ -37,9 +37,9 @@ interface RouteLayerProps {
 export default function RouteLayer({
   id = 'route',
   routeGeoJSON,
-  color = '#10B981',
-  glowColor = 'rgba(16, 185, 129, 0.15)',
-  casingColor = 'rgba(5, 150, 105, 0.4)',
+  color = '#0057FF',
+  glowColor = 'rgba(0, 87, 255, 0.15)',
+  casingColor = 'rgba(0, 64, 193, 0.4)',
   showGlow = true,
 }: RouteLayerProps) {
   if (!routeGeoJSON) return null;

@@ -31,7 +31,7 @@ export default function AnimatedMarker({
   label,
   color,
   isStale = false,
-  primaryColor = '#10B981',
+  primaryColor = '#0057FF',
 }: AnimatedMarkerProps) {
   const bounceAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;

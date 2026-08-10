@@ -18,6 +18,8 @@ import { Vehicle } from '@/types/database';
 import { calculateFare, formatCurrency } from '@/utils/fareCalculator';
 import DatePickerModal from '@/components/ride/DatePickerModal';
 import TimePickerModal from '@/components/ride/TimePickerModal';
+import AnimatedMarker from '@/components/common/AnimatedMarker';
+import GlassCard from '@/components/common/GlassCard';
 
 interface LocationData {
   lat: number;
@@ -40,7 +42,7 @@ export default function CreateRideScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { profile } = useAuth();
-  const { location } = useLocation();
+  const { location, loading: locationLoading } = useLocation();
 
   const [step, setStep] = useState(1); // 1: route, 2: details, 3: confirm
   const params = useLocalSearchParams<{
@@ -108,6 +110,17 @@ export default function CreateRideScreen() {
   const [isFree, setIsFree] = useState(params.fare === '0' || params.fare === '0.00');
   const [loading, setLoading] = useState(false);
 
+  // Prevent unverified accounts from creating rides
+  useEffect(() => {
+    if (profile && (profile.role !== 'driver' || !profile.is_verified || !profile.verified_badge)) {
+      Alert.alert(
+        'Verification Required',
+        'Your driver application is currently under review. You will be able to create rides once your documents have been verified.',
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
+    }
+  }, [profile]);
+
   // Search state
   const [searchMode, setSearchMode] = useState<'origin' | 'destination' | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -136,14 +149,34 @@ export default function CreateRideScreen() {
 
   const cameraRef = useRef<CameraRef>(null);
   const buttonScale = useRef(new Animated.Value(1)).current;
+  const hasAutoCenteredRef = useRef(false);
 
-  // Fly camera to user's real GPS location once it's loaded
+  // Auto-focus camera to user's real GPS location once resolved
   useEffect(() => {
     const hasPrefilledRoute = !!((params.origin_lat || params.originLat) && (params.destination_lat || params.destLat));
-    if (location && cameraRef.current && !hasPrefilledRoute) {
-      cameraRef.current.flyTo({ center: [location.longitude, location.latitude], zoom: 14, duration: 1000 });
+    if (location?.latitude && location?.longitude && !locationLoading && !hasPrefilledRoute && !routeInfo) {
+      if (!hasAutoCenteredRef.current) {
+        hasAutoCenteredRef.current = true;
+        setTimeout(() => {
+          cameraRef.current?.easeTo({
+            center: [location.longitude, location.latitude],
+            zoom: 14,
+            duration: 800,
+          });
+        }, 300);
+      }
     }
-  }, [location, params.origin_lat, params.originLat, params.destination_lat, params.destLat]);
+  }, [location?.latitude, location?.longitude, locationLoading, params, routeInfo]);
+
+  const handleCenterOnUser = () => {
+    if (location?.latitude && location?.longitude) {
+      cameraRef.current?.easeTo({
+        center: [location.longitude, location.latitude],
+        zoom: 14,
+        duration: 600,
+      });
+    }
+  };
 
   const fareBreakdown = useMemo(() => {
     if (!routeInfo) return null;
@@ -190,14 +223,31 @@ export default function CreateRideScreen() {
     autoGeocode();
   }, [params.origin, params.destination]);
 
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    };
+  }, []);
+
   // ── Search handlers ──
-  const handleSearch = async (query: string) => {
+  const handleSearch = (query: string) => {
     setSearchQuery(query);
-    if (query.length < 3) { setSearchResults([]); return; }
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+
+    if (query.trim().length < 3) {
+      setSearchResults([]);
+      setSearching(false);
+      return;
+    }
+
     setSearching(true);
-    const results = await searchPlaces(query);
-    setSearchResults(results);
-    setSearching(false);
+    searchTimeoutRef.current = setTimeout(async () => {
+      const results = await searchPlaces(query.trim());
+      setSearchResults(results);
+      setSearching(false);
+    }, 250);
   };
 
   /** Shared route calculation logic */
@@ -407,25 +457,21 @@ export default function CreateRideScreen() {
               <Layer id="osm-layer" type="raster" source="osm" />
             </RasterSource>
 
-            {/* User location indicator */}
-            <Marker id="user-location" lngLat={[location.longitude, location.latitude]}>
-              <View style={styles.userDotOuter}>
-                <View style={[styles.userDotInner, { backgroundColor: theme.colors.primary }]} />
-              </View>
-            </Marker>
+            {/* User location */}
+            {location && (
+              <Marker id="user-location" lngLat={[location.longitude, location.latitude]}>
+                <AnimatedMarker variant="user" primaryColor={theme.colors.primary} />
+              </Marker>
+            )}
 
             {origin && (
               <Marker id="origin" lngLat={[origin.lng, origin.lat]}>
-                <View style={{ alignItems: 'center' }}>
-                  <Ionicons name="location" size={36} color={theme.colors.success} style={styles.pinShadow} />
-                </View>
+                <AnimatedMarker variant="origin" label="Pickup" color={theme.colors.success} />
               </Marker>
             )}
             {destination && (
               <Marker id="destination" lngLat={[destination.lng, destination.lat]}>
-                <View style={{ alignItems: 'center' }}>
-                  <Ionicons name="flag" size={36} color={theme.colors.error} style={styles.pinShadow} />
-                </View>
+                <AnimatedMarker variant="destination" label="Drop-off" color={theme.colors.error} />
               </Marker>
             )}
 
@@ -469,7 +515,12 @@ export default function CreateRideScreen() {
           </View>
 
           {/* Pin mode toggle */}
-          <View style={[styles.pinModeBar, { backgroundColor: theme.colors.surface }]}>
+          <GlassCard
+            style={[
+              styles.pinModeBar,
+              { bottom: (origin && destination && routeInfo) ? 96 : 24 },
+            ]}
+          >
             <Ionicons name="finger-print" size={16} color={theme.colors.primary} />
             <Text style={[styles.pinModeLabel, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
               Tap map to set:
@@ -504,7 +555,7 @@ export default function CreateRideScreen() {
                 Destination
               </Text>
             </Pressable>
-          </View>
+          </GlassCard>
 
           {/* Reverse geocoding indicator */}
           {reverseGeocoding && (
@@ -514,7 +565,12 @@ export default function CreateRideScreen() {
           )}
 
           {routeInfo && (
-            <View style={[styles.routeInfoCard, { backgroundColor: theme.colors.surface }]}>
+            <GlassCard
+              style={[
+                styles.routeInfoCard,
+                { bottom: (origin && destination && routeInfo) ? 160 : 88 },
+              ]}
+            >
               <View style={styles.routeInfoRow}>
                 <Ionicons name="navigate" size={16} color={theme.colors.primary} />
                 <Text style={[styles.routeInfoText, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]}>
@@ -527,8 +583,24 @@ export default function CreateRideScreen() {
                   {routeInfo.durationMin} min
                 </Text>
               </View>
-            </View>
+            </GlassCard>
           )}
+
+          {/* Focus on User Location Button */}
+          <Pressable
+            style={({ pressed }) => [
+              styles.fab,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+                bottom: (origin && destination && routeInfo) ? 220 : 88,
+                transform: [{ scale: pressed ? 0.9 : 1 }],
+              },
+            ]}
+            onPress={handleCenterOnUser}
+          >
+            <Ionicons name="locate" size={20} color={theme.colors.primary} />
+          </Pressable>
 
           {origin && destination && routeInfo && (
             <Pressable style={[styles.nextButton, { backgroundColor: theme.colors.primary }]} onPress={() => setStep(2)}>
@@ -778,34 +850,61 @@ const styles = StyleSheet.create({
   locationDot: { width: 12, height: 12, borderRadius: 6 },
   locationText: { flex: 1, fontSize: 14 },
 
+  fab: {
+    position: 'absolute',
+    right: 16,
+    width: 46,
+    height: 46,
+    borderRadius: 15,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 6,
+    zIndex: 10,
+  },
+
   /* Pin mode bar */
   pinModeBar: {
-    position: 'absolute', top: 118, left: 16, right: 16,
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 14, paddingVertical: 10,
-    borderRadius: 12,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 4,
+    position: 'absolute', left: 16, right: 16,
+    flexDirection: 'row', alignItems: 'center',
+    padding: 8, paddingHorizontal: 16,
+    borderRadius: 100, overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4,
   },
-  pinModeLabel: { fontSize: 12, marginRight: 2 },
+  pinModeLabel: { fontSize: 13, marginLeft: 6, marginRight: 12 },
   pinModeBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: 10, paddingVertical: 6,
-    borderRadius: 8, borderWidth: 1.5, borderColor: 'transparent',
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 12, paddingVertical: 6,
+    borderRadius: 100, borderWidth: 1, borderColor: 'transparent', marginRight: 8,
   },
-  pinModeDot: { width: 8, height: 8, borderRadius: 4 },
-  pinModeBtnText: { fontSize: 12 },
+  pinModeDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
+  pinModeBtnText: { fontSize: 13 },
 
   /* Geocoding banner */
   geocodingBanner: {
-    position: 'absolute', top: 160, alignSelf: 'center',
+    position: 'absolute', top: 130, alignSelf: 'center',
     paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
   },
   geocodingText: { color: '#fff', fontSize: 13 },
 
-  routeInfoCard: { position: 'absolute', bottom: 90, left: 16, flexDirection: 'row', gap: 16, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 4 },
-  routeInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  routeInfoText: { fontSize: 14 },
-  nextButton: { position: 'absolute', bottom: 24, left: 24, right: 24, height: 56, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, shadowColor: '#0D9488', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
+  routeInfoCard: {
+    position: 'absolute', right: 16,
+    padding: 12, borderRadius: 12, overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4,
+  },
+  routeInfoRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 4 },
+  routeInfoText: { fontSize: 14, marginLeft: 8 },
+
+  nextButton: {
+    position: 'absolute', bottom: 24, left: 16, right: 16,
+    height: 56, borderRadius: 16,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    shadowColor: '#0057FF', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.28, shadowRadius: 12, elevation: 6,
+  },
   nextButtonText: { color: '#fff', fontSize: 16, fontFamily: 'Inter-SemiBold' },
   searchOverlay: { flex: 1, paddingHorizontal: 16, paddingTop: 16 },
   searchBar: { flexDirection: 'row', alignItems: 'center', height: 52, borderRadius: 14, borderWidth: 2, paddingHorizontal: 16, gap: 12 },

@@ -1,0 +1,11 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-label="Commute Companion Logo" role="img">
+  <title>Commute Companion</title>
+  <rect width="100" height="100" rx="22" fill="#F8F7F4"/>
+  <path d="M 18 38 A 32 32 0 1 1 82 38 C 82 62, 50 88, 50 88 C 50 88, 18 62, 18 38 Z" fill="#0057FF"/>
+  <circle cx="50" cy="38" r="20" fill="#F8F7F4"/>
+  <g fill="#0057FF">
+    <circle cx="41" cy="29" r="5"/>
+    <circle cx="59" cy="29" r="5"/>
+    <path d="M 31.5 46 C 31.5 38, 36 36, 41 36 C 46 36, 48 40, 50 40 C 52 40, 54 36, 59 36 C 64 36, 68.5 38, 68.5 46 Z"/>
+  </g>
+</svg>

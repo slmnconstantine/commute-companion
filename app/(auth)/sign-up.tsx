@@ -15,19 +15,20 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Map, Camera, type CameraRef } from '@maplibre/maplibre-react-native';
 import { useAuth } from '@/context/AuthContext';
+import { useTheme } from '@/context/ThemeContext';
 import { isValidEmail, isValidPassword, isNotEmpty } from '@/utils/validators';
+import AuthBackground from '@/components/common/AuthBackground';
 
-// Premium Dark Theme Colors
+// Signal Blue Palette
 const COLORS = {
-  primary: '#0D9488',
-  primaryGlow: 'rgba(13, 148, 136, 0.4)',
-  surface: 'rgba(0, 0, 0, 0.45)',
+  primary: '#0057FF',
+  primaryGlow: 'rgba(0, 87, 255, 0.45)',
+  surface: 'rgba(15, 23, 42, 0.65)',
   surfaceBorder: 'rgba(255, 255, 255, 0.1)',
   text: '#FFFFFF',
-  textMuted: 'rgba(255, 255, 255, 0.6)',
-  background: '#000000',
+  textMuted: 'rgba(248, 247, 244, 0.7)',
+  background: '#070B14',
   error: '#EF4444',
 };
 
@@ -35,7 +36,8 @@ export default function SignUpScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { signUp } = useAuth();
-  const cameraRef = useRef<CameraRef>(null);
+  const { mode } = useTheme();
+  const isLight = mode === 'light';
 
   const [loading, setLoading] = useState(false);
 
@@ -99,48 +101,24 @@ export default function SignUpScreen() {
     Animated.spring(buttonScale, { toValue: 1, friction: 5, useNativeDriver: true }).start();
   };
 
+  const textColor = isLight ? '#0F172A' : '#FFFFFF';
+  const textMutedColor = isLight ? '#64748B' : 'rgba(248, 247, 244, 0.7)';
+  const inputBgColor = isLight ? '#F0EFEA' : 'rgba(0, 0, 0, 0.35)';
+  const inputBorderColor = isLight ? '#E8E6DF' : 'rgba(255, 255, 255, 0.1)';
+
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-
-      {/* MapLibre Animated Background */}
-      <View style={StyleSheet.absoluteFill}>
-        <Map
-          style={styles.map}
-          mapStyle="https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json"
-          logo={false}
-          attribution={false}
-          compass={false}
-          dragPan={false}
-          touchZoom={false}
-          doubleTapZoom={false}
-          doubleTapHoldZoom={false}
-          touchPitch={false}
-          touchRotate={false}
-        >
-          <Camera
-            ref={cameraRef}
-            initialViewState={{
-              center: [123.891, 10.315], // Cebu City
-              zoom: 13,
-              pitch: 65,
-              bearing: 0,
-            }}
-          />
-        </Map>
-        
-        {/* Deep Gradient Overlay */}
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)' }]} />
-      </View>
-
-      <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 16 }]}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+    <AuthBackground>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
+        <StatusBar barStyle={isLight ? 'dark-content' : 'light-content'} translucent backgroundColor="transparent" />
+
+        <ScrollView
+          contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 16 }]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
         {/* Back Button */}
         <Pressable
           style={[styles.backButton, { marginTop: 8 }]}
@@ -152,18 +130,32 @@ export default function SignUpScreen() {
             }
           }}
         >
-          <View style={styles.backButtonBackground} />
-          <Ionicons name="arrow-back" size={22} color={COLORS.text} />
+          <View style={[
+              styles.backButtonBackground,
+              {
+                backgroundColor: isLight ? '#FFFFFF' : 'rgba(0, 0, 0, 0.35)',
+                borderColor: isLight ? '#E8E6DF' : 'rgba(255, 255, 255, 0.08)',
+              },
+            ]} />
+          <Ionicons name="arrow-back" size={22} color={textColor} />
         </Pressable>
 
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>Create account</Text>
-          <Text style={styles.subtitle}>Fill in your details to get started as a commuter</Text>
+          <Text style={[styles.title, { color: textColor }]}>Create account</Text>
+          <Text style={[styles.subtitle, { color: textMutedColor }]}>Fill in your details to get started as a commuter</Text>
         </View>
 
         {/* Form Container */}
-        <View style={styles.glassCard}>
+        <View style={[
+              styles.glassCard,
+              {
+                backgroundColor: isLight ? '#FFFFFF' : 'rgba(15, 23, 42, 0.65)',
+                borderColor: isLight ? '#E8E6DF' : 'rgba(255, 255, 255, 0.1)',
+                shadowColor: isLight ? '#0057FF' : '#000',
+                shadowOpacity: isLight ? 0.06 : 0.3,
+              },
+            ]}>
           <InputField
             label="Full Name"
             value={fullName}
@@ -174,6 +166,7 @@ export default function SignUpScreen() {
             placeholder="Juan Dela Cruz"
             icon="person-outline"
             error={errors.fullName}
+            isLight={isLight}
           />
           <InputField
             label="Username"
@@ -186,6 +179,7 @@ export default function SignUpScreen() {
             icon="at-outline"
             autoCapitalize="none"
             error={errors.username}
+            isLight={isLight}
           />
           <InputField
             label="Email"
@@ -199,6 +193,7 @@ export default function SignUpScreen() {
             keyboardType="email-address"
             autoCapitalize="none"
             error={errors.email}
+            isLight={isLight}
           />
           <InputField
             label="Password"
@@ -213,6 +208,7 @@ export default function SignUpScreen() {
             rightIcon={showPassword ? 'eye-off-outline' : 'eye-outline'}
             onRightIconPress={() => setShowPassword(!showPassword)}
             error={errors.password}
+            isLight={isLight}
           />
           <InputField
             label="Confirm Password"
@@ -225,38 +221,28 @@ export default function SignUpScreen() {
             icon="lock-closed-outline"
             secureTextEntry={!showPassword}
             error={errors.confirmPassword}
+            isLight={isLight}
           />
 
-          {/* Commuter role info */}
-          <View style={styles.roleInfo}>
-            <Ionicons name="information-circle" size={20} color={COLORS.primary} style={{ marginTop: 1 }} />
-            <Text style={styles.roleInfoText}>
-              You'll start as a <Text style={{ fontFamily: 'Inter-SemiBold', color: COLORS.primary }}>Commuter</Text>. You can upgrade to a Driver anytime from your profile.
-            </Text>
-          </View>
-
           {/* Action Button */}
-          <View style={styles.actionContainer}>
-            <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
-              <Pressable
-                style={[styles.actionButton, { opacity: loading ? 0.7 : 1 }]}
-                onPress={handleSignUp}
-                onPressIn={onPressIn}
-                onPressOut={onPressOut}
-                disabled={loading}
-              >
-                <View style={[StyleSheet.absoluteFill, styles.buttonPrimaryGlow]} />
-                <Text style={styles.actionButtonText}>
-                  {loading ? 'Creating Account...' : 'Create Account'}
-                </Text>
-              </Pressable>
-            </Animated.View>
-          </View>
+          <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
+            <Pressable
+              style={[styles.actionButton, { opacity: loading ? 0.7 : 1 }]}
+              onPress={handleSignUp}
+              onPressIn={onPressIn}
+              onPressOut={onPressOut}
+              disabled={loading}
+            >
+              <Text style={styles.actionButtonText}>
+                {loading ? 'Creating Account...' : 'Create Account'}
+              </Text>
+            </Pressable>
+          </Animated.View>
         </View>
 
         {/* Sign In Link */}
         <View style={[styles.footer, { paddingBottom: insets.bottom + 24 }]}>
-          <Text style={styles.footerText}>
+          <Text style={[styles.footerText, { color: textMutedColor }]}>
             Already have an account?{' '}
           </Text>
           <Pressable onPress={() => router.replace('/(auth)/sign-in')}>
@@ -265,6 +251,7 @@ export default function SignUpScreen() {
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+    </AuthBackground>
   );
 }
 
@@ -281,34 +268,41 @@ function InputField({
   rightIcon,
   onRightIconPress,
   error,
+  isLight,
 }: any) {
+  const textColor = isLight ? '#0F172A' : '#FFFFFF';
+  const textMutedColor = isLight ? '#64748B' : 'rgba(248, 247, 244, 0.7)';
+  const inputBgColor = isLight ? '#F0EFEA' : 'rgba(0, 0, 0, 0.35)';
+  const inputBorderColor = isLight ? '#E8E6DF' : 'rgba(255, 255, 255, 0.1)';
+
   return (
     <View style={styles.inputGroup}>
-      <Text style={styles.label}>
+      <Text style={[styles.label, { color: textColor }]}>
         {label}
       </Text>
       <View
         style={[
           styles.inputContainer,
           {
-            borderColor: error ? COLORS.error : COLORS.surfaceBorder,
+            backgroundColor: inputBgColor,
+            borderColor: error ? '#EF4444' : inputBorderColor,
           },
         ]}
       >
-        <Ionicons name={icon} size={20} color={COLORS.textMuted} style={{ marginLeft: 12 }} />
+        <Ionicons name={icon} size={20} color={textMutedColor} style={{ marginLeft: 12 }} />
         <TextInput
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
-          placeholderTextColor={COLORS.textMuted}
+          placeholderTextColor={textMutedColor}
           keyboardType={keyboardType}
           autoCapitalize={autoCapitalize}
           secureTextEntry={secureTextEntry}
-          style={[styles.textInput, { color: COLORS.text }]}
+          style={[styles.textInput, { color: textColor }]}
         />
         {rightIcon && (
           <Pressable onPress={onRightIconPress} style={{ padding: 12 }}>
-            <Ionicons name={rightIcon} size={20} color={COLORS.textMuted} />
+            <Ionicons name={rightIcon} size={20} color={textMutedColor} />
           </Pressable>
         )}
       </View>
@@ -322,7 +316,7 @@ function InputField({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: 'transparent',
   },
   map: {
     flex: 1,

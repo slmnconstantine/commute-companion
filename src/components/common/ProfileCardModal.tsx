@@ -1,28 +1,28 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Modal, Pressable, ActivityIndicator, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import Avatar from './Avatar';
 import Badge from './Badge';
 import { supabase } from '@/lib/supabase';
-import { Profile, Vehicle, ReviewWithProfiles } from '@/types/database';
-import { getUserReviews } from '@/services/reviews';
+import { Profile, Vehicle } from '@/types/database';
 
 interface ProfileCardModalProps {
   userId: string | null;
   visible: boolean;
   onClose: () => void;
+  onMention?: (handle: string) => void;
 }
 
-export default function ProfileCardModal({ userId, visible, onClose }: ProfileCardModalProps) {
+export default function ProfileCardModal({ userId, visible, onClose, onMention }: ProfileCardModalProps) {
   const { theme } = useTheme();
   const { profile: currentUser } = useAuth();
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
-  const [reviews, setReviews] = useState<ReviewWithProfiles[]>([]);
-  const [showReportModal, setShowReportModal] = useState(false);
 
   useEffect(() => {
     if (!visible || !userId) return;
@@ -49,14 +49,6 @@ export default function ProfileCardModal({ userId, visible, onClose }: ProfileCa
             if (vData) setVehicle(vData as Vehicle);
           }
         }
-
-        // Fetch recent reviews
-        try {
-          const reviewsData = await getUserReviews(userId);
-          setReviews(reviewsData.slice(0, 3));
-        } catch (e) {
-          // Reviews fetch is non-critical
-        }
       } catch (e) {
         console.error(e);
       } finally {
@@ -67,16 +59,29 @@ export default function ProfileCardModal({ userId, visible, onClose }: ProfileCa
     fetchProfile();
   }, [userId, visible]);
 
-  const getRelativeTime = (dateStr: string) => {
-    const diff = Date.now() - new Date(dateStr).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 60) return `${mins}m ago`;
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    const days = Math.floor(hrs / 24);
-    if (days < 30) return `${days}d ago`;
-    return `${Math.floor(days / 30)}mo ago`;
+  const handleMention = () => {
+    if (!profile) return;
+    const rawHandle = profile.username || profile.full_name.replace(/\s+/g, '');
+    const handleWithAt = `@${rawHandle}`;
+    
+    onClose();
+
+    if (onMention) {
+      onMention(handleWithAt);
+    } else {
+      // Small timeout so modal cleanly closes before tab transition
+      setTimeout(() => {
+        router.push({
+          pathname: '/(main)/(tabs)/community',
+          params: { mention: handleWithAt },
+        });
+      }, 150);
+    }
   };
+
+  const handleDisplayTag = profile?.username
+    ? `@${profile.username}`
+    : `@${(profile?.full_name || '').replace(/\s+/g, '')}`;
 
   return (
     <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
@@ -94,78 +99,79 @@ export default function ProfileCardModal({ userId, visible, onClose }: ProfileCa
               </View>
 
               <View style={styles.infoSection}>
-                <Text style={[styles.name, { color: theme.colors.text, fontFamily: 'Inter-Bold' }]}>
-                  {profile.full_name}
-                </Text>
+                <View style={styles.nameContainer}>
+                  <Text style={[styles.name, { color: theme.colors.text, fontFamily: 'Inter-Bold' }]}>
+                    {profile.full_name}
+                  </Text>
+                  <Text style={[styles.handle, { color: theme.colors.primary, fontFamily: 'Inter-Medium' }]}>
+                    {handleDisplayTag}
+                  </Text>
+                </View>
                 
                 <View style={styles.badgesRow}>
-                  <Badge label={profile.role === 'driver' ? 'Driver' : 'Commuter'} variant={profile.role === 'driver' ? 'active' : 'pending'} />
+                  <Badge label={profile.role === 'driver' ? 'Verified Driver 🚗' : 'Commuter 🚶'} variant={profile.role === 'driver' ? 'active' : 'pending'} />
                 </View>
 
-                <View style={styles.statsRow}>
-                  <View style={[styles.statBox, { backgroundColor: theme.colors.background }]}>
-                    <Ionicons name="star" size={18} color={theme.colors.accent} />
-                    <Text style={[styles.statValue, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>
-                      {profile.rating_avg?.toFixed(1) || 'New'}
-                    </Text>
-                    <Text style={[styles.statLabel, { color: theme.colors.textMuted }]}>
-                      {profile.total_ratings} Ratings
-                    </Text>
-                  </View>
-                  
-                  {vehicle && (
-                    <View style={[styles.statBox, { backgroundColor: theme.colors.background, flex: 2 }]}>
-                      <Ionicons name="car-outline" size={18} color={theme.colors.primary} />
-                      <Text style={[styles.statValue, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>
-                        {vehicle.model}
-                      </Text>
-                      <Text style={[styles.statLabel, { color: theme.colors.textMuted }]}>
-                        {vehicle.plate_number} • {vehicle.capacity} seats
+                {/* Ratings (shown for drivers) */}
+                {profile.role === 'driver' && (
+                  <View style={styles.statsRow}>
+                    <View style={[styles.statBox, { backgroundColor: theme.colors.background }]}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Ionicons name="star" size={20} color={theme.colors.accent || '#F59E0B'} />
+                        <Text style={[styles.statValue, { color: theme.colors.text, fontFamily: 'Inter-Bold' }]}>
+                          {profile.rating_avg ? profile.rating_avg.toFixed(1) : '5.0'}
+                        </Text>
+                      </View>
+                      <Text style={[styles.statLabel, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
+                        {profile.total_ratings || 0} Ratings
                       </Text>
                     </View>
-                  )}
+                    
+                    {vehicle && (
+                      <View style={[styles.statBox, { backgroundColor: theme.colors.background, flex: 2 }]}>
+                        <Ionicons name="car-outline" size={20} color={theme.colors.primary} />
+                        <Text style={[styles.statValue, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>
+                          {vehicle.model}
+                        </Text>
+                        <Text style={[styles.statLabel, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
+                          {vehicle.plate_number} • {vehicle.capacity} seats
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {/* Action Buttons: @ Mention in Community Hub */}
+                <View style={styles.actionButtonsContainer}>
+                  <Pressable
+                    style={[styles.mentionBtn, { backgroundColor: theme.colors.primary }]}
+                    onPress={handleMention}
+                  >
+                    <View style={styles.atBadgeCircle}>
+                      <Text style={styles.atBadgeText}>@</Text>
+                    </View>
+                    <Text style={[styles.mentionBtnText, { fontFamily: 'Inter-SemiBold' }]}>
+                      Mention in Community Hub
+                    </Text>
+                    <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+                  </Pressable>
                 </View>
 
-                {/* Recent Reviews */}
-                {reviews.length > 0 && (
-                  <View style={styles.reviewsSection}>
-                    <Text style={[styles.reviewsTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>
-                      Recent Reviews
+                {/* Action Buttons: @ Mention in Community Hub */}
+                <View style={styles.actionButtonsContainer}>
+                  <Pressable
+                    style={[styles.mentionBtn, { backgroundColor: theme.colors.primary }]}
+                    onPress={handleMention}
+                  >
+                    <View style={styles.atBadgeCircle}>
+                      <Text style={styles.atBadgeText}>@</Text>
+                    </View>
+                    <Text style={[styles.mentionBtnText, { fontFamily: 'Inter-SemiBold' }]}>
+                      Mention in Community Hub
                     </Text>
-                    {reviews.map((review) => (
-                      <View key={review.id} style={[styles.reviewCard, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
-                        <View style={styles.reviewHeader}>
-                          <Avatar uri={review.reviewer?.avatar_url} name={review.reviewer?.full_name || ''} size="sm" />
-                          <View style={styles.reviewMeta}>
-                            <Text style={[styles.reviewerName, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]} numberOfLines={1}>
-                              {review.reviewer?.full_name}
-                            </Text>
-                            <Text style={[styles.reviewTime, { color: theme.colors.textMuted }]}>
-                              {getRelativeTime(review.created_at)}
-                            </Text>
-                          </View>
-                          <View style={styles.starsRow}>
-                            {[1, 2, 3, 4, 5].map(s => (
-                              <Ionicons key={s} name={s <= review.rating ? 'star' : 'star-outline'} size={12} color={theme.colors.accent} />
-                            ))}
-                          </View>
-                        </View>
-                        {review.comment && (
-                          <Text style={[styles.reviewComment, { color: theme.colors.textMuted }]} numberOfLines={2}>
-                            "{review.comment}"
-                          </Text>
-                        )}
-                      </View>
-                    ))}
-                  </View>
-                )}
-
-                {reviews.length === 0 && (
-                  <View style={[styles.noReviews, { backgroundColor: theme.colors.background }]}>
-                    <Ionicons name="chatbubble-ellipses-outline" size={20} color={theme.colors.textMuted} />
-                    <Text style={[styles.noReviewsText, { color: theme.colors.textMuted }]}>No reviews yet</Text>
-                  </View>
-                )}
+                    <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+                  </Pressable>
+                </View>
 
                 {/* Report User */}
                 {currentUser?.id !== userId && (
@@ -173,7 +179,6 @@ export default function ProfileCardModal({ userId, visible, onClose }: ProfileCa
                     style={styles.reportBtn}
                     onPress={() => {
                       onClose();
-                      // Small delay so modal closes first
                       setTimeout(() => {
                         const { Alert } = require('react-native');
                         Alert.alert(
@@ -203,7 +208,6 @@ export default function ProfileCardModal({ userId, visible, onClose }: ProfileCa
                     <Text style={[styles.reportText, { color: theme.colors.error }]}>Report User</Text>
                   </Pressable>
                 )}
-
               </View>
             </ScrollView>
           ) : (
@@ -225,7 +229,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
-    minHeight: 280,
+    minHeight: 260,
     maxHeight: '80%',
   },
   header: {
@@ -238,10 +242,16 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   infoSection: {
-    gap: 12,
+    gap: 14,
+  },
+  nameContainer: {
+    gap: 2,
   },
   name: {
-    fontSize: 24,
+    fontSize: 22,
+  },
+  handle: {
+    fontSize: 14,
   },
   badgesRow: {
     flexDirection: 'row',
@@ -250,12 +260,12 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection: 'row',
     gap: 12,
-    marginTop: 8,
+    marginTop: 4,
   },
   statBox: {
     flex: 1,
     borderRadius: 16,
-    padding: 16,
+    padding: 14,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
@@ -266,62 +276,47 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: 12,
   },
-  reviewsSection: {
+  actionButtonsContainer: {
     marginTop: 8,
-    gap: 8,
   },
-  reviewsTitle: {
-    fontSize: 15,
-  },
-  reviewCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 12,
-    gap: 6,
-  },
-  reviewHeader: {
+  mentionBtn: {
     flexDirection: 'row',
+    height: 52,
+    borderRadius: 16,
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    gap: 10,
+    shadowColor: '#0057FF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 4,
   },
-  reviewMeta: {
-    flex: 1,
-  },
-  reviewerName: {
-    fontSize: 13,
-  },
-  reviewTime: {
-    fontSize: 11,
-    fontFamily: 'Inter-Regular',
-  },
-  starsRow: {
-    flexDirection: 'row',
-    gap: 1,
-  },
-  reviewComment: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    fontStyle: 'italic',
-    marginLeft: 32,
-  },
-  noReviews: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    padding: 16,
+  atBadgeCircle: {
+    width: 24,
+    height: 24,
     borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    alignItems: 'center',
     justifyContent: 'center',
   },
-  noReviewsText: {
+  atBadgeText: {
+    color: '#FFFFFF',
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontWeight: '700',
+  },
+  mentionBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    flex: 1,
   },
   reportBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 12,
+    paddingVertical: 10,
     marginTop: 4,
   },
   reportText: {

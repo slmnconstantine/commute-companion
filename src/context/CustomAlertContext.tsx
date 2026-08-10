@@ -52,17 +52,22 @@ export function showCustomAlert(title: string, message?: string, buttons?: Alert
     type = 'warning';
   }
 
-  if (globalAlertListener) {
-    globalAlertListener({
-      visible: true,
-      title,
-      message,
-      buttons: buttons && buttons.length > 0 ? buttons : [{ text: 'OK', style: 'default' }],
-      type,
-    });
-  } else {
-    RNAlert.alert(title, message as any, buttons as any);
-  }
+  const notifyListener = () => {
+    if (globalAlertListener) {
+      globalAlertListener({
+        visible: true,
+        title,
+        message,
+        buttons: buttons && buttons.length > 0 ? buttons : [{ text: 'OK', style: 'default' }],
+        type,
+      });
+    } else {
+      RNAlert.alert(title, message as any, buttons as any);
+    }
+  };
+
+  // Schedule asynchronously so it never triggers during React component render phase
+  setTimeout(notifyListener, 0);
 }
 
 // Global monkey-patch of React Native Alert.alert

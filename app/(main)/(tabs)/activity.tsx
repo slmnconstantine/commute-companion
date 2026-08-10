@@ -55,9 +55,7 @@ const STATUS_STYLES: Record<
   dropped_off_early: { label: 'Dropped Off Early', colorKey: 'warning' },
 };
 
-// ── ActivityCard ──────────────────────────────────────────────────────────────
-
-function ActivityCard({
+const ActivityCard = React.memo(function ActivityCard({
   booking,
   theme,
   onReview,
@@ -259,7 +257,7 @@ function ActivityCard({
       )}
     </Pressable>
   );
-}
+});
 
 // ── Skeleton Card ─────────────────────────────────────────────────────────────
 

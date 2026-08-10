@@ -34,7 +34,7 @@ export default function SetRouteScreen() {
   }>();
   const insets = useSafeAreaInsets();
   const { theme, mode } = useTheme();
-  const { location } = useLocation();
+  const { location, loading: locationLoading } = useLocation();
   const { saveRoute, activeRoute } = useRoute();
 
   const [origin, setOrigin] = useState<LocationData | null>(() => {
@@ -93,22 +93,59 @@ export default function SetRouteScreen() {
   const [reverseGeocoding, setReverseGeocoding] = useState(false);
 
   const cameraRef = useRef<CameraRef>(null);
+  const hasAutoCenteredRef = useRef(false);
 
-  // Fly camera to user's real GPS location once it's loaded
+  // Auto-refocus camera to user's real GPS location once resolved
   useEffect(() => {
-    if (location && cameraRef.current && !activeRoute) {
-      cameraRef.current.flyTo({ center: [location.longitude, location.latitude], zoom: 14, duration: 1000 });
+    if (location?.latitude && location?.longitude && !locationLoading) {
+      if (!routeInfo && !hasAutoCenteredRef.current) {
+        hasAutoCenteredRef.current = true;
+        setTimeout(() => {
+          cameraRef.current?.easeTo({
+            center: [location.longitude, location.latitude],
+            zoom: 14,
+            duration: 800,
+          });
+        }, 300);
+      }
     }
-  }, [location, activeRoute]);
+  }, [location?.latitude, location?.longitude, locationLoading, routeInfo]);
+
+  const handleCenterOnUser = () => {
+    if (location?.latitude && location?.longitude) {
+      cameraRef.current?.easeTo({
+        center: [location.longitude, location.latitude],
+        zoom: 14,
+        duration: 600,
+      });
+    }
+  };
+
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    };
+  }, []);
 
   // ── Search handlers ──
-  const handleSearch = async (query: string) => {
+  const handleSearch = (query: string) => {
     setSearchQuery(query);
-    if (query.length < 3) { setSearchResults([]); return; }
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+
+    if (query.trim().length < 3) {
+      setSearchResults([]);
+      setSearching(false);
+      return;
+    }
+
     setSearching(true);
-    const results = await searchPlaces(query);
-    setSearchResults(results);
-    setSearching(false);
+    searchTimeoutRef.current = setTimeout(async () => {
+      const results = await searchPlaces(query.trim());
+      setSearchResults(results);
+      setSearching(false);
+    }, 250);
   };
 
   /** Shared route calculation logic */
@@ -352,12 +389,12 @@ export default function SetRouteScreen() {
 
             {origin && (
               <Marker id="origin" lngLat={[origin.lng, origin.lat]}>
-                <AnimatedMarker variant="origin" color={theme.colors.success} />
+                <AnimatedMarker variant="origin" label="Pickup" color={theme.colors.success} />
               </Marker>
             )}
             {destination && (
               <Marker id="destination" lngLat={[destination.lng, destination.lat]}>
-                <AnimatedMarker variant="destination" color={theme.colors.error} />
+                <AnimatedMarker variant="destination" label="Drop-off" color={theme.colors.error} />
               </Marker>
             )}
 
@@ -402,7 +439,12 @@ export default function SetRouteScreen() {
           </GlassCard>
 
           {/* Pin mode toggle */}
-          <GlassCard style={styles.pinModeBar}>
+          <GlassCard
+            style={[
+              styles.pinModeBar,
+              { bottom: (origin && destination && routeInfo) ? 96 : 24 },
+            ]}
+          >
             <Ionicons name="finger-print" size={16} color={theme.colors.primary} />
             <Text style={[styles.pinModeLabel, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
               Tap map to set:
@@ -447,7 +489,12 @@ export default function SetRouteScreen() {
           )}
 
           {routeInfo && (
-            <GlassCard style={styles.routeInfoCard}>
+            <GlassCard
+              style={[
+                styles.routeInfoCard,
+                { bottom: (origin && destination && routeInfo) ? 160 : 88 },
+              ]}
+            >
               <View style={styles.routeInfoRow}>
                 <Ionicons name="navigate" size={16} color={theme.colors.primary} />
                 <Text style={[styles.routeInfoText, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]}>
@@ -462,6 +509,22 @@ export default function SetRouteScreen() {
               </View>
             </GlassCard>
           )}
+
+          {/* Focus on User Location Button */}
+          <Pressable
+            style={({ pressed }) => [
+              styles.fab,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+                bottom: (origin && destination && routeInfo) ? 220 : 88,
+                transform: [{ scale: pressed ? 0.9 : 1 }],
+              },
+            ]}
+            onPress={handleCenterOnUser}
+          >
+            <Ionicons name="locate" size={20} color={theme.colors.primary} />
+          </Pressable>
 
           {origin && destination && routeInfo && (
             <Pressable style={[styles.nextButton, { backgroundColor: theme.colors.primary }]} onPress={handleSaveRoute}>
@@ -501,7 +564,24 @@ const styles = StyleSheet.create({
   locationDot: { width: 10, height: 10, borderRadius: 5, marginRight: 16 },
   locationText: { flex: 1, fontSize: 15 },
 
-  pinModeBar: { position: 'absolute', bottom: 120, left: 16, right: 16, flexDirection: 'row', alignItems: 'center', padding: 8, paddingHorizontal: 16, borderRadius: 100, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
+  fab: {
+    position: 'absolute',
+    right: 16,
+    width: 46,
+    height: 46,
+    borderRadius: 15,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 6,
+    zIndex: 10,
+  },
+
+  pinModeBar: { position: 'absolute', left: 16, right: 16, flexDirection: 'row', alignItems: 'center', padding: 8, paddingHorizontal: 16, borderRadius: 100, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
   pinModeLabel: { fontSize: 13, marginLeft: 6, marginRight: 12 },
   pinModeBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100, borderWidth: 1, borderColor: 'transparent', marginRight: 8 },
   pinModeDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
@@ -510,10 +590,10 @@ const styles = StyleSheet.create({
   geocodingBanner: { position: 'absolute', top: 130, alignSelf: 'center', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
   geocodingText: { color: '#fff', fontSize: 13 },
 
-  routeInfoCard: { position: 'absolute', bottom: 180, right: 16, padding: 12, borderRadius: 12, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
+  routeInfoCard: { position: 'absolute', right: 16, padding: 12, borderRadius: 12, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
   routeInfoRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 4 },
   routeInfoText: { fontSize: 14, marginLeft: 8 },
 
-  nextButton: { position: 'absolute', bottom: 32, left: 16, right: 16, height: 56, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', shadowColor: '#0D9488', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
+  nextButton: { position: 'absolute', bottom: 24, left: 16, right: 16, height: 56, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', shadowColor: '#0057FF', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.28, shadowRadius: 12, elevation: 6 },
   nextButtonText: { color: '#fff', fontSize: 16, fontFamily: 'Inter-SemiBold', marginRight: 8 },
 });

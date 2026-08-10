@@ -9,8 +9,8 @@ Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: false,
     shouldShowBanner: false,
-    shouldShowList: true,
-    shouldPlaySound: true,
+    shouldShowList: false, // Suppress OS notification shade/list while app is in foreground
+    shouldPlaySound: false, // Suppress OS sound while app is in foreground
     shouldSetBadge: true,
   }),
 });
@@ -28,7 +28,7 @@ export async function registerForPushNotificationsAsync() {
       name: 'default',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#10B981', // App Primary Color
+      lightColor: '#0057FF', // App Primary Color (Signal Blue)
     });
   }
 

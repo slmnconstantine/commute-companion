@@ -6,8 +6,9 @@
  * via `useColorScheme()` and keeps the StatusBar in sync.
  */
 
-import React, { createContext, useContext, useState, useMemo, type PropsWithChildren } from 'react';
-import { useColorScheme, StatusBar } from 'react-native';
+import React, { createContext, useContext, useState, useMemo, useEffect, type PropsWithChildren } from 'react';
+import { StatusBar } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getTheme, type Theme } from '@/theme';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 
@@ -28,8 +29,16 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
  * Wrap your app root with `<ThemeProvider>` to enable theming everywhere.
  */
 export function ThemeProvider({ children }: PropsWithChildren) {
-  const deviceScheme = useColorScheme();
-  const [mode, setMode] = useState<ThemeMode>(deviceScheme === 'dark' ? 'dark' : 'light');
+  const [mode, setMode] = useState<ThemeMode>('light');
+
+  // Load user-saved theme preference on mount (defaults to 'light')
+  useEffect(() => {
+    AsyncStorage.getItem('@app_theme_mode').then((savedMode) => {
+      if (savedMode === 'dark' || savedMode === 'light') {
+        setMode(savedMode);
+      }
+    }).catch(() => {});
+  }, []);
 
   // Load Inter font family
   const [fontsLoaded] = useFonts({
@@ -38,7 +47,13 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     Inter_700Bold,
   });
 
-  const toggleTheme = () => setMode((prev) => (prev === 'light' ? 'dark' : 'light'));
+  const toggleTheme = () => {
+    setMode((prev) => {
+      const next = prev === 'light' ? 'dark' : 'light';
+      AsyncStorage.setItem('@app_theme_mode', next).catch(() => {});
+      return next;
+    });
+  };
 
   const value = useMemo<ThemeContextValue>(
     () => ({

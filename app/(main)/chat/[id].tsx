@@ -37,7 +37,7 @@ export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { theme } = useTheme();
+  const { theme, mode } = useTheme();
   const { profile } = useAuth();
 
   const [messages, setMessages] = useState<MessageWithSender[]>([]);
@@ -89,8 +89,8 @@ export default function ChatScreen() {
   const loadMessages = async () => {
     if (!id) return;
     try {
-      const data = await getMessages(id);
-      setMessages(data);
+      const msgs = await getMessages(id);
+      setMessages(msgs);
     } catch (e) {
       console.error('Failed to load messages:', e);
     }
@@ -121,21 +121,21 @@ export default function ChatScreen() {
   }, [isTripCompleted, completionRefTime, isChatExpired]);
 
   const handleSend = async () => {
-    if (!newMessage.trim() || !profile || !id) return;
+    if (!newMessage.trim() || !id || !profile) return;
+    const content = newMessage.trim();
 
-    // Press animation
     Animated.sequence([
-      Animated.timing(sendScale, { toValue: 0.85, duration: 80, useNativeDriver: true }),
-      Animated.spring(sendScale, { toValue: 1, friction: 5, useNativeDriver: true }),
+      Animated.timing(sendScale, { toValue: 0.85, duration: 100, useNativeDriver: true }),
+      Animated.spring(sendScale, { toValue: 1, friction: 4, useNativeDriver: true }),
     ]).start();
 
     setSending(true);
     try {
-      const { data, error } = await sendMessage(id, profile.id, newMessage.trim());
-      if (data) {
-        setMessages(prev => {
-          if (prev.find(m => m.id === data.id)) return prev;
-          return [...prev, { ...data, sender: profile } as MessageWithSender];
+      const { data: sent, error } = await sendMessage(id, profile.id, content);
+      if (sent && !error) {
+        setMessages((prev) => {
+          if (prev.find(m => m.id === sent.id)) return prev;
+          return [...prev, { ...sent, sender: profile } as MessageWithSender];
         });
       }
       setNewMessage('');
@@ -148,7 +148,33 @@ export default function ChatScreen() {
 
   const renderMessage = ({ item, index }: { item: MessageWithSender; index: number }) => {
     const isOwn = item.sender_id === profile?.id;
+    const isAlert = Boolean(item.is_alert);
     const showDate = shouldShowDateSeparator(messages, index);
+
+    // Resolve bubble background and text colors
+    const bubbleBg = isAlert
+      ? (mode === 'dark' ? 'rgba(245, 158, 11, 0.18)' : '#FEF3C7')
+      : isOwn
+      ? theme.colors.primary
+      : theme.colors.surface;
+
+    const bubbleBorder = isAlert
+      ? (mode === 'dark' ? 'rgba(245, 158, 11, 0.5)' : '#FCD34D')
+      : isOwn
+      ? 'transparent'
+      : theme.colors.border;
+
+    const textColor = isAlert
+      ? (mode === 'dark' ? '#FEF3C7' : '#92400E')
+      : isOwn
+      ? '#FFFFFF'
+      : theme.colors.text;
+
+    const timeColor = isAlert
+      ? (mode === 'dark' ? 'rgba(254, 243, 199, 0.7)' : '#B45309')
+      : isOwn
+      ? 'rgba(255, 255, 255, 0.75)'
+      : theme.colors.textMuted;
 
     return (
       <>
@@ -165,26 +191,31 @@ export default function ChatScreen() {
           {!isOwn && (
             <Avatar uri={item.sender?.avatar_url} name={item.sender?.full_name || ''} size="sm" />
           )}
-          <View style={[
-            styles.bubble,
-            isOwn ? { backgroundColor: theme.colors.primary } : { backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border },
-            item.is_alert && { backgroundColor: `${theme.colors.accent}20`, borderColor: theme.colors.accent, borderWidth: 1 },
-          ]}>
-            {!isOwn && (
+          <View
+            style={[
+              styles.bubble,
+              {
+                backgroundColor: bubbleBg,
+                borderColor: bubbleBorder,
+                borderWidth: isOwn && !isAlert ? 0 : 1,
+              },
+            ]}
+          >
+            {!isOwn && !isAlert && (
               <Text style={[styles.senderName, { color: theme.colors.primary, fontFamily: 'Inter-SemiBold' }]}>
                 {item.sender?.full_name}
               </Text>
             )}
-            {item.is_alert && (
+            {isAlert && (
               <View style={styles.alertRow}>
-                <Ionicons name="warning" size={14} color={theme.colors.accent} />
-                <Text style={[styles.alertLabel, { color: theme.colors.accent, fontFamily: 'Inter-SemiBold' }]}>Alert</Text>
+                <Ionicons name="warning" size={14} color="#D97706" />
+                <Text style={[styles.alertLabel, { color: '#D97706', fontFamily: 'Inter-SemiBold' }]}>Alert</Text>
               </View>
             )}
-            <Text style={[styles.messageText, { color: isOwn ? '#fff' : theme.colors.text, fontFamily: 'Inter-Regular' }]}>
+            <Text style={[styles.messageText, { color: textColor, fontFamily: isAlert ? 'Inter-Medium' : 'Inter-Regular' }]}>
               {item.content}
             </Text>
-            <Text style={[styles.timeText, { color: isOwn ? 'rgba(255,255,255,0.7)' : theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
+            <Text style={[styles.timeText, { color: timeColor, fontFamily: 'Inter-Regular' }]}>
               {formatMessageTime(item.created_at)}
             </Text>
           </View>

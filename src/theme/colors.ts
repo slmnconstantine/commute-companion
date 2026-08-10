@@ -36,43 +36,47 @@ export interface Colors {
 }
 
 const shared = {
-  primary: '#10B981', // Emerald
-  primaryDark: '#059669',
-  primaryLight: '#34D399',
   accent: '#F59E0B',
   success: '#22C55E',
   warning: '#F59E0B',
   error: '#EF4444',
-  info: '#3B82F6',
+  info: '#0057FF',
   white: '#FFFFFF',
   black: '#000000',
   transparent: 'transparent',
-  gradientPrimary: ['#34D399', '#059669'] as [string, string],
   gradientAccent: ['#FBBF24', '#F59E0B'] as [string, string],
 };
 
 const light: Colors = {
   ...shared,
-  primarySubtle: 'rgba(16, 185, 129, 0.08)',
-  background: '#F8FAFC',
+  primary: '#0057FF',
+  primaryDark: '#0040C1',
+  primaryLight: '#4D8BFF',
+  primarySubtle: '#EBF2FF',
+  gradientPrimary: ['#0057FF', '#0040C1'] as [string, string],
+  background: '#F8F7F4',
   surface: '#FFFFFF',
   surfaceElevated: '#FFFFFF',
   text: '#0F172A',
   textMuted: '#64748B',
-  border: '#E2E8F0',
-  shadow: 'rgba(0, 0, 0, 0.08)',
-  overlay: 'rgba(0, 0, 0, 0.5)',
-  inputBackground: '#F1F5F9',
+  border: '#E8E6DF',
+  shadow: 'rgba(0, 87, 255, 0.08)',
+  overlay: 'rgba(0, 40, 120, 0.5)',
+  inputBackground: '#F0EFEA',
   glassBackground: '#FFFFFF',
-  glassBorder: '#E2E8F0',
-  shimmer: '#E2E8F0',
-  routeGlow: 'rgba(16, 185, 129, 0.18)',
+  glassBorder: '#E8E6DF',
+  shimmer: '#E8E6DF',
+  routeGlow: 'rgba(0, 87, 255, 0.20)',
   statusBar: 'dark-content',
 };
 
 const dark: Colors = {
   ...shared,
-  primarySubtle: 'rgba(16, 185, 129, 0.10)',
+  primary: '#90CAF9',
+  primaryDark: '#2196F3',
+  primaryLight: '#E3F2FD',
+  primarySubtle: 'rgba(144, 202, 249, 0.15)',
+  gradientPrimary: ['#90CAF9', '#2196F3'] as [string, string],
   background: '#080C14',
   surface: '#111827',
   surfaceElevated: '#1A2235',
@@ -85,7 +89,7 @@ const dark: Colors = {
   glassBackground: '#1A2235',
   glassBorder: '#1F2A3D',
   shimmer: '#1F2A3D',
-  routeGlow: 'rgba(52, 211, 153, 0.22)',
+  routeGlow: 'rgba(144, 202, 249, 0.22)',
   statusBar: 'light-content',
 };
 

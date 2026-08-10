@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, PressableProps, StyleProp, ViewStyle } from 'react-native';
+import { Pressable, PressableProps } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -7,11 +7,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { haptics } from '@/utils/haptics';
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
 export interface BouncyPressableProps extends PressableProps {
-  children: React.ReactNode;
-  style?: StyleProp<ViewStyle>;
+  children: React.ReactNode | ((state: { pressed: boolean }) => React.ReactNode);
   scaleTo?: number;
   hapticType?: 'light' | 'medium' | 'heavy' | 'success' | 'warning' | 'error' | 'selection' | 'none';
 }
@@ -53,15 +50,17 @@ export default function BouncyPressable({
   };
 
   return (
-    <AnimatedPressable
-      style={[animatedStyle, style]}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
-      onPress={onPress}
-      disabled={disabled}
-      {...props}
-    >
-      {children}
-    </AnimatedPressable>
+    <Animated.View style={animatedStyle}>
+      <Pressable
+        style={style}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        onPress={onPress}
+        disabled={disabled}
+        {...props}
+      >
+        {children}
+      </Pressable>
+    </Animated.View>
   );
 }

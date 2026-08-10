@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { HubPostWithAuthor, PostCommentWithAuthor } from '@/types/database';
 import { sendPushNotification } from './pushNotifications';
+import { createNotification } from './notifications';
 import { handleServiceError } from '@/utils/errorHelper';
 
 import { isJsonLabel } from '@/utils/routeHash';
@@ -165,7 +166,50 @@ export const createPost = async (
   
   const authorProfile = Array.isArray(data.author) ? data.author[0] : data.author;
   
-  // Notify other users tracking this route (only commute routes, ignoring temporary ride request routes)
+  // 1. Notify mentioned users in the post
+  const mentions = message.match(/@([\w.-]+)/g);
+  const notifiedUserIds = new Set<string>();
+
+  if (mentions && mentions.length > 0) {
+    const rawHandles = Array.from(new Set(mentions.map(m => m.substring(1).toLowerCase())));
+    try {
+      const { data: allProfiles } = await supabase
+        .from('profiles')
+        .select('id, push_token, username, full_name');
+
+      if (allProfiles) {
+        const matched = allProfiles.filter(p => {
+          const u = (p.username || '').toLowerCase();
+          const cleanFull = (p.full_name || '').replace(/\s+/g, '').toLowerCase();
+          return rawHandles.includes(u) || rawHandles.includes(cleanFull);
+        }).filter(p => p.id !== userId);
+
+        for (const target of matched) {
+          notifiedUserIds.add(target.id);
+          const title = 'You were mentioned in Hub 💬';
+          const body = `${authorProfile.full_name} mentioned you: "${message.length > 60 ? message.substring(0, 57) + '...' : message}"`;
+
+          await createNotification(target.id, title, body, 'hub_mention', {
+            postId: data.id,
+            routeHash,
+            authorId: userId,
+          });
+
+          if (target.push_token) {
+            await sendPushNotification(target.push_token, title, body, {
+              type: 'hub_mention',
+              postId: data.id,
+              routeHash,
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to notify mentioned users:', err);
+    }
+  }
+
+  // 2. Notify other users tracking this route (only commute routes, ignoring temporary ride request routes)
   const { data: routesData } = await supabase
     .from('routes')
     .select('user_id, label')
@@ -183,7 +227,7 @@ export const createPost = async (
           }
         })
         .map(r => r.user_id)
-    )).filter(id => id !== userId);
+    )).filter(id => id !== userId && !notifiedUserIds.has(id));
     
     if (userIds.length > 0) {
       const { data: profilesData } = await supabase.from('profiles').select('id, push_token').in('id', userIds);

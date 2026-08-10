@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useRef } from 'r
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import * as Notifications from 'expo-notifications';
+import * as Haptics from 'expo-haptics';
 import { Alert, Animated } from 'react-native';
 import { router } from 'expo-router';
 import NotificationBanner from '@/components/notifications/NotificationBanner';
@@ -109,18 +110,20 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     await AsyncStorage.setItem('@notif_email_enabled', JSON.stringify(val));
   };
 
-  // Configure Expo Notification Handler dynamically based on settings
+  // Configure Expo Notification Handler dynamically:
+  // In foreground (when using the app), suppress OS push banners/tray so ONLY in-app banners appear.
+  // When outside the app (background/closed), OS will natively display the push notification.
   useEffect(() => {
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
         shouldShowAlert: false,
         shouldShowBanner: false,
-        shouldShowList: pushEnabled,
-        shouldPlaySound: soundEnabled,
+        shouldShowList: false,
+        shouldPlaySound: false,
         shouldSetBadge: pushEnabled,
       }),
     });
-  }, [pushEnabled, soundEnabled]);
+  }, [pushEnabled]);
 
   const showInAppNotification = (title: string, body: string, data?: any) => {
     // Also enforce preferences for programmatically shown alerts
@@ -129,6 +132,10 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     if (data) {
       if ((data.type === 'ride_matched' || data.type === 'trip_update') && !ride) return;
       if ((data.type === 'chat' || data.type === 'new_message') && !chat) return;
+    }
+
+    if (soundEnabled) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     }
 
     if (data && data.type === 'ride_matched') {
