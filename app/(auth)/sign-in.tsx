@@ -34,8 +34,7 @@ export default function SignInScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { signIn } = useAuth();
-  const { mode } = useTheme();
-  const isLight = mode === 'light';
+  const isLight = true;
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');

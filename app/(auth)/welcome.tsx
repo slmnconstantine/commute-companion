@@ -18,8 +18,7 @@ import AuthBackground from '@/components/common/AuthBackground';
 export default function WelcomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { mode } = useTheme();
-  const isLight = mode === 'light';
+  const isLight = true;
 
   // Entrance Animations
   const contentOpacity = useRef(new Animated.Value(0)).current;
