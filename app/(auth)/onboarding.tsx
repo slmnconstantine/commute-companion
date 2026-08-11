@@ -51,8 +51,7 @@ function OnboardingHeroGraphic({
   tag1: string;
   tag2: string;
 }) {
-  const { mode } = useTheme();
-  const isLight = mode === 'light';
+  const isLight = true;
 
   // Smooth floating animations
   const floatMain = useSharedValue(0);
@@ -356,7 +355,6 @@ import BouncyPressable from '@/components/common/BouncyPressable';
 export default function OnboardingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { theme, mode } = useTheme();
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
 
@@ -378,10 +376,7 @@ export default function OnboardingScreen() {
   const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
 
   const renderItem = ({ item }: { item: typeof SLIDES[0] }) => {
-    const isLight = mode === 'light';
-    const topGradientColors = isLight
-      ? ['#EFF4FF', '#F8F7F4']
-      : ['#0B1326', '#070B14'];
+    const topGradientColors = ['#EFF4FF', '#F8F7F4'];
 
     return (
       <View style={{ width, flex: 1 }}>
@@ -399,10 +394,10 @@ export default function OnboardingScreen() {
           />
         </LinearGradient>
         <View style={styles.contentContainer}>
-          <Text style={[styles.title, { color: theme.colors.text, fontFamily: 'Inter-Bold' }]}>
+          <Text style={[styles.title, { color: '#0F172A', fontFamily: 'Inter-Bold' }]}>
             {item.title}
           </Text>
-          <Text style={[styles.description, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
+          <Text style={[styles.description, { color: '#64748B', fontFamily: 'Inter-Regular' }]}>
             {item.description}
           </Text>
         </View>
@@ -411,7 +406,7 @@ export default function OnboardingScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <View style={[styles.container, { backgroundColor: '#F8F7F4' }]}>
       <FlatList
         ref={flatListRef}
         data={SLIDES}
@@ -433,7 +428,7 @@ export default function OnboardingScreen() {
               key={index.toString()}
               style={[
                 styles.dot,
-                { backgroundColor: index === currentIndex ? theme.colors.primary : theme.colors.border },
+                { backgroundColor: index === currentIndex ? '#0057FF' : '#E8E6DF' },
                 index === currentIndex && { width: 24 }
               ]}
             />
@@ -442,7 +437,7 @@ export default function OnboardingScreen() {
 
         <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 20) + 24 }]}>
           <BouncyPressable
-            style={[styles.nextBtn, { backgroundColor: theme.colors.primary }]}
+            style={[styles.nextBtn, { backgroundColor: '#0057FF' }]}
             hapticType="medium"
             onPress={handleNext}
           >

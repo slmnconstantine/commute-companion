@@ -36,8 +36,7 @@ export default function SignUpScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { signUp } = useAuth();
-  const { mode } = useTheme();
-  const isLight = mode === 'light';
+  const isLight = true;
 
   const [loading, setLoading] = useState(false);
 

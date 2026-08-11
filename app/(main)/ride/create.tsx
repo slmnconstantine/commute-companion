@@ -593,7 +593,7 @@ export default function CreateRideScreen() {
               {
                 backgroundColor: theme.colors.surface,
                 borderColor: theme.colors.border,
-                bottom: (origin && destination && routeInfo) ? 220 : 88,
+                bottom: (origin && destination && routeInfo) ? 260 : 88,
                 transform: [{ scale: pressed ? 0.9 : 1 }],
               },
             ]}

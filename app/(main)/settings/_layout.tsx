@@ -6,6 +6,9 @@ export default function SettingsLayout() {
       <Stack.Screen name="edit-profile" />
       <Stack.Screen name="become-driver" />
       <Stack.Screen name="notifications" />
+      <Stack.Screen name="about" />
+      <Stack.Screen name="terms-privacy" />
+      <Stack.Screen name="report-bug" />
     </Stack>
   );
 }

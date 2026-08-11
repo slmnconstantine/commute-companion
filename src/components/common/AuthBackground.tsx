@@ -63,20 +63,12 @@ export default function AuthBackground({ children }: AuthBackgroundProps) {
     };
   }, []);
 
-  const gradientColors = isLight
-    ? (['#F8F7F4', '#EFF4FF', '#F4F2EC'] as const)
-    : (['#070B14', '#0B1326', '#05080F'] as const);
-
-  const topGlowColors = isLight
-    ? (['rgba(0, 87, 255, 0.12)', 'rgba(0, 87, 255, 0.03)', 'transparent'] as const)
-    : (['rgba(0, 87, 255, 0.35)', 'rgba(0, 87, 255, 0.08)', 'transparent'] as const);
-
-  const bottomGlowColors = isLight
-    ? (['rgba(0, 87, 255, 0.08)', 'rgba(0, 87, 255, 0.02)', 'transparent'] as const)
-    : (['rgba(0, 87, 255, 0.22)', 'rgba(0, 87, 255, 0.04)', 'transparent'] as const);
+  const gradientColors = ['#F8F7F4', '#EFF4FF', '#F4F2EC'] as const;
+  const topGlowColors = ['rgba(0, 87, 255, 0.12)', 'rgba(0, 87, 255, 0.03)', 'transparent'] as const;
+  const bottomGlowColors = ['rgba(0, 87, 255, 0.08)', 'rgba(0, 87, 255, 0.02)', 'transparent'] as const;
 
   return (
-    <View style={[styles.container, { backgroundColor: isLight ? '#F8F7F4' : '#070B14' }]}>
+    <View style={[styles.container, { backgroundColor: '#F8F7F4' }]}>
       {/* Base Deep Gradient */}
       <LinearGradient
         colors={gradientColors as any}
@@ -126,21 +118,21 @@ export default function AuthBackground({ children }: AuthBackgroundProps) {
         <View
           style={[
             styles.routeArch1,
-            { borderColor: isLight ? 'rgba(0, 87, 255, 0.12)' : 'rgba(0, 87, 255, 0.16)' },
+            { borderColor: 'rgba(0, 87, 255, 0.12)' },
           ]}
         />
         {/* Route Arch 2 */}
         <View
           style={[
             styles.routeArch2,
-            { borderColor: isLight ? 'rgba(0, 0, 0, 0.05)' : 'rgba(248, 247, 244, 0.07)' },
+            { borderColor: 'rgba(0, 0, 0, 0.05)' },
           ]}
         />
         {/* Route Arch 3 */}
         <View
           style={[
             styles.routeArch3,
-            { borderColor: isLight ? 'rgba(0, 87, 255, 0.08)' : 'rgba(0, 87, 255, 0.12)' },
+            { borderColor: 'rgba(0, 87, 255, 0.08)' },
           ]}
         />
 
@@ -149,7 +141,7 @@ export default function AuthBackground({ children }: AuthBackgroundProps) {
           style={[
             styles.node,
             styles.node1,
-            { backgroundColor: isLight ? 'rgba(0, 87, 255, 0.10)' : 'rgba(0, 87, 255, 0.15)' },
+            { backgroundColor: 'rgba(0, 87, 255, 0.10)' },
           ]}
         >
           <View style={styles.nodeCore} />
@@ -158,7 +150,7 @@ export default function AuthBackground({ children }: AuthBackgroundProps) {
           style={[
             styles.node,
             styles.node2,
-            { backgroundColor: isLight ? 'rgba(0, 87, 255, 0.10)' : 'rgba(0, 87, 255, 0.15)' },
+            { backgroundColor: 'rgba(0, 87, 255, 0.10)' },
           ]}
         >
           <View style={styles.nodeCore} />
@@ -167,15 +159,12 @@ export default function AuthBackground({ children }: AuthBackgroundProps) {
           style={[
             styles.node,
             styles.node3,
-            { backgroundColor: isLight ? 'rgba(0, 87, 255, 0.10)' : 'rgba(0, 87, 255, 0.15)' },
+            { backgroundColor: 'rgba(0, 87, 255, 0.10)' },
           ]}
         >
           <View style={styles.nodeCore} />
         </View>
       </View>
-
-      {/* Subtle Fine Grid Texture Overlay for Dark Mode */}
-      {!isLight && <View style={styles.gridOverlay} pointerEvents="none" />}
 
       {/* Foreground Content */}
       {children}

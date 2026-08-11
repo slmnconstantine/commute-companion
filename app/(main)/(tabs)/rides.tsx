@@ -33,7 +33,7 @@ import { supabase } from '@/lib/supabase';
 
 import { getDriverTrips, getTrips } from '@/services/trips';
 import { getCommuterRequests, CommuterRequest } from '@/services/rideRequests';
-import type { TripWithDriver } from '@/types/database';
+import type { TripWithDriver, Route } from '@/types/database';
 import AnimatedSegmentControl from '@/components/common/AnimatedSegmentControl';
 import TripCard from '@/components/ride/TripCard';
 import AnimatedListItem from '@/components/common/AnimatedListItem';
@@ -123,6 +123,7 @@ export default function RidesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [myRides, setMyRides] = useState<TripWithDriver[]>([]);
   const [recentDriverTrips, setRecentDriverTrips] = useState<TripWithDriver[]>([]);
+  const [recentCommuterRequests, setRecentCommuterRequests] = useState<Route[]>([]);
   const [availableRides, setAvailableRides] = useState<TripWithDriver[]>([]);
   const [rideRequests, setRideRequests] = useState<CommuterRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -216,6 +217,53 @@ export default function RidesScreen() {
         label: activeRoute.destination_label,
       });
     }
+
+    setShowRequestModal(true);
+  };
+
+  const handleRepostRequest = (req: Route) => {
+    const isVerified = profile?.is_verified && profile?.verified_badge;
+    if (!isVerified) {
+      Alert.alert(
+        'Verification Required',
+        'Only verified commuters can post ride requests. Please submit your verification documents in the Profile tab.',
+        [
+          { text: 'Go to Profile', onPress: () => router.push('/(main)/(tabs)/profile') },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
+      return;
+    }
+
+    const details = parseRequestDetails(req.label);
+    setReqOrigin({
+      lat: req.origin_lat,
+      lng: req.origin_lng,
+      label: req.origin_label,
+    });
+    setReqDestination({
+      lat: req.destination_lat,
+      lng: req.destination_lng,
+      label: req.destination_label,
+    });
+    setSeatsNeeded(details?.seats || 1);
+
+    if (details?.departure_time) {
+      try {
+        const dateObj = new Date(details.departure_time);
+        const hr = String(dateObj.getHours()).padStart(2, '0');
+        const mn = String(dateObj.getMinutes()).padStart(2, '0');
+        setRequestTime(`${hr}:${mn}`);
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const d = String(today.getDate()).padStart(2, '0');
+    setRequestDate(`${y}-${m}-${d}`);
 
     setShowRequestModal(true);
   };
@@ -334,16 +382,16 @@ export default function RidesScreen() {
       const allRides = await getTrips({ limit: 50 });
       setAvailableRides(allRides.filter(t => t.status === 'open' || t.status === 'full' || t.status === 'ongoing'));
 
-      // Load active ride request for the user
+      // Load active ride request and past requests for the user
       if (profile?.id) {
         const { data: routesData, error: routesError } = await supabase
           .from('routes')
           .select('*')
           .eq('user_id', profile.id)
-          .eq('is_active', true);
+          .order('created_at', { ascending: false });
 
         if (!routesError && routesData) {
-          const reqRoute = routesData.find((r: any) => isJsonLabel(r.label));
+          const reqRoute = routesData.find((r: any) => r.is_active && isJsonLabel(r.label));
           if (reqRoute) {
             setActiveRequestRoute((prev: any) => {
               if (prev && prev.id === reqRoute.id && prev.is_active === reqRoute.is_active && prev.label === reqRoute.label) {
@@ -398,6 +446,20 @@ export default function RidesScreen() {
               setReqDestination(prev => prev === null ? null : null);
             }
           }
+
+          // Extract recent commuter ride requests
+          const pastRequests = routesData.filter((r: any) => isJsonLabel(r.label));
+          const uniqueRequests: Route[] = [];
+          const seenReqs = new Set<string>();
+          for (const req of pastRequests) {
+            const routeStr = `${req.origin_label}-${req.destination_label}`;
+            if (!seenReqs.has(routeStr)) {
+              seenReqs.add(routeStr);
+              uniqueRequests.push(req as Route);
+            }
+            if (uniqueRequests.length >= 5) break;
+          }
+          setRecentCommuterRequests(uniqueRequests);
         }
       }
 
@@ -633,6 +695,62 @@ export default function RidesScreen() {
                   </View>
                   <Ionicons name="chevron-forward" size={18} color={theme.colors.primary} />
                 </Pressable>
+              )}
+
+              {/* Commuter Recent Ride Requests / Re-post */}
+              {!isDriver && recentCommuterRequests.length > 0 && (
+                <View style={{ marginBottom: 16 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+                    <Text style={[styles.myRidesTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', marginBottom: 0 }]}>
+                      Recent Ride Requests
+                    </Text>
+                  </View>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingBottom: 4 }}>
+                    {recentCommuterRequests.map((req) => {
+                      const details = parseRequestDetails(req.label);
+                      const seats = details?.seats || 1;
+                      return (
+                        <Pressable
+                          key={req.id}
+                          style={{
+                            backgroundColor: theme.colors.surface,
+                            padding: 14,
+                            borderRadius: 16,
+                            borderWidth: 1,
+                            borderColor: theme.colors.border,
+                            width: 260,
+                          }}
+                          onPress={() => handleRepostRequest(req)}
+                        >
+                          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                              <Ionicons name="time-outline" size={16} color={theme.colors.textMuted} />
+                              <Text style={{ color: theme.colors.textMuted, fontSize: 13 }}>Re-post request</Text>
+                            </View>
+                            <View style={{ backgroundColor: `${theme.colors.primary}15`, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                              <Ionicons name="people" size={12} color={theme.colors.primary} />
+                              <Text style={{ color: theme.colors.primary, fontSize: 11, fontFamily: 'Inter-SemiBold' }}>
+                                {seats} {seats === 1 ? 'seat' : 'seats'}
+                              </Text>
+                            </View>
+                          </View>
+                          <Text style={{ color: theme.colors.text, fontFamily: 'Inter-Medium', fontSize: 14 }} numberOfLines={1}>
+                            From: {req.origin_label?.split(',')[0]}
+                          </Text>
+                          <Text style={{ color: theme.colors.text, fontFamily: 'Inter-Medium', fontSize: 14 }} numberOfLines={1}>
+                            To: {req.destination_label?.split(',')[0]}
+                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 }}>
+                            <Ionicons name="refresh-circle" size={18} color={theme.colors.primary} />
+                            <Text style={{ color: theme.colors.primary, fontFamily: 'Inter-SemiBold', fontSize: 13 }}>
+                              Re-post Request
+                            </Text>
+                          </View>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
               )}
 
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, marginTop: 4 }}>

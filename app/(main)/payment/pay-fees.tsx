@@ -9,20 +9,15 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
-  Image
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import SafeLottieView from '@/components/common/SafeLottieView';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { createCheckoutSession } from '@/services/paymongo';
-import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
-
-type PaymentMethod = 'gcash' | 'maya' | 'card';
 
 export default function PayFeesScreen() {
   const { theme } = useTheme();
@@ -34,17 +29,11 @@ export default function PayFeesScreen() {
 
   // Form States
   const [payAmount, setPayAmount] = useState(outstandingBalance.toString());
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('gcash');
   const [loading, setLoading] = useState(false);
 
   // Mock Paymongo Simulator Modal States
   const [showSimulator, setShowSimulator] = useState(false);
-  const [simulatorStep, setSimulatorStep] = useState<1 | 2 | 3 | 4>(1);
-  const [simPhoneNumber, setSimPhoneNumber] = useState('');
-  const [simOtp, setSimOtp] = useState('');
-  const [simCardNum, setSimCardNum] = useState('');
-  const [simCardExpiry, setSimCardExpiry] = useState('');
-  const [simCardCvv, setSimCardCvv] = useState('');
+  const [simulatorStep, setSimulatorStep] = useState<1 | 2>(1);
 
   const parsedAmount = parseFloat(payAmount) || 0;
 
@@ -68,19 +57,19 @@ export default function PayFeesScreen() {
         description: `Payment of Platform Fees for driver: ${profile?.full_name || 'Driver Account'}`,
         billing: {
           name: profile?.full_name || 'Driver Account',
-          email: 'driver@commutecompanion.com'
+          email: 'driver@commutecompanion.com',
         },
         line_items: [
           {
             amount: Math.round(parsedAmount * 100),
             currency: 'PHP',
             name: 'Commute Companion - Platform Fee Settlement',
-            quantity: 1
-          }
+            quantity: 1,
+          },
         ],
         reference_number: profile?.id, // Sent to PayMongo to identify user in webhook
         success_url: 'commute-companion://payment/success',
-        cancel_url: 'commute-companion://payment/cancel'
+        cancel_url: 'commute-companion://payment/cancel',
       });
 
       if (!res.success) {
@@ -88,43 +77,37 @@ export default function PayFeesScreen() {
       }
 
       if (res.isMock) {
-        // If no API key, launch our local custom interactive checkout simulator
-        setSimPhoneNumber('');
-        setSimOtp('');
-        setSimCardNum('');
-        setSimCardExpiry('');
-        setSimCardCvv('');
+        // If no API key, launch local interactive QR code simulator
         setSimulatorStep(1);
         setShowSimulator(true);
       } else {
-        // Open the live Paymongo checkout url
+        // Open the live Paymongo checkout url (which displays the QR code)
         Alert.alert(
           'Redirecting to Paymongo',
-          'You will be redirected to the secure Paymongo portal to complete your payment.',
+          'You will be redirected to the secure Paymongo portal to scan the QR code and complete your payment.',
           [
             { text: 'Cancel', style: 'cancel' },
-            { 
-              text: 'Proceed', 
+            {
+              text: 'Proceed',
               onPress: async () => {
-                const result = await WebBrowser.openBrowserAsync(res.checkoutUrl);
-                
+                await WebBrowser.openBrowserAsync(res.checkoutUrl);
+
                 // In a live app we would check payment status via webhook or polling.
-                  // For demo, we will simulate the completion after user returns
-                  Alert.alert(
-                    'Did you complete the payment?',
-                    'If you successfully completed the checkout in the browser, press confirm to update your account.',
-                    [
-                      { 
-                        text: 'Yes, Confirm', 
-                        onPress: async () => {
-                          await finalizeDatabasePayment(parsedAmount);
-                        } 
+                Alert.alert(
+                  'Did you complete the payment?',
+                  'If you successfully completed the QR payment in the browser, press confirm to update your account.',
+                  [
+                    {
+                      text: 'Yes, Confirm',
+                      onPress: async () => {
+                        await finalizeDatabasePayment(parsedAmount);
                       },
-                      { text: 'No, Cancel', style: 'cancel' }
-                    ]
-                  );
-              }
-            }
+                    },
+                    { text: 'No, Cancel', style: 'cancel' },
+                  ]
+                );
+              },
+            },
           ]
         );
       }
@@ -137,12 +120,10 @@ export default function PayFeesScreen() {
 
   /**
    * Finalizes database platform fee deduction.
-   * Note: In production builds, this balance update is securely processed
-   * via Paymongo webhook triggers to prevent client-side manipulation.
    */
   const finalizeDatabasePayment = async (amountPaid: number) => {
     if (!profile) return;
-    
+
     // Bounds & sanity validation
     const currentBalance = profile.platform_fee_balance || 0;
     if (amountPaid <= 0 || amountPaid > currentBalance + 0.01) {
@@ -162,9 +143,9 @@ export default function PayFeesScreen() {
       if (error) throw error;
 
       await refreshProfile();
-      
+
       Alert.alert('Payment Successful!', `Successfully settled ₱${amountPaid.toFixed(2)} of platform fees.`, [
-        { text: 'OK', onPress: () => router.back() }
+        { text: 'OK', onPress: () => router.back() },
       ]);
     } catch (e: any) {
       Alert.alert('Database Error', 'Failed to update your account balance in the database. Please contact support.');
@@ -173,37 +154,12 @@ export default function PayFeesScreen() {
     }
   };
 
-  // Mock Simulator Steps handlers
-  const handleSimStep1Next = () => {
-    if (paymentMethod === 'card') {
-      if (simCardNum.length < 12 || simCardExpiry.length < 4 || simCardCvv.length < 3) {
-        Alert.alert('Invalid Card', 'Please enter valid credit card details.');
-        return;
-      }
-      setSimulatorStep(3); // Go directly to confirmation
-    } else {
-      if (simPhoneNumber.length < 10) {
-        Alert.alert('Invalid Phone', 'Please enter a valid mobile number.');
-        return;
-      }
-      setSimulatorStep(2); // Go to OTP
-    }
-  };
-
-  const handleSimStep2Next = () => {
-    if (simOtp.length < 4) {
-      Alert.alert('Invalid OTP', 'Please enter the 6-digit OTP code.');
-      return;
-    }
-    setSimulatorStep(3); // Go to confirmation
-  };
-
   const handleSimAuthorize = async () => {
-    setSimulatorStep(4); // Success screen
+    setSimulatorStep(2); // Success screen
     setTimeout(async () => {
       setShowSimulator(false);
       await finalizeDatabasePayment(parsedAmount);
-    }, 2000);
+    }, 1800);
   };
 
   return (
@@ -251,43 +207,6 @@ export default function PayFeesScreen() {
           </View>
         </View>
 
-        {/* Payment Methods */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>Select Payment Option</Text>
-          
-          <Pressable
-            style={[
-              styles.methodCard,
-              { backgroundColor: theme.colors.surface, borderColor: paymentMethod === 'gcash' ? theme.colors.primary : theme.colors.border }
-            ]}
-            onPress={() => setPaymentMethod('gcash')}
-          >
-            <View style={[styles.methodSelector, { borderColor: paymentMethod === 'gcash' ? theme.colors.primary : theme.colors.textMuted }]}>
-              {paymentMethod === 'gcash' && <View style={[styles.methodSelectedDot, { backgroundColor: theme.colors.primary }]} />}
-            </View>
-            <View style={styles.methodInfo}>
-              <Text style={[styles.methodName, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>GCash</Text>
-              <Text style={[styles.methodDesc, { color: theme.colors.textMuted }]}>Pay instantly using your GCash E-Wallet</Text>
-            </View>
-          </Pressable>
-
-          <Pressable
-            style={[
-              styles.methodCard,
-              { backgroundColor: theme.colors.surface, borderColor: paymentMethod === 'maya' ? theme.colors.primary : theme.colors.border }
-            ]}
-            onPress={() => setPaymentMethod('maya')}
-          >
-            <View style={[styles.methodSelector, { borderColor: paymentMethod === 'maya' ? theme.colors.primary : theme.colors.textMuted }]}>
-              {paymentMethod === 'maya' && <View style={[styles.methodSelectedDot, { backgroundColor: theme.colors.primary }]} />}
-            </View>
-            <View style={styles.methodInfo}>
-              <Text style={[styles.methodName, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>Maya</Text>
-              <Text style={[styles.methodDesc, { color: theme.colors.textMuted }]}>Settle using your Maya Account balance</Text>
-            </View>
-          </Pressable>
-        </View>
-
         {/* Submit */}
         <Pressable
           style={({ pressed }) => [
@@ -295,8 +214,8 @@ export default function PayFeesScreen() {
             {
               backgroundColor: theme.colors.primary,
               opacity: pressed || loading ? 0.9 : 1,
-              transform: [{ scale: pressed ? 0.98 : 1 }]
-            }
+              transform: [{ scale: pressed ? 0.98 : 1 }],
+            },
           ]}
           disabled={loading}
           onPress={handleProcessPayment}
@@ -317,13 +236,13 @@ export default function PayFeesScreen() {
       {/* MOCK CHECKOUT PORTAL MODAL */}
       <Modal visible={showSimulator} animationType="slide" transparent={true}>
         <View style={styles.simContainer}>
-          <View style={[styles.simContent, { backgroundColor: paymentMethod === 'gcash' ? '#005CE6' : paymentMethod === 'maya' ? '#02D35A' : '#1F2937' }]}>
-            
+          <View style={[styles.simContent, { backgroundColor: '#1E293B' }]}>
             {/* Modal Sim Header */}
             <View style={styles.simHeader}>
-              <Text style={styles.simLogoText}>
-                {paymentMethod === 'gcash' ? 'GCash' : paymentMethod === 'maya' ? 'Maya' : 'Card Checkout'}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="qr-code-outline" size={22} color="#FFF" />
+                <Text style={styles.simLogoText}>QR Ph Checkout</Text>
+              </View>
               <Pressable style={styles.simCloseBtn} onPress={() => setShowSimulator(false)}>
                 <Ionicons name="close-circle" size={24} color="#FFF" />
               </Pressable>
@@ -331,116 +250,38 @@ export default function PayFeesScreen() {
 
             {/* Sim Body Content */}
             <View style={styles.simBody}>
-              <Text style={styles.simMerchantLabel}>Merchant: Commute Companion</Text>
-              <Text style={styles.simAmountLabel}>Amount Owed: ₱{parsedAmount.toFixed(2)}</Text>
-
-              {/* STEP 1: Phone / Card Input */}
-              {simulatorStep === 1 && (
-                <View style={styles.simStepFrame}>
-                  {paymentMethod === 'card' ? (
-                    <>
-                      <Text style={styles.simInputTitle}>Enter Credit Card Number</Text>
-                      <TextInput
-                        style={styles.simInput}
-                        placeholder="4111 2222 3333 4444"
-                        placeholderTextColor="#9CA3AF"
-                        keyboardType="numeric"
-                        value={simCardNum}
-                        onChangeText={setSimCardNum}
-                      />
-                      <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.simInputTitle}>Expiry</Text>
-                          <TextInput
-                            style={styles.simInput}
-                            placeholder="MM/YY"
-                            placeholderTextColor="#9CA3AF"
-                            value={simCardExpiry}
-                            onChangeText={setSimCardExpiry}
-                          />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.simInputTitle}>CVV</Text>
-                          <TextInput
-                            style={styles.simInput}
-                            placeholder="123"
-                            placeholderTextColor="#9CA3AF"
-                            keyboardType="numeric"
-                            secureTextEntry
-                            value={simCardCvv}
-                            onChangeText={setSimCardCvv}
-                          />
-                        </View>
-                      </View>
-                    </>
-                  ) : (
-                    <>
-                      <Text style={styles.simInputTitle}>Enter registered mobile number</Text>
-                      <View style={styles.simPhoneInputWrapper}>
-                        <Text style={styles.simPhonePrefix}>+63</Text>
-                        <TextInput
-                          style={styles.simPhoneInput}
-                          placeholder="917 123 4567"
-                          placeholderTextColor="#9CA3AF"
-                          keyboardType="phone-pad"
-                          maxLength={10}
-                          value={simPhoneNumber}
-                          onChangeText={setSimPhoneNumber}
-                        />
-                      </View>
-                    </>
-                  )}
-                  <Pressable style={styles.simBtn} onPress={handleSimStep1Next}>
-                    <Text style={styles.simBtnText}>Next</Text>
-                  </Pressable>
-                </View>
-              )}
-
-              {/* STEP 2: OTP authentication */}
-              {simulatorStep === 2 && (
-                <View style={styles.simStepFrame}>
-                  <Text style={styles.simInputTitle}>A 6-digit authentication code has been sent to +63 {simPhoneNumber}</Text>
-                  <TextInput
-                    style={styles.simInput}
-                    placeholder="123456"
-                    placeholderTextColor="#9CA3AF"
-                    keyboardType="numeric"
-                    maxLength={6}
-                    value={simOtp}
-                    onChangeText={setSimOtp}
-                  />
-                  <Text style={styles.simHelperText}>For testing, type any 6-digit number.</Text>
-                  <Pressable style={styles.simBtn} onPress={handleSimStep2Next}>
-                    <Text style={styles.simBtnText}>Verify OTP</Text>
-                  </Pressable>
-                </View>
-              )}
-
-              {/* STEP 3: Confirm and Authorize */}
-              {simulatorStep === 3 && (
-                <View style={styles.simStepFrame}>
-                  <Text style={styles.simInputTitle}>Confirm payment authorization to Commute Companion.</Text>
-                  <View style={styles.simConfirmBox}>
-                    <Text style={styles.simConfirmText}>Merchant: Commute Companion</Text>
-                    <Text style={styles.simConfirmText}>Reference ID: REF-PAY-MOCK</Text>
-                    <Text style={styles.simConfirmTextAmount}>Total Amount: ₱{parsedAmount.toFixed(2)}</Text>
+              {simulatorStep === 1 ? (
+                <>
+                  <View style={{ alignItems: 'center' }}>
+                    <Text style={styles.simMerchantLabel}>Merchant: Commute Companion</Text>
+                    <Text style={styles.simAmountLabel}>Amount Due: ₱{parsedAmount.toFixed(2)}</Text>
                   </View>
-                  <Pressable style={[styles.simBtn, { backgroundColor: '#F59E0B' }]} onPress={handleSimAuthorize}>
-                    <Text style={styles.simBtnText}>Authorize Payment</Text>
+
+                  {/* QR Code Container */}
+                  <View style={styles.simQrCard}>
+                    <Ionicons name="qr-code" size={160} color="#0F172A" />
+                    <View style={styles.simQrBadge}>
+                      <Text style={styles.simQrBadgeText}>QR Ph Standard</Text>
+                    </View>
+                  </View>
+
+                  <Text style={styles.simQrInstruction}>
+                    Scan this QR code using GCash, Maya, ShopeePay, or any mobile banking app to pay.
+                  </Text>
+
+                  <Pressable style={styles.simBtn} onPress={handleSimAuthorize}>
+                    <Text style={styles.simBtnText}>Simulate Scan & Pay</Text>
                   </Pressable>
-                </View>
-              )}
-
-              {/* STEP 4: Success Loading Screen */}
-              {simulatorStep === 4 && (
+                </>
+              ) : (
+                /* STEP 2: Success Loading Screen */
                 <View style={styles.simStepFrame}>
-                  <Ionicons name="checkmark-circle" size={64} color="#FFF" style={{ alignSelf: 'center', marginBottom: 12 }} />
-                  <Text style={styles.simSuccessTitle}>Payment Processing Success!</Text>
-                  <Text style={styles.simSuccessSubtitle}>Updating account details...</Text>
-                  <ActivityIndicator color="#FFF" style={{ marginTop: 10 }} />
+                  <Ionicons name="checkmark-circle" size={64} color="#10B981" style={{ alignSelf: 'center', marginBottom: 12 }} />
+                  <Text style={styles.simSuccessTitle}>Payment Received!</Text>
+                  <Text style={styles.simSuccessSubtitle}>Updating platform fee balance...</Text>
+                  <ActivityIndicator color="#10B981" style={{ marginTop: 12 }} />
                 </View>
               )}
-
             </View>
           </View>
         </View>
@@ -525,37 +366,6 @@ const styles = StyleSheet.create({
   maxBtnText: {
     fontSize: 11,
   },
-  methodCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 14,
-  },
-  methodSelector: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  methodSelectedDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  methodInfo: {
-    flex: 1,
-    gap: 2,
-  },
-  methodName: {
-    fontSize: 14,
-  },
-  methodDesc: {
-    fontSize: 11,
-  },
   submitButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -597,7 +407,7 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(255, 255, 255, 0.1)',
   },
   simLogoText: {
-    fontSize: 22,
+    fontSize: 20,
     color: '#FFF',
     fontFamily: 'Outfit-Bold',
   },
@@ -607,105 +417,83 @@ const styles = StyleSheet.create({
   },
   simBody: {
     padding: 24,
-    backgroundColor: '#111827',
+    backgroundColor: '#0F172A',
     gap: 16,
+    alignItems: 'center',
   },
   simMerchantLabel: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: '#94A3B8',
+    fontFamily: 'Inter-Regular',
   },
   simAmountLabel: {
-    fontSize: 18,
+    fontSize: 20,
     color: '#FFF',
+    fontFamily: 'Outfit-Bold',
+    marginTop: 2,
+  },
+  simQrCard: {
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  simQrBadge: {
+    backgroundColor: '#0284C7',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginTop: 8,
+  },
+  simQrBadgeText: {
+    color: '#FFF',
+    fontSize: 11,
     fontFamily: 'Inter-SemiBold',
+    letterSpacing: 0.5,
+  },
+  simQrInstruction: {
+    color: '#94A3B8',
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 18,
+    paddingHorizontal: 8,
+    fontFamily: 'Inter-Regular',
   },
   simStepFrame: {
     gap: 14,
-    marginTop: 10,
-  },
-  simInputTitle: {
-    fontSize: 12,
-    color: '#D1D5DB',
-  },
-  simInput: {
-    backgroundColor: '#1F2937',
-    borderWidth: 1,
-    borderColor: '#374151',
-    borderRadius: 10,
-    color: '#FFF',
-    paddingHorizontal: 14,
-    height: 48,
-    fontSize: 14,
-  },
-  simPhoneInputWrapper: {
-    flexDirection: 'row',
+    paddingVertical: 12,
     alignItems: 'center',
-    backgroundColor: '#1F2937',
-    borderWidth: 1,
-    borderColor: '#374151',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    height: 48,
-  },
-  simPhonePrefix: {
-    color: '#9CA3AF',
-    marginRight: 6,
-    fontSize: 14,
-  },
-  simPhoneInput: {
-    flex: 1,
-    color: '#FFF',
-    fontSize: 14,
-    padding: 0,
   },
   simBtn: {
-    backgroundColor: '#3B82F6',
-    borderRadius: 10,
+    backgroundColor: '#0284C7',
+    borderRadius: 12,
     height: 48,
+    width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 10,
+    marginTop: 4,
   },
   simBtnText: {
     color: '#FFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  simHelperText: {
-    fontSize: 11,
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  simConfirmBox: {
-    backgroundColor: '#1F2937',
-    padding: 16,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#374151',
-    gap: 6,
-  },
-  simConfirmText: {
-    fontSize: 12,
-    color: '#D1D5DB',
-  },
-  simConfirmTextAmount: {
-    fontSize: 14,
-    color: '#FFF',
-    fontWeight: '700',
-    marginTop: 4,
-    borderTopWidth: 1,
-    borderTopColor: '#374151',
-    paddingTop: 8,
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
   },
   simSuccessTitle: {
-    fontSize: 16,
+    fontSize: 18,
     color: '#FFF',
-    fontWeight: '700',
+    fontFamily: 'Inter-Bold',
     textAlign: 'center',
   },
   simSuccessSubtitle: {
-    fontSize: 12,
-    color: '#9CA3AF',
+    fontSize: 13,
+    color: '#94A3B8',
+    fontFamily: 'Inter-Regular',
     textAlign: 'center',
-  }
+  },
 });

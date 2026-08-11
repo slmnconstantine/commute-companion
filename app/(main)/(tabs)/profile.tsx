@@ -168,12 +168,18 @@ export default function ProfileScreen() {
         {
           icon: 'information-circle-outline',
           label: 'About',
-          onPress: () => {},
+          onPress: () => router.push('/(main)/settings/about' as any),
         },
         {
           icon: 'document-text-outline',
           label: 'Terms & Privacy',
-          onPress: () => {},
+          onPress: () => router.push('/(main)/settings/terms-privacy' as any),
+        },
+        {
+          icon: 'bug-outline',
+          label: 'Report a Bug',
+          onPress: () => router.push('/(main)/settings/report-bug' as any),
+          color: theme.colors.primary,
         },
       ],
     },

@@ -30,8 +30,7 @@ export default function VerifyEmailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { session, signOut } = useAuth();
-  const { mode } = useTheme();
-  const isLight = mode === 'light';
+  const isLight = true;
   
   const [loading, setLoading] = useState(false);
   const primaryButtonScale = useRef(new Animated.Value(1)).current;
