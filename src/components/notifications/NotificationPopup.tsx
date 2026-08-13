@@ -7,6 +7,8 @@ import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 
+import { handleNotificationNavigation } from '@/utils/notificationRouter';
+
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface NotificationPopupProps {
@@ -14,6 +16,8 @@ interface NotificationPopupProps {
     title: string;
     body: string;
     tripId?: string;
+    data?: any;
+    [key: string]: any;
   } | null;
   popupScaleAnim: Animated.Value;
   handleDismissPopup: () => void;
@@ -73,6 +77,11 @@ export default function NotificationPopup({ centerPopupNotification, popupScaleA
   }, [centerPopupNotification]);
 
   if (!centerPopupNotification) return null;
+
+  const handleActionPress = () => {
+    handleNotificationNavigation(router, centerPopupNotification);
+    handleDismissPopup();
+  };
 
   const gradientColors = theme.colors.gradientPrimary;
 
@@ -164,35 +173,30 @@ export default function NotificationPopup({ centerPopupNotification, popupScaleA
                 </Text>
               </Pressable>
 
-              {centerPopupNotification.tripId && (
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.popupBtn,
-                    { opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.97 : 1 }] },
-                  ]}
-                  onPress={() => {
-                    router.push(`/(main)/ride/${centerPopupNotification.tripId}`);
-                    handleDismissPopup();
-                  }}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.popupBtn,
+                  { opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.97 : 1 }] },
+                ]}
+                onPress={handleActionPress}
+              >
+                <LinearGradient
+                  colors={gradientColors}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.gradientBtn}
                 >
-                  <LinearGradient
-                    colors={gradientColors}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={styles.gradientBtn}
+                  <Ionicons name="arrow-forward" size={16} color="#fff" style={{ marginRight: 4 }} />
+                  <Text
+                    style={[
+                      styles.popupBtnText,
+                      { color: '#fff', fontFamily: 'Inter-SemiBold' },
+                    ]}
                   >
-                    <Ionicons name="arrow-forward" size={16} color="#fff" style={{ marginRight: 4 }} />
-                    <Text
-                      style={[
-                        styles.popupBtnText,
-                        { color: '#fff', fontFamily: 'Inter-SemiBold' },
-                      ]}
-                    >
-                      Check Details
-                    </Text>
-                  </LinearGradient>
-                </Pressable>
-              )}
+                    Check Details
+                  </Text>
+                </LinearGradient>
+              </Pressable>
             </View>
           </View>
         </LinearGradient>

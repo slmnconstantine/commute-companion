@@ -30,7 +30,13 @@ export async function createBooking(bookingData: Omit<Booking, 'id' | 'created_a
     const { data: tripData } = await supabase.from('trips').select('driver:profiles!driver_id(id, push_token)').eq('id', bookingData.trip_id).single();
     const pushToken = (tripData?.driver as any)?.push_token;
     if (pushToken) {
-      await sendPushNotification(pushToken, 'New Ride Request', 'A commuter has requested to join your ride!', { type: 'booking', bookingId: booking.id }, (tripData?.driver as any)?.id);
+      await sendPushNotification(
+        pushToken,
+        'New Ride Request',
+        'A commuter has requested to join your ride!',
+        { type: 'booking', bookingId: booking.id, tripId: bookingData.trip_id },
+        (tripData?.driver as any)?.id
+      );
     }
   }
 
@@ -90,7 +96,7 @@ export async function updateBookingStatus(id: string, status: string): Promise<v
         title = 'Ride Declined';
         body = 'The driver declined your booking request.';
       }
-      await sendPushNotification(pushToken, title, body, { type: 'booking_update', status }, data.commuter_id);
+      await sendPushNotification(pushToken, title, body, { type: 'booking_update', status, bookingId: id, tripId: data.trip_id }, data.commuter_id);
     }
     if (status === 'accepted') {
       // Schedule ride reminders for the commuter

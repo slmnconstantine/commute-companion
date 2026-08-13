@@ -139,7 +139,7 @@ export default function FareBreakdown({ fareBreakdown, passengers = 1 }: FareBre
                 },
               ]}
             >
-              Platform fee
+              Passenger platform fee
             </Text>
             <Ionicons name="information-circle-outline" size={14} color={`${theme.colors.textMuted}80`} />
           </View>
@@ -147,12 +147,12 @@ export default function FareBreakdown({ fareBreakdown, passengers = 1 }: FareBre
             style={[
               styles.rowAmount,
               {
-                color: theme.colors.textMuted,
-                fontFamily: 'Inter-Medium',
+                color: theme.colors.success,
+                fontFamily: 'Inter-SemiBold',
               },
             ]}
           >
-            {formatCurrency(fareBreakdown.platformFee)}
+            FREE
           </Text>
         </View>
       </View>

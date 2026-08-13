@@ -11,6 +11,8 @@ import BouncyPressable from '@/components/common/BouncyPressable';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { getUserNotifications, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification, deleteAllNotifications, AppNotification } from '@/services/notifications';
 
+import { handleNotificationNavigation } from '@/utils/notificationRouter';
+
 export default function NotificationInboxScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -48,16 +50,8 @@ export default function NotificationInboxScreen() {
       setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, read: true } : n));
     }
 
-    // Navigate based on type
-    if (notification.type === 'booking' || notification.type === 'booking_update') {
-      if (notification.data?.bookingId) {
-        // Find if driver or commuter and navigate to appropriate tab
-        router.push('/(main)/(tabs)/rides');
-      }
-    } else if (notification.type === 'passenger_arrival' || notification.type === 'driver_arrival') {
-      // Typically these are handled in-ride, so we could just go to rides tab
-      router.push('/(main)/(tabs)/rides');
-    }
+    // Direct routing to the specific feature/screen
+    handleNotificationNavigation(router, notification);
   };
 
   const handleMarkAllRead = async () => {
@@ -90,12 +84,36 @@ export default function NotificationInboxScreen() {
 
   const getIconForType = (type: string) => {
     switch (type) {
-      case 'booking': return 'car';
-      case 'booking_update': return 'checkmark-circle';
-      case 'passenger_arrival': return 'walk';
-      case 'driver_arrival': return 'car-sport';
-      case 'ride_reminder': return 'time';
-      default: return 'notifications';
+      case 'chat':
+      case 'new_message':
+        return 'chatbubbles';
+      case 'booking':
+      case 'booking_request':
+        return 'car';
+      case 'booking_update':
+        return 'checkmark-circle';
+      case 'trip_update':
+        return 'navigate';
+      case 'ride_matched':
+        return 'car-sport';
+      case 'passenger_arrival':
+        return 'walk';
+      case 'driver_arrival':
+        return 'car-sport';
+      case 'ride_reminder':
+        return 'time';
+      case 'hub_post':
+      case 'hub_mention':
+      case 'hub_like':
+      case 'hub_comment':
+        return 'people';
+      case 'driver_validation':
+        return 'shield-checkmark';
+      case 'review':
+      case 'new_rating':
+        return 'star';
+      default:
+        return 'notifications';
     }
   };
 

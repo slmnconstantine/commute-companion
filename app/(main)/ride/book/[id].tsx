@@ -74,10 +74,8 @@ export default function BookRideScreen() {
       }
 
       const fareEst = trip.fare_per_seat * seats;
-      const commuterPlatformFee = Math.round(fareEst * PLATFORM_FEE_RATE * 100) / 100;
+      const totalBookingPrice = fareEst;
       const driverPlatformFee = Math.round(fareEst * PLATFORM_FEE_RATE * 100) / 100;
-      const totalBookingPrice = fareEst + commuterPlatformFee;
-      const combinedPlatformFee = commuterPlatformFee + driverPlatformFee;
 
       const { error } = await createBooking({
         trip_id: trip.id,
@@ -88,7 +86,7 @@ export default function BookRideScreen() {
         dropoff_lng: trip.destination_lng,
         status: 'pending',
         fare_paid: totalBookingPrice,
-        platform_fee: combinedPlatformFee,
+        platform_fee: driverPlatformFee,
         seats_booked: seats,
         driver_confirmed: false,
         commuter_confirmed: false,
@@ -137,7 +135,6 @@ export default function BookRideScreen() {
   if (!trip) return <LoadingSpinner size="lg" message="Trip not found" />;
 
   const totalFare = trip.fare_per_seat * seats;
-  const platformFee = Math.round(totalFare * PLATFORM_FEE_RATE * 100) / 100;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -202,21 +199,23 @@ export default function BookRideScreen() {
             <Text style={[styles.fareValue, { color: theme.colors.text }]}>x{seats}</Text>
           </View>
           <View style={styles.fareRow}>
-            <Text style={[styles.fareLabel, { color: theme.colors.textMuted }]}>Platform fee</Text>
-            <Text style={[styles.fareValue, { color: theme.colors.text }]}>
-              {trip.fare_per_seat === 0 ? 'FREE' : formatCurrency(platformFee)}
+            <Text style={[styles.fareLabel, { color: theme.colors.textMuted }]}>
+              Passenger platform fee
+            </Text>
+            <Text style={[styles.fareValue, { color: theme.colors.success, fontFamily: 'Inter-SemiBold' }]}>
+              FREE
             </Text>
           </View>
           <View style={[styles.fareDivider, { backgroundColor: theme.colors.border }]} />
           <View style={styles.fareRow}>
             <Text style={[styles.fareTotalLabel, { color: theme.colors.text, fontFamily: 'Inter-Bold' }]}>Total</Text>
             <Text style={[styles.fareTotalValue, { color: trip.fare_per_seat === 0 ? theme.colors.success : theme.colors.primary, fontFamily: 'Inter-Bold' }]}>
-              {trip.fare_per_seat === 0 ? 'FREE' : formatCurrency(totalFare + platformFee)}
+              {trip.fare_per_seat === 0 ? 'FREE' : formatCurrency(totalFare)}
             </Text>
           </View>
           {seats > 1 && trip.fare_per_seat > 0 && (
             <Text style={[styles.breakdownText, { color: theme.colors.textMuted }]}>
-              ({formatCurrency(trip.fare_per_seat + (platformFee / seats))} × {seats} passengers)
+              ({formatCurrency(trip.fare_per_seat)} × {seats} passengers)
             </Text>
           )}
         </View>

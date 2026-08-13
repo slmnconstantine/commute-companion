@@ -20,6 +20,7 @@ import DatePickerModal from '@/components/ride/DatePickerModal';
 import TimePickerModal from '@/components/ride/TimePickerModal';
 import AnimatedMarker from '@/components/common/AnimatedMarker';
 import GlassCard from '@/components/common/GlassCard';
+import RouteLayer from '@/components/common/RouteLayer';
 
 interface LocationData {
   lat: number;
@@ -476,9 +477,9 @@ export default function CreateRideScreen() {
             )}
 
             {routeCoords.length > 0 && (
-              <GeoJSONSource
-                id="route"
-                data={{
+              <RouteLayer
+                id="createRoute"
+                routeGeoJSON={{
                   type: 'Feature',
                   geometry: {
                     type: 'LineString',
@@ -486,9 +487,10 @@ export default function CreateRideScreen() {
                   },
                   properties: {}
                 }}
-              >
-                <Layer id="routeLayer" type="line" source="route" style={{ lineColor: '#0D9488', lineWidth: 4 }} />
-              </GeoJSONSource>
+                color={theme.colors.primary}
+                glowColor={theme.colors.routeGlow}
+                casingColor={`${theme.colors.primaryDark}66`}
+              />
             )}
           </Map>
 

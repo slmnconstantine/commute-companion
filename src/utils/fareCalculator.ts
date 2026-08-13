@@ -2,7 +2,8 @@
  * Fare calculation utility for Commutable Companion
  *
  * Produces a full breakdown: base fare + distance + time, split across
- * passengers, with a platform fee on top.
+ * passengers. Passengers do not pay a platform fee. Only drivers who created
+ * a ride that collects fare are charged a 10% platform fee from earnings.
  */
 
 import { BASE_FARE, COST_PER_KM, COST_PER_MIN, PLATFORM_FEE_RATE } from '@/lib/constants';
@@ -38,9 +39,9 @@ export function calculateFare(
   const timeCost = Math.round(durationMin * COST_PER_MIN * 100) / 100;
   const subtotal = baseFare + distanceCost + timeCost;
   const costPerSeat = Math.ceil(subtotal / Math.max(1, passengers));
-  // 10% platform fee applied per seat booking
-  const platformFee = Math.round(costPerSeat * PLATFORM_FEE_RATE * 100) / 100;
-  const totalPerSeat = costPerSeat + platformFee;
+  // Passengers pay no platform fee
+  const platformFee = 0;
+  const totalPerSeat = costPerSeat;
 
   return { baseFare, distanceCost, timeCost, subtotal, costPerSeat, platformFee, totalPerSeat };
 }
@@ -51,9 +52,7 @@ export function formatCurrency(amount: number): string {
 
 /**
  * Calculate driver net payout and platform fee from the total fare collected.
- * The driver is charged 10% of the base fare as a platform fee, and the platform
- * also collects the 10% commuter platform fee. The combined platform fee is what
- * the driver owes to the platform (since they collect the total in cash).
+ * Only drivers who created a ride that collects fare are charged a 10% platform fee from earnings.
  */
 export function getDriverPayout(totalFare: number): { netPayout: number; platformFee: number } {
   // Only drivers get charged a 10% platform fee from their earnings

@@ -7,6 +7,8 @@ import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 
+import { handleNotificationNavigation } from '@/utils/notificationRouter';
+
 interface NotificationBannerProps {
   activeNotification: {
     title: string;
@@ -78,14 +80,7 @@ export default function NotificationBanner({ activeNotification, slideAnim, hand
   if (!activeNotification) return null;
 
   const handleBannerPress = () => {
-    const { data } = activeNotification;
-    if (data) {
-      if (data.type === 'chat' && data.chatRoomId) {
-        router.push(`/(main)/chat/${data.chatRoomId}`);
-      } else if (data.tripId) {
-        router.push(`/(main)/ride/${data.tripId}`);
-      }
-    }
+    handleNotificationNavigation(router, activeNotification);
     handleDismiss();
   };
 
@@ -93,6 +88,7 @@ export default function NotificationBanner({ activeNotification, slideAnim, hand
     const type = activeNotification.data?.type;
     switch (type) {
       case 'chat':
+      case 'new_message':
         return { name: 'chatbubbles' as const, color: theme.colors.info };
       case 'ride_matched':
         return { name: 'car-sport' as const, color: theme.colors.success };
@@ -102,13 +98,34 @@ export default function NotificationBanner({ activeNotification, slideAnim, hand
       case 'booking_update':
         return { name: 'ticket' as const, color: theme.colors.accent };
       case 'hub_post':
+      case 'hub_mention':
+      case 'hub_like':
+      case 'hub_comment':
         return { name: 'people' as const, color: theme.colors.info };
+      case 'driver_validation':
+        return { name: 'shield-checkmark' as const, color: theme.colors.success };
       default:
         return { name: 'notifications' as const, color: theme.colors.primary };
     }
   };
 
+  const getActionBtnConfig = () => {
+    const data = activeNotification.data;
+    const type = data?.type;
+    if (type === 'chat' || type === 'new_message' || data?.chatRoomId) {
+      return { icon: 'chatbubble' as const, label: 'Open Chat' };
+    }
+    if (type?.startsWith('hub_') || data?.postId) {
+      return { icon: 'people' as const, label: 'View Hub' };
+    }
+    if (type === 'driver_validation') {
+      return { icon: 'shield-checkmark' as const, label: 'View Status' };
+    }
+    return { icon: 'arrow-forward' as const, label: 'View Details' };
+  };
+
   const iconConfig = getIconConfig();
+  const actionBtnConfig = getActionBtnConfig();
   const gradientColors = theme.colors.gradientPrimary;
 
   return (
@@ -192,57 +209,26 @@ export default function NotificationBanner({ activeNotification, slideAnim, hand
             </Text>
           </Pressable>
 
-          {activeNotification.data?.chatRoomId && (
-            <Pressable
-              style={({ pressed }) => [
-                styles.pillBtn,
-                styles.pillAction,
-                { opacity: pressed ? 0.8 : 1 },
-              ]}
-              onPress={() => {
-                router.push(`/(main)/chat/${activeNotification.data.chatRoomId}`);
-                handleDismiss();
-              }}
+          <Pressable
+            style={({ pressed }) => [
+              styles.pillBtn,
+              styles.pillAction,
+              { opacity: pressed ? 0.8 : 1 },
+            ]}
+            onPress={handleBannerPress}
+          >
+            <LinearGradient
+              colors={gradientColors}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.pillGradient}
             >
-              <LinearGradient
-                colors={gradientColors}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.pillGradient}
-              >
-                <Ionicons name="chatbubble" size={12} color="#fff" />
-                <Text style={[styles.pillText, { color: '#fff', fontFamily: 'Inter-SemiBold' }]}>
-                  Open Chat
-                </Text>
-              </LinearGradient>
-            </Pressable>
-          )}
-
-          {activeNotification.data?.tripId && !activeNotification.data?.chatRoomId && (
-            <Pressable
-              style={({ pressed }) => [
-                styles.pillBtn,
-                styles.pillAction,
-                { opacity: pressed ? 0.8 : 1 },
-              ]}
-              onPress={() => {
-                router.push(`/(main)/ride/${activeNotification.data.tripId}`);
-                handleDismiss();
-              }}
-            >
-              <LinearGradient
-                colors={gradientColors}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.pillGradient}
-              >
-                <Ionicons name="eye" size={12} color="#fff" />
-                <Text style={[styles.pillText, { color: '#fff', fontFamily: 'Inter-SemiBold' }]}>
-                  View Details
-                </Text>
-              </LinearGradient>
-            </Pressable>
-          )}
+              <Ionicons name={actionBtnConfig.icon} size={12} color="#fff" />
+              <Text style={[styles.pillText, { color: '#fff', fontFamily: 'Inter-SemiBold' }]}>
+                {actionBtnConfig.label}
+              </Text>
+            </LinearGradient>
+          </Pressable>
         </View>
       </View>
 

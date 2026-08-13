@@ -8,6 +8,7 @@ import { router } from 'expo-router';
 import NotificationBanner from '@/components/notifications/NotificationBanner';
 import NotificationPopup from '@/components/notifications/NotificationPopup';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { handleNotificationNavigation } from '@/utils/notificationRouter';
 
 interface NotificationContextType {
   driverPendingCount: number;
@@ -324,17 +325,13 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       );
     });
 
-    // 2. Background Tap Listener: Auto-route to the matching ride page or chatroom
+    // 2. Background Tap Listener: Auto-route to the matching ride page, chatroom, community post, or verification
     const backgroundSub = Notifications.addNotificationResponseReceivedListener((response) => {
       const { data } = response.notification.request.content;
       console.log('[PUSH] User tapped background notification:', data);
 
       if (data) {
-        if (data.chatRoomId && data.type === 'chat') {
-          router.push(`/(main)/chat/${data.chatRoomId}` as any);
-        } else if (data.tripId) {
-          router.push(`/(main)/ride/${data.tripId}` as any);
-        }
+        handleNotificationNavigation(router, data);
       }
     });
 
@@ -346,14 +343,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   const handleBannerPress = () => {
     if (!activeNotification) return;
-    const { data } = activeNotification;
-    if (data) {
-      if (data.type === 'chat' && data.chatRoomId) {
-        router.push(`/(main)/chat/${data.chatRoomId}` as any);
-      } else if (data.tripId) {
-        router.push(`/(main)/ride/${data.tripId}` as any);
-      }
-    }
+    handleNotificationNavigation(router, activeNotification);
     handleDismiss();
   };
 
