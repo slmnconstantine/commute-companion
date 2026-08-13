@@ -150,6 +150,8 @@ function ToastInner({ theme, accentColor, config, toast }: any) {
   );
 }
 
+import { getFriendlyErrorMessage } from '@/utils/errorHelper';
+
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastData[]>([]);
   const idCounter = useRef(0);
@@ -158,7 +160,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     const id = ++idCounter.current;
     const config = VARIANT_CONFIG[variant];
     Haptics.notificationAsync(config.haptic);
-    setToasts(prev => [...prev, { id, variant, title, message, duration }]);
+
+    const friendlyMessage = message
+      ? (variant === 'error' ? getFriendlyErrorMessage(message, message) : message)
+      : message;
+
+    setToasts(prev => [...prev, { id, variant, title, message: friendlyMessage, duration }]);
   }, []);
 
   const dismissToast = useCallback((id: number) => {

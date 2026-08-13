@@ -97,7 +97,7 @@ export default function CommunityScreen() {
   const { profile } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { mention } = useLocalSearchParams<{ mention?: string }>();
+  const { mention, postId } = useLocalSearchParams<{ mention?: string; postId?: string }>();
 
   const [posts, setPosts] = useState<HubPostWithAuthor[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -129,6 +129,16 @@ export default function CommunityScreen() {
       setNewPostVisible(true);
     }
   }, [mention]);
+
+  // Listen for incoming postId from notification navigation
+  useEffect(() => {
+    if (postId && posts.length > 0) {
+      const target = posts.find(p => p.id === postId);
+      if (target) {
+        openComments(target);
+      }
+    }
+  }, [postId, posts]);
 
   const loadPosts = useCallback(async () => {
     if (!activeRoute || !activeRoute.route_hash || !profile) {

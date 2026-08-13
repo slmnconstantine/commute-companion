@@ -54,7 +54,7 @@ export default function SignUpScreen() {
   const validate = () => {
     const newErrors: Record<string, string> = {};
     if (!isNotEmpty(fullName)) newErrors.fullName = 'Full name is required';
-    
+
     if (!isNotEmpty(username)) {
       newErrors.username = 'Username is required';
     } else if (username.includes(' ') || !/^[a-zA-Z0-9_]+$/.test(username)) {
@@ -118,138 +118,158 @@ export default function SignUpScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-        {/* Back Button */}
-        <Pressable
-          style={[styles.backButton, { marginTop: 8 }]}
-          onPress={() => {
-            if (router.canGoBack()) {
-              router.back();
-            } else {
-              router.replace('/');
-            }
-          }}
-        >
-          <View style={[
+          {/* Back Button */}
+          <Pressable
+            style={[styles.backButton, { marginTop: 8 }]}
+            onPress={() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/');
+              }
+            }}
+          >
+            <View style={[
               styles.backButtonBackground,
               {
                 backgroundColor: isLight ? '#FFFFFF' : 'rgba(0, 0, 0, 0.35)',
                 borderColor: isLight ? '#E8E6DF' : 'rgba(255, 255, 255, 0.08)',
               },
             ]} />
-          <Ionicons name="arrow-back" size={22} color={textColor} />
-        </Pressable>
-
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={[styles.title, { color: textColor }]}>Create account</Text>
-          <Text style={[styles.subtitle, { color: textMutedColor }]}>Fill in your details to get started as a commuter</Text>
-        </View>
-
-        {/* Form Container */}
-        <View style={[
-              styles.glassCard,
-              {
-                backgroundColor: isLight ? '#FFFFFF' : 'rgba(15, 23, 42, 0.65)',
-                borderColor: isLight ? '#E8E6DF' : 'rgba(255, 255, 255, 0.1)',
-                shadowColor: isLight ? '#0057FF' : '#000',
-                shadowOpacity: isLight ? 0.06 : 0.3,
-              },
-            ]}>
-          <InputField
-            label="Full Name"
-            value={fullName}
-            onChangeText={(t: string) => {
-              setFullName(t);
-              setErrors((e) => ({ ...e, fullName: '' }));
-            }}
-            placeholder="Juan Dela Cruz"
-            icon="person-outline"
-            error={errors.fullName}
-            isLight={isLight}
-          />
-          <InputField
-            label="Username"
-            value={username}
-            onChangeText={(t: string) => {
-              setUsername(t);
-              setErrors((e) => ({ ...e, username: '' }));
-            }}
-            placeholder="juandc"
-            icon="at-outline"
-            autoCapitalize="none"
-            error={errors.username}
-            isLight={isLight}
-          />
-          <InputField
-            label="Email"
-            value={email}
-            onChangeText={(t: string) => {
-              setEmail(t);
-              setErrors((e) => ({ ...e, email: '' }));
-            }}
-            placeholder="juan@email.com"
-            icon="mail-outline"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            error={errors.email}
-            isLight={isLight}
-          />
-          <InputField
-            label="Password"
-            value={password}
-            onChangeText={(t: string) => {
-              setPassword(t);
-              setErrors((e) => ({ ...e, password: '' }));
-            }}
-            placeholder="Min. 8 characters"
-            icon="lock-closed-outline"
-            secureTextEntry={!showPassword}
-            rightIcon={showPassword ? 'eye-off-outline' : 'eye-outline'}
-            onRightIconPress={() => setShowPassword(!showPassword)}
-            error={errors.password}
-            isLight={isLight}
-          />
-          <InputField
-            label="Confirm Password"
-            value={confirmPassword}
-            onChangeText={(t: string) => {
-              setConfirmPassword(t);
-              setErrors((e) => ({ ...e, confirmPassword: '' }));
-            }}
-            placeholder="Re-enter password"
-            icon="lock-closed-outline"
-            secureTextEntry={!showPassword}
-            error={errors.confirmPassword}
-            isLight={isLight}
-          />
-
-          {/* Action Button */}
-          <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
-            <Pressable
-              style={[styles.actionButton, { opacity: loading ? 0.7 : 1 }]}
-              onPress={handleSignUp}
-              onPressIn={onPressIn}
-              onPressOut={onPressOut}
-              disabled={loading}
-            >
-              <Text style={styles.actionButtonText}>
-                {loading ? 'Creating Account...' : 'Create Account'}
-              </Text>
-            </Pressable>
-          </Animated.View>
-        </View>
-
-        {/* Sign In Link */}
-        <View style={[styles.footer, { paddingBottom: insets.bottom + 24 }]}>
-          <Text style={[styles.footerText, { color: textMutedColor }]}>
-            Already have an account?{' '}
-          </Text>
-          <Pressable onPress={() => router.replace('/(auth)/sign-in')}>
-            <Text style={styles.footerLink}>Sign In</Text>
+            <Ionicons name="arrow-back" size={22} color={textColor} />
           </Pressable>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={[styles.title, { color: textColor }]}>Create account</Text>
+            <Text style={[styles.subtitle, { color: textMutedColor }]}>Fill in your details to get started as a commuter</Text>
+          </View>
+
+          {/* Form Container */}
+          <View style={[
+            styles.glassCard,
+            {
+              backgroundColor: isLight ? '#FFFFFF' : 'rgba(15, 23, 42, 0.65)',
+              borderColor: isLight ? '#E8E6DF' : 'rgba(255, 255, 255, 0.1)',
+              shadowColor: isLight ? '#0057FF' : '#000',
+              shadowOpacity: isLight ? 0.06 : 0.3,
+            },
+          ]}>
+            <InputField
+              label="Full Name"
+              value={fullName}
+              onChangeText={(t: string) => {
+                setFullName(t);
+                setErrors((e) => ({ ...e, fullName: '' }));
+              }}
+              placeholder="Juan Dela Cruz"
+              icon="person-outline"
+              error={errors.fullName}
+              isLight={isLight}
+            />
+            <InputField
+              label="Username"
+              value={username}
+              onChangeText={(t: string) => {
+                setUsername(t);
+                setErrors((e) => ({ ...e, username: '' }));
+              }}
+              placeholder="juandc"
+              icon="at-outline"
+              autoCapitalize="none"
+              error={errors.username}
+              isLight={isLight}
+            />
+            <InputField
+              label="Email"
+              value={email}
+              onChangeText={(t: string) => {
+                setEmail(t);
+                setErrors((e) => ({ ...e, email: '' }));
+              }}
+              placeholder="juan@email.com"
+              icon="mail-outline"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              error={errors.email}
+              isLight={isLight}
+            />
+            <InputField
+              label="Password"
+              value={password}
+              onChangeText={(t: string) => {
+                setPassword(t);
+                setErrors((e) => ({ ...e, password: '' }));
+              }}
+              placeholder="Min. 8 characters"
+              icon="lock-closed-outline"
+              secureTextEntry={!showPassword}
+              rightIcon={showPassword ? 'eye-off-outline' : 'eye-outline'}
+              onRightIconPress={() => setShowPassword(!showPassword)}
+              error={errors.password}
+              isLight={isLight}
+            />
+
+            {/* Password Formatting Tips */}
+            <View style={styles.passwordTipsContainer}>
+              <PasswordRequirementItem
+                label="Min. 8 Characters"
+                isMet={password.length >= 8}
+                isLight={isLight}
+              />
+              <PasswordRequirementItem
+                label="Must have atleast one uppercase letter"
+                isMet={/[A-Z]/.test(password)}
+                isLight={isLight}
+              />
+              <PasswordRequirementItem
+                label="Must have atleast one number"
+                isMet={/[0-9]/.test(password)}
+                isLight={isLight}
+              />
+            </View>
+
+            <InputField
+              label="Confirm Password"
+              value={confirmPassword}
+              onChangeText={(t: string) => {
+                setConfirmPassword(t);
+                setErrors((e) => ({ ...e, confirmPassword: '' }));
+              }}
+              placeholder="Re-enter password"
+              icon="lock-closed-outline"
+              secureTextEntry={!showPassword}
+              error={errors.confirmPassword}
+              isLight={isLight}
+            />
+
+            {/* Action Button */}
+            <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
+              <Pressable
+                style={[styles.actionButton, { opacity: loading ? 0.7 : 1 }]}
+                onPress={handleSignUp}
+                onPressIn={onPressIn}
+                onPressOut={onPressOut}
+                disabled={loading}
+              >
+                <Text style={styles.actionButtonText}>
+                  {loading ? 'Creating Account...' : 'Create Account'}
+                </Text>
+              </Pressable>
+            </Animated.View>
+          </View>
+
+          {/* Sign In Link */}
+          <View style={[styles.footer, { paddingBottom: insets.bottom + 24 }]}>
+            <Text style={[styles.footerText, { color: textMutedColor }]}>
+              Already have an account?{' '}
+            </Text>
+            <Pressable onPress={() => router.replace('/(auth)/sign-in')}>
+              <Text style={styles.footerLink}>Sign In</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </AuthBackground>
   );
 }
@@ -308,6 +328,42 @@ function InputField({
       {error ? (
         <Text style={styles.errorText}>{error}</Text>
       ) : null}
+    </View>
+  );
+}
+
+/** Password requirement checklist item */
+function PasswordRequirementItem({
+  label,
+  isMet,
+  isLight,
+}: {
+  label: string;
+  isMet: boolean;
+  isLight: boolean;
+}) {
+  const activeColor = '#22C55E';
+  const inactiveColor = isLight ? '#94A3B8' : 'rgba(255, 255, 255, 0.4)';
+
+  return (
+    <View style={styles.requirementRow}>
+      <Ionicons
+        name={isMet ? 'checkmark-circle' : 'ellipse-outline'}
+        size={14}
+        color={isMet ? activeColor : inactiveColor}
+        style={{ marginRight: 6 }}
+      />
+      <Text
+        style={[
+          styles.requirementText,
+          {
+            color: isMet ? (isLight ? '#166534' : '#4ADE80') : (isLight ? '#64748B' : 'rgba(248, 247, 244, 0.6)'),
+            fontFamily: isMet ? 'Inter-Medium' : 'Inter-Regular',
+          },
+        ]}
+      >
+        {label}
+      </Text>
     </View>
   );
 }
@@ -399,6 +455,19 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     marginLeft: 4,
     color: COLORS.error,
+  },
+  passwordTipsContainer: {
+    marginTop: -8,
+    marginBottom: 4,
+    paddingHorizontal: 6,
+    gap: 5,
+  },
+  requirementRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  requirementText: {
+    fontSize: 12,
   },
   roleInfo: {
     flexDirection: 'row',

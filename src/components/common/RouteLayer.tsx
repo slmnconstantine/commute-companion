@@ -38,8 +38,8 @@ export default function RouteLayer({
   id = 'route',
   routeGeoJSON,
   color = '#0057FF',
-  glowColor = 'rgba(0, 87, 255, 0.15)',
-  casingColor = 'rgba(0, 64, 193, 0.4)',
+  glowColor = 'rgba(0, 87, 255, 0.18)',
+  casingColor = 'rgba(0, 64, 193, 0.40)',
   showGlow = true,
 }: RouteLayerProps) {
   if (!routeGeoJSON) return null;
@@ -51,14 +51,12 @@ export default function RouteLayer({
         <Layer
           id={`${id}-glow`}
           type="line"
-          paint={{
-            'line-color': glowColor,
-            'line-width': 14,
-            'line-blur': 6,
-          }}
-          layout={{
-            'line-cap': 'round',
-            'line-join': 'round',
+          style={{
+            lineColor: glowColor,
+            lineWidth: 12,
+            lineBlur: 4,
+            lineCap: 'round',
+            lineJoin: 'round',
           }}
         />
       )}
@@ -67,27 +65,23 @@ export default function RouteLayer({
       <Layer
         id={`${id}-casing`}
         type="line"
-        paint={{
-          'line-color': casingColor,
-          'line-width': 7,
-        }}
-        layout={{
-          'line-cap': 'round',
-          'line-join': 'round',
+        style={{
+          lineColor: casingColor,
+          lineWidth: 7,
+          lineCap: 'round',
+          lineJoin: 'round',
         }}
       />
 
-      {/* Layer 3: Main route line */}
+      {/* Layer 3: Main route line (Signal Blue) */}
       <Layer
         id={`${id}-line`}
         type="line"
-        paint={{
-          'line-color': color,
-          'line-width': 4,
-        }}
-        layout={{
-          'line-cap': 'round',
-          'line-join': 'round',
+        style={{
+          lineColor: color,
+          lineWidth: 4,
+          lineCap: 'round',
+          lineJoin: 'round',
         }}
       />
     </GeoJSONSource>

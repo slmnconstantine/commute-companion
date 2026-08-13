@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
+import { useAuth } from '@/context/AuthContext';
 import { getTripById } from '@/services/trips';
 import { getTripBookings } from '@/services/bookings';
 import { formatDepartureTime } from '@/utils/dateFormatter';
@@ -19,6 +20,7 @@ export default function TripSummaryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const { profile } = useAuth();
 
   const [trip, setTrip] = useState<TripWithDriver | null>(null);
   const [bookings, setBookings] = useState<BookingWithCommuter[]>([]);
@@ -44,7 +46,7 @@ export default function TripSummaryScreen() {
 
   const handleShare = async () => {
     if (!trip) return;
-    const acceptedBookings = bookings.filter(b => b.status === 'accepted' || b.status === 'completed');
+    const acceptedBookings = bookings.filter(b => b.status === 'accepted' || b.status === 'completed' || b.status === 'dropped_off_early');
     const totalPassengers = acceptedBookings.reduce((sum, b) => sum + (b.seats_booked || 1), 0);
     const totalFare = acceptedBookings.reduce((sum, b) => sum + (b.fare_paid || 0), 0);
 
@@ -83,11 +85,18 @@ export default function TripSummaryScreen() {
     );
   }
 
+  const isDriver = profile?.id === trip.driver_id;
+  const myBooking = bookings.find(b => b.commuter_id === profile?.id);
   const acceptedBookings = bookings.filter(b => b.status === 'accepted' || b.status === 'completed' || b.status === 'dropped_off_early');
+  
   const totalPassengers = acceptedBookings.reduce((sum, b) => sum + (b.seats_booked || 1), 0);
-  const totalFare = acceptedBookings.reduce((sum, b) => sum + (b.fare_paid || 0), 0);
-  const platformFee = Math.round(totalFare * PLATFORM_FEE_RATE * 100) / 100;
-  const baseFare = totalFare - platformFee;
+  const totalFareCollected = acceptedBookings.reduce((sum, b) => sum + (b.fare_paid || 0), 0);
+  const driverPayout = getDriverPayout(totalFareCollected);
+
+  // Passenger specific amounts
+  const passengerSeats = myBooking ? (myBooking.seats_booked || 1) : 1;
+  const passengerBaseFare = trip.fare_per_seat * passengerSeats;
+  const passengerTotalPaid = myBooking ? myBooking.fare_paid : passengerBaseFare;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -164,27 +173,59 @@ export default function TripSummaryScreen() {
         <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>Fare Breakdown</Text>
 
-          <View style={styles.fareRow}>
-            <Text style={[styles.fareLabel, { color: theme.colors.textMuted }]}>Passengers</Text>
-            <Text style={[styles.fareValue, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]}>{totalPassengers}</Text>
-          </View>
-          <View style={styles.fareRow}>
-            <Text style={[styles.fareLabel, { color: theme.colors.textMuted }]}>Fare per seat</Text>
-            <Text style={[styles.fareValue, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]}>{formatCurrency(trip.fare_per_seat)}</Text>
-          </View>
-          <View style={styles.fareRow}>
-            <Text style={[styles.fareLabel, { color: theme.colors.textMuted }]}>Subtotal</Text>
-            <Text style={[styles.fareValue, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]}>{formatCurrency(baseFare)}</Text>
-          </View>
-          <View style={styles.fareRow}>
-            <Text style={[styles.fareLabel, { color: theme.colors.textMuted }]}>Platform Fee (10%)</Text>
-            <Text style={[styles.fareValue, { color: theme.colors.error, fontFamily: 'Inter-Medium' }]}>+{formatCurrency(platformFee)}</Text>
-          </View>
-          <View style={[styles.fareDivider, { backgroundColor: theme.colors.border }]} />
-          <View style={styles.fareRow}>
-            <Text style={[styles.fareLabel, { color: theme.colors.text, fontFamily: 'Inter-Bold', fontSize: 16 }]}>Total</Text>
-            <Text style={[styles.fareValue, { color: theme.colors.primary, fontFamily: 'Inter-Bold', fontSize: 18 }]}>{formatCurrency(totalFare)}</Text>
-          </View>
+          {isDriver ? (
+            <>
+              <View style={styles.fareRow}>
+                <Text style={[styles.fareLabel, { color: theme.colors.textMuted }]}>Passengers</Text>
+                <Text style={[styles.fareValue, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]}>{totalPassengers}</Text>
+              </View>
+              <View style={styles.fareRow}>
+                <Text style={[styles.fareLabel, { color: theme.colors.textMuted }]}>Fare per seat</Text>
+                <Text style={[styles.fareValue, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]}>{trip.fare_per_seat === 0 ? 'FREE' : formatCurrency(trip.fare_per_seat)}</Text>
+              </View>
+              <View style={styles.fareRow}>
+                <Text style={[styles.fareLabel, { color: theme.colors.textMuted }]}>Gross Collected</Text>
+                <Text style={[styles.fareValue, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]}>{formatCurrency(totalFareCollected)}</Text>
+              </View>
+              <View style={styles.fareRow}>
+                <Text style={[styles.fareLabel, { color: theme.colors.textMuted }]}>Platform Fee (10%)</Text>
+                <Text style={[styles.fareValue, { color: theme.colors.error, fontFamily: 'Inter-Medium' }]}>-{formatCurrency(driverPayout.platformFee)}</Text>
+              </View>
+              <View style={[styles.fareDivider, { backgroundColor: theme.colors.border }]} />
+              <View style={styles.fareRow}>
+                <Text style={[styles.fareLabel, { color: theme.colors.text, fontFamily: 'Inter-Bold', fontSize: 16 }]}>Net Earnings</Text>
+                <Text style={[styles.fareValue, { color: theme.colors.success, fontFamily: 'Inter-Bold', fontSize: 18 }]}>{formatCurrency(driverPayout.netPayout)}</Text>
+              </View>
+            </>
+          ) : (
+            <>
+              <View style={styles.fareRow}>
+                <Text style={[styles.fareLabel, { color: theme.colors.textMuted }]}>Seats Booked</Text>
+                <Text style={[styles.fareValue, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]}>{passengerSeats}</Text>
+              </View>
+              <View style={styles.fareRow}>
+                <Text style={[styles.fareLabel, { color: theme.colors.textMuted }]}>Fare per seat</Text>
+                <Text style={[styles.fareValue, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]}>{trip.fare_per_seat === 0 ? 'FREE' : formatCurrency(trip.fare_per_seat)}</Text>
+              </View>
+              <View style={styles.fareRow}>
+                <Text style={[styles.fareLabel, { color: theme.colors.textMuted }]}>Subtotal</Text>
+                <Text style={[styles.fareValue, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]}>{trip.fare_per_seat === 0 ? 'FREE' : formatCurrency(passengerBaseFare)}</Text>
+              </View>
+              <View style={styles.fareRow}>
+                <Text style={[styles.fareLabel, { color: theme.colors.textMuted }]}>
+                  Passenger platform fee
+                </Text>
+                <Text style={[styles.fareValue, { color: theme.colors.success, fontFamily: 'Inter-SemiBold' }]}>
+                  FREE
+                </Text>
+              </View>
+              <View style={[styles.fareDivider, { backgroundColor: theme.colors.border }]} />
+              <View style={styles.fareRow}>
+                <Text style={[styles.fareLabel, { color: theme.colors.text, fontFamily: 'Inter-Bold', fontSize: 16 }]}>Total Paid</Text>
+                <Text style={[styles.fareValue, { color: trip.fare_per_seat === 0 ? theme.colors.success : theme.colors.primary, fontFamily: 'Inter-Bold', fontSize: 18 }]}>{trip.fare_per_seat === 0 ? 'FREE' : formatCurrency(passengerTotalPaid)}</Text>
+              </View>
+            </>
+          )}
         </View>
 
         {/* Action Buttons */}

@@ -157,22 +157,6 @@ export default function ProfileCardModal({ userId, visible, onClose, onMention }
                   </Pressable>
                 </View>
 
-                {/* Action Buttons: @ Mention in Community Hub */}
-                <View style={styles.actionButtonsContainer}>
-                  <Pressable
-                    style={[styles.mentionBtn, { backgroundColor: theme.colors.primary }]}
-                    onPress={handleMention}
-                  >
-                    <View style={styles.atBadgeCircle}>
-                      <Text style={styles.atBadgeText}>@</Text>
-                    </View>
-                    <Text style={[styles.mentionBtnText, { fontFamily: 'Inter-SemiBold' }]}>
-                      Mention in Community Hub
-                    </Text>
-                    <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
-                  </Pressable>
-                </View>
-
                 {/* Report User */}
                 {currentUser?.id !== userId && (
                   <Pressable

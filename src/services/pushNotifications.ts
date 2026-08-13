@@ -21,48 +21,46 @@ export async function registerForPushNotificationsAsync() {
     return null;
   }
 
-  let token;
-
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('default', {
-      name: 'default',
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#0057FF', // App Primary Color (Signal Blue)
-    });
-  }
-
-  console.log('[PUSH] Requesting permissions...');
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-  console.log('[PUSH] Existing permission status:', existingStatus);
-
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-    console.log('[PUSH] Requested new permission status:', finalStatus);
-  }
-
-  if (finalStatus !== 'granted') {
-    console.log('[PUSH] Returning null because permission not granted.');
-    return null;
-  }
+  let token = null;
 
   try {
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#0057FF', // App Primary Color (Signal Blue)
+      }).catch(() => {});
+    }
+
+    const { status: existingStatus } = await Notifications.getPermissionsAsync().catch(() => ({ status: 'undetermined' }));
+    let finalStatus = existingStatus;
+
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync().catch(() => ({ status: 'denied' }));
+      finalStatus = status;
+    }
+
+    if (finalStatus !== 'granted') {
+      return null;
+    }
+
     const projectId = Constants?.expoConfig?.extra?.eas?.projectId
       ?? Constants?.easConfig?.projectId;
 
-    console.log('[PUSH] Fetching token for Project ID:', projectId);
+    const res = await Notifications.getExpoPushTokenAsync(
+      projectId ? { projectId } : undefined
+    ).catch((err) => {
+      console.warn('[PUSH] Handled token fetch notice:', err?.message || err);
+      return null;
+    });
 
-    token = (
-      await Notifications.getExpoPushTokenAsync({
-        projectId,
-      })
-    ).data;
-
-    console.log('[PUSH] Successfully generated token:', token);
-  } catch (e) {
-    console.warn("[PUSH] Failed to get Expo push token:", e);
+    token = res?.data || null;
+    if (token) {
+      console.log('[PUSH] Successfully acquired token:', token);
+    }
+  } catch (e: any) {
+    console.warn('[PUSH] Failed to get Expo push token:', e?.message || e);
   }
 
   return token;

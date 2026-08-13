@@ -13,6 +13,8 @@ export interface AlertState {
 type AlertListener = (state: AlertState) => void;
 let globalAlertListener: AlertListener | null = null;
 
+import { getFriendlyErrorMessage } from '@/utils/errorHelper';
+
 export function showCustomAlert(title: string, message?: string, buttons?: AlertButton[]) {
   const lowerTitle = (title || '').toLowerCase();
   const lowerMsg = (message || '').toLowerCase();
@@ -52,17 +54,24 @@ export function showCustomAlert(title: string, message?: string, buttons?: Alert
     type = 'warning';
   }
 
+  // Ensure error messages are comprehensible and friendly for users
+  const friendlyMessage = message
+    ? (type === 'error' || lowerTitle.includes('error') || lowerTitle.includes('fail')
+        ? getFriendlyErrorMessage(message, message)
+        : message)
+    : message;
+
   const notifyListener = () => {
     if (globalAlertListener) {
       globalAlertListener({
         visible: true,
         title,
-        message,
+        message: friendlyMessage,
         buttons: buttons && buttons.length > 0 ? buttons : [{ text: 'OK', style: 'default' }],
         type,
       });
     } else {
-      RNAlert.alert(title, message as any, buttons as any);
+      RNAlert.alert(title, friendlyMessage as any, buttons as any);
     }
   };
 
