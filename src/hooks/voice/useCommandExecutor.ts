@@ -48,7 +48,7 @@ export function useCommandExecutor() {
     if (tripId) {
       router.push(`/(main)/ride/book/${tripId}`);
     } else {
-      router.push('/(main)/(tabs)/hub');
+      router.push('/(main)/(tabs)/rides');
     }
   };
 

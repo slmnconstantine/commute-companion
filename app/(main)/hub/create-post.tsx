@@ -28,8 +28,8 @@ export default function CreatePostScreen() {
   const buttonScale = useRef(new Animated.Value(1)).current;
 
   const handlePost = async () => {
-    if (!message.trim() || !selectedTag || !profile) {
-      Alert.alert('Missing Info', 'Please write a message and select a category.');
+    if (!message.trim() || !selectedTag || !profile || loading) {
+      if (!loading) Alert.alert('Missing Info', 'Please write a message and select a category.');
       return;
     }
     setLoading(true);

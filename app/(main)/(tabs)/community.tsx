@@ -116,6 +116,7 @@ export default function CommunityScreen() {
   const [comments, setComments] = useState<PostCommentWithAuthor[]>([]);
   const [newComment, setNewComment] = useState('');
   const [commentsLoading, setCommentsLoading] = useState(false);
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
 
   // Profile Modal State
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
@@ -295,12 +296,15 @@ export default function CommunityScreen() {
   };
 
   const handleSubmitComment = async () => {
-    if (!profile || !activePost || !newComment.trim()) return;
+    if (!profile || !activePost || !newComment.trim() || isSubmittingComment) return;
+
+    const commentText = newComment.trim();
+    setIsSubmittingComment(true);
+    setNewComment(''); // Clear input immediately to prevent double submissions
 
     try {
-      const comment = await createComment(activePost.id, profile.id, newComment.trim());
-      setComments([...comments, comment]);
-      setNewComment('');
+      const comment = await createComment(activePost.id, profile.id, commentText);
+      setComments(prev => [...prev, comment]);
 
       // Update comment count on post
       setPosts(prev => prev.map(p => {
@@ -310,7 +314,10 @@ export default function CommunityScreen() {
         return p;
       }));
     } catch (err) {
-      console.error(err);
+      console.error('Error submitting comment:', err);
+      setNewComment(commentText); // Restore input text if the request failed
+    } finally {
+      setIsSubmittingComment(false);
     }
   };
 
@@ -616,13 +623,17 @@ export default function CommunityScreen() {
                 style={[
                   styles.sendCircleBtn, 
                   { 
-                    backgroundColor: newComment.trim() ? theme.colors.primary : `${theme.colors.primary}20`
+                    backgroundColor: (newComment.trim() && !isSubmittingComment) ? theme.colors.primary : `${theme.colors.primary}20`
                   }
                 ]} 
                 onPress={handleSubmitComment} 
-                disabled={!newComment.trim()}
+                disabled={!newComment.trim() || isSubmittingComment}
               >
-                <Ionicons name="send" size={13} color={newComment.trim() ? theme.colors.white : theme.colors.textMuted} />
+                {isSubmittingComment ? (
+                  <ActivityIndicator size="small" color={theme.colors.white} />
+                ) : (
+                  <Ionicons name="send" size={13} color={(newComment.trim() && !isSubmittingComment) ? theme.colors.white : theme.colors.textMuted} />
+                )}
               </Pressable>
             </View>
           </View>

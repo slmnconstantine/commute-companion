@@ -22,13 +22,17 @@ export default function Skeleton({ width = '100%', height = 20, borderRadius = 8
   const shimmerAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.loop(
+    const loop = Animated.loop(
       Animated.timing(shimmerAnim, {
         toValue: 1,
         duration: 1200,
         useNativeDriver: true,
       })
-    ).start();
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+    };
   }, [shimmerAnim]);
 
   const translateX = shimmerAnim.interpolate({

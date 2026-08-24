@@ -192,31 +192,37 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
   }, [parseCommand, profile, startConfirmationLoop]);
 
   const handleParsedCommand = (result: AssistantCommand, text: string, context: any) => {
-    setSpokenReply(result.spokenReply);
+    const replyText = result.spokenReply || "I'm here to help with your commute.";
+    setSpokenReply(replyText);
     setCommand(result);
     setConversation(prev => [
       ...prev,
       { id: Date.now().toString(), role: 'user', text },
-      { id: (Date.now() + 1).toString(), role: 'assistant', text: result.spokenReply }
+      { id: (Date.now() + 1).toString(), role: 'assistant', text: replyText }
     ]);
 
-    if (result.spokenReply) {
-      setState('speaking');
-      Speech.speak(result.spokenReply, {
-        onDone: () => {
-          if (result.requiresConfirmation) {
-            startConfirmationLoop(result, context);
-          } else {
-            handleExecution(result);
-          }
-        }
-      });
-    } else {
+    const onSpeechFinished = () => {
       if (result.requiresConfirmation) {
         startConfirmationLoop(result, context);
-      } else {
+      } else if (result.type !== 'NOOP' && result.type !== 'CLARIFY') {
         handleExecution(result);
+      } else {
+        setState('idle');
       }
+    };
+
+    setState('speaking');
+    try {
+      Speech.speak(replyText, {
+        onDone: onSpeechFinished,
+        onError: (err) => {
+          console.warn('Speech TTS error:', err);
+          onSpeechFinished();
+        }
+      });
+    } catch (speechErr) {
+      console.warn('Failed to invoke Speech.speak:', speechErr);
+      onSpeechFinished();
     }
   };
 
@@ -227,14 +233,12 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
       setTimeout(() => {
         setState('idle');
         setCommand(null);
-        setConversation([]);
       }, 1000);
     } catch (e) {
       console.error('Execution Error:', e);
       setState('error');
       setTimeout(() => {
         setState('idle');
-        setConversation([]);
       }, 2000);
     }
   };

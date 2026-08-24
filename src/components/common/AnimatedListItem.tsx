@@ -23,7 +23,7 @@ export default function AnimatedListItem({ index, staggerMs = 60, children }: An
 
   useEffect(() => {
     const delay = index * staggerMs;
-    Animated.parallel([
+    const anim = Animated.parallel([
       Animated.timing(opacity, {
         toValue: 1,
         duration: 350,
@@ -38,7 +38,11 @@ export default function AnimatedListItem({ index, staggerMs = 60, children }: An
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
-    ]).start();
+    ]);
+    anim.start();
+    return () => {
+      anim.stop();
+    };
   }, []);
 
   return (

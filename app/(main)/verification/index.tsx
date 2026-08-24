@@ -7,7 +7,6 @@ import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { updateProfile, updateVerification } from '@/services/profiles';
 import { pickImage, takePhoto, uploadGovernmentId } from '@/services/storage';
-import { addVehicle, getVehicles, deleteVehicle } from '@/services/vehicles';
 
 export default function VerificationScreen() {
   const router = useRouter();
@@ -59,21 +58,15 @@ export default function VerificationScreen() {
     if (!profile) return;
     
     if (isVerified || isPending) {
-      // Just unverify / reset
+      // Unverify / reset commuter verification
       setSubmitting(true);
       try {
         const { error } = await updateVerification(profile.id, false);
         if (error) throw error;
-        await updateProfile(profile.id, { government_id_url: null, verified_badge: false } as any);
-        
-        // Optionally clean up vehicles
-        const existing = await getVehicles(profile.id);
-        for (const v of existing) {
-          await deleteVehicle(v.id);
-        }
+        await updateProfile(profile.id, { government_id_url: null, is_verified: false, verified_badge: false } as any);
         
         await refreshProfile();
-        Alert.alert('Demo Override Success', 'Your verification status has been reset.');
+        Alert.alert('Demo Override Success', 'Your commuter verification status has been reset.');
       } catch (e: any) {
         Alert.alert('Error', e.message || 'Demo override failed.');
       } finally {
@@ -82,55 +75,18 @@ export default function VerificationScreen() {
       return;
     }
 
-    // If not verified, ask for vehicle type
-    Alert.alert(
-      'Select Vehicle Type',
-      'What type of vehicle do you drive?',
-      [
-        {
-          text: 'Tricycle',
-          onPress: () => processOverride('tricycle'),
-        },
-        {
-          text: 'Private Vehicle (Car)',
-          onPress: () => processOverride('private'),
-        },
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        }
-      ]
-    );
-  };
-
-  const processOverride = async (vehicleType: string) => {
-    if (!profile) return;
+    // Instantly verify account as a commuter without vehicle selection
     setSubmitting(true);
     try {
-      // 1. Update verification state in profiles first
       const { error: verError } = await updateVerification(profile.id, true);
       if (verError) throw verError;
 
-      // 2. Update role to driver so RLS checks pass for vehicle insertion
-      await updateProfile(profile.id, { role: 'driver', is_verified: true, verified_badge: true } as any);
-
-      // 3. Insert mock vehicle gracefully
-      try {
-        await addVehicle(
-          profile.id,
-          `DEMO-${Math.floor(100 + Math.random() * 900)}`,
-          vehicleType,
-          vehicleType === 'tricycle' ? 'Tricycle Model' : 'Sedan Model',
-          vehicleType === 'tricycle' ? '3' : '4'
-        );
-      } catch (vErr) {
-        console.warn('Note: Mock vehicle insertion skipped:', vErr);
-      }
-
+      await updateProfile(profile.id, { is_verified: true, verified_badge: true } as any);
       await refreshProfile();
+
       Alert.alert(
         'Verification Success! 🎉',
-        'Your profile is now verified! The verified badge is active and driver status is enabled.'
+        'Your commuter account is now verified! The verified badge is active on your profile.'
       );
     } catch (e: any) {
       Alert.alert('Verification Error', e.message || 'Demo override failed.');

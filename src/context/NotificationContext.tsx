@@ -161,16 +161,21 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   };
 
   useEffect(() => {
+    let anim: Animated.CompositeAnimation | null = null;
     if (centerPopupNotification) {
-      Animated.spring(popupScaleAnim, {
+      anim = Animated.spring(popupScaleAnim, {
         toValue: 1,
         useNativeDriver: true,
         tension: 80,
         friction: 7,
-      }).start();
+      });
+      anim.start();
     } else {
       popupScaleAnim.setValue(0);
     }
+    return () => {
+      if (anim) anim.stop();
+    };
   }, [centerPopupNotification]);
 
   const handleDismissPopup = () => {
@@ -184,21 +189,26 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   };
 
   useEffect(() => {
+    let anim: Animated.CompositeAnimation | null = null;
     if (activeNotification) {
       // Slide down with bouncy spring
-      Animated.spring(slideAnim, {
+      anim = Animated.spring(slideAnim, {
         toValue: 60, // position from top
         useNativeDriver: true,
         tension: 50,
         friction: 7,
-      }).start();
+      });
+      anim.start();
 
       // Auto dismiss after 6 seconds
       const timer = setTimeout(() => {
         handleDismiss();
       }, 6000);
 
-      return () => clearTimeout(timer);
+      return () => {
+        clearTimeout(timer);
+        if (anim) anim.stop();
+      };
     }
   }, [activeNotification]);
 

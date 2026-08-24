@@ -33,11 +33,13 @@ function TripCard({ trip, onPress, loading = false }: TripCardProps) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    Animated.timing(fadeAnim, {
+    const anim = Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 300,
       useNativeDriver: true,
-    }).start();
+    });
+    anim.start();
+    return () => anim.stop();
   }, []);
 
   if (loading || !trip) {
