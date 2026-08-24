@@ -37,6 +37,20 @@ const queryClient = new QueryClient({
 });
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LogManager } from '@maplibre/maplibre-react-native';
+
+// Suppress transient tile network errors (e.g., 502 Bad Gateway / tile load dropouts)
+LogManager.onLog((event) => {
+  const msg = event?.message || '';
+  if (
+    msg.includes('Failed to load tile') ||
+    msg.includes('502') ||
+    msg.includes('404')
+  ) {
+    return true; // Handled: prevent surfacing transient network tile dropouts
+  }
+  return false;
+});
 
 function RootLayoutNav() {
   const { session, isLoading } = useAuth();

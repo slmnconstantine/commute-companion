@@ -82,31 +82,28 @@ export default function ProfileScreen() {
     ]);
   };
 
-  const handleDemoOverride = () => {
+  const handleResetDriverRole = () => {
     Alert.alert(
-      'Demo Override',
-      'This will instantly set you as a verified driver. For demo/testing only.',
+      'Reset Driver Role',
+      'Are you sure you want to reset your account back to Commuter? You will no longer be able to post rides unless you register as a driver again.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Confirm',
+          text: 'Reset to Commuter',
+          style: 'destructive',
           onPress: async () => {
-            const { error } = await updateProfile({
-              role: 'driver',
-              is_verified: true,
-              verified_badge: true,
-            });
-            if (!error) {
-              Alert.alert('Success! ✅', 'You are now a verified driver.');
+            const { error } = await updateProfile({ role: 'commuter' });
+            if (error) {
+              Alert.alert('Error', error.message || 'Failed to reset driver role.');
             } else {
-              Alert.alert('Error', 'Failed to update profile.');
+              await refreshProfile();
+              Alert.alert('Success', 'Your role has been reset to Commuter.');
             }
           },
         },
       ]
     );
   };
-
 
   // ── Menu Sections ─────────────────────────────────────────────
 
@@ -132,6 +129,12 @@ export default function ProfileScreen() {
                 onPress: () =>
                   router.push('/(main)/settings/vehicle' as any),
               },
+              {
+                icon: 'refresh-outline' as const,
+                label: 'Reset Driver Role',
+                onPress: handleResetDriverRole,
+                color: theme.colors.warning || '#F59E0B',
+              },
             ]
           : []),
       ],
@@ -151,17 +154,6 @@ export default function ProfileScreen() {
         },
       ],
     },
-    ...(__DEV__ ? [{
-      title: 'Developer',
-      items: [
-        {
-          icon: 'flash-outline' as const,
-          label: 'Override Driver Verification (Demo)',
-          onPress: handleDemoOverride,
-          color: theme.colors.accent,
-        },
-      ],
-    }] : []),
     {
       title: 'Support',
       items: [

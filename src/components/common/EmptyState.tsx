@@ -44,8 +44,11 @@ export default function EmptyState({
   const floatAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    let animLoop: Animated.CompositeAnimation | null = null;
+    let isMounted = true;
+
     // Entrance
-    Animated.parallel([
+    const entranceAnim = Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 500,
@@ -59,9 +62,12 @@ export default function EmptyState({
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
-    ]).start(() => {
+    ]);
+
+    entranceAnim.start(() => {
+      if (!isMounted) return;
       // Start floating loop after entrance
-      Animated.loop(
+      animLoop = Animated.loop(
         Animated.sequence([
           Animated.timing(floatAnim, {
             toValue: -8,
@@ -76,8 +82,17 @@ export default function EmptyState({
             useNativeDriver: true,
           }),
         ])
-      ).start();
+      );
+      animLoop.start();
     });
+
+    return () => {
+      isMounted = false;
+      entranceAnim.stop();
+      if (animLoop) {
+        animLoop.stop();
+      }
+    };
   }, []);
 
   return (

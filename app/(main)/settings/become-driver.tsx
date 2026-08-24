@@ -26,6 +26,8 @@ import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { pickImage, uploadDriverDocument } from '@/services/storage';
 
+import { addVehicle } from '@/services/vehicles';
+
 export default function BecomeDriverScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -72,6 +74,20 @@ export default function BecomeDriverScreen() {
       if (error) {
         Alert.alert('Error', error.message || 'Failed to submit application.');
       } else {
+        try {
+          if (profile?.id) {
+            await addVehicle(
+              profile.id,
+              plateNumber.trim(),
+              vehicleType,
+              vehicleModel.trim(),
+              vehicleType === 'motorcycle' ? '1' : vehicleType === 'van' ? '12' : '4'
+            );
+          }
+        } catch (vErr) {
+          console.warn('Vehicle registration note:', vErr);
+        }
+
         Alert.alert(
           'Application Submitted! 🎉',
           'Your driver application and documents have been uploaded for review. You can now start posting rides!',
@@ -86,30 +102,60 @@ export default function BecomeDriverScreen() {
   };
 
   const handleDemoOverride = async () => {
+    if (!profile) return;
+
     Alert.alert(
-      'Demo Override',
-      'This will instantly verify you as a driver. Use for demo/testing only.',
+      'Select Vehicle Type',
+      'What type of vehicle do you drive?',
       [
-        { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Confirm',
-          onPress: async () => {
-            setLoading(true);
-            const { error } = await updateProfile({
-              role: 'driver',
-              is_verified: true,
-              verified_badge: true,
-            });
-            setLoading(false);
-            if (!error) {
-              Alert.alert('Success! ✅', 'You are now a verified driver.', [
-                { text: 'OK', onPress: () => router.back() },
-              ]);
-            }
-          },
+          text: 'Tricycle',
+          onPress: () => processDriverOverride('motorcycle', 'Tricycle (TODA)', '3'),
+        },
+        {
+          text: 'Private Vehicle (Car)',
+          onPress: () => processDriverOverride('sedan', 'Sedan (Private)', '4'),
+        },
+        {
+          text: 'Motorcycle',
+          onPress: () => processDriverOverride('motorcycle', 'Motorcycle', '1'),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
         },
       ]
     );
+  };
+
+  const processDriverOverride = async (type: string, defaultModel: string, capacity: string) => {
+    if (!profile) return;
+    setLoading(true);
+    try {
+      const { error } = await updateProfile({
+        role: 'driver',
+        is_verified: true,
+        verified_badge: true,
+      });
+      if (error) throw error;
+
+      const plate = plateNumber.trim() || `DEMO-${Math.floor(100 + Math.random() * 900)}`;
+      const model = vehicleModel.trim() || defaultModel;
+
+      try {
+        await addVehicle(profile.id, plate, type, model, capacity);
+      } catch (vErr) {
+        console.warn('Note: Mock vehicle insertion skipped:', vErr);
+      }
+
+      Alert.alert('Success! 🚗', 'You are now a verified driver with your registered vehicle.', [
+        { text: 'OK', onPress: () => router.back() },
+      ]);
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to verify driver.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

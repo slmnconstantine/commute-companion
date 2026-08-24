@@ -194,7 +194,7 @@ For spokenReply:
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: Deno.env.get('AI_INTENT_MODEL') || 'llama-3.1-8b-instant',
+          model: Deno.env.get('AI_INTENT_MODEL') || 'openai/gpt-oss-20b',
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: `User said: "${activeTranscript}"` }

@@ -37,6 +37,7 @@ export default function CustomAlertModal({
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    let anim: Animated.CompositeAnimation | null = null;
     if (visible) {
       Haptics.notificationAsync(
         type === 'error'
@@ -46,7 +47,7 @@ export default function CustomAlertModal({
           : Haptics.NotificationFeedbackType.Warning
       );
 
-      Animated.parallel([
+      anim = Animated.parallel([
         Animated.spring(scaleAnim, {
           toValue: 1,
           useNativeDriver: true,
@@ -58,11 +59,17 @@ export default function CustomAlertModal({
           duration: 180,
           useNativeDriver: true,
         }),
-      ]).start();
+      ]);
+      anim.start();
     } else {
       scaleAnim.setValue(0.85);
       opacityAnim.setValue(0);
     }
+    return () => {
+      if (anim) {
+        anim.stop();
+      }
+    };
   }, [visible]);
 
   if (!visible) return null;
