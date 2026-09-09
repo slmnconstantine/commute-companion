@@ -44,12 +44,18 @@ export const addVehicle = async (
     // Non-critical check
   }
 
+  // Satisfy database check constraint: vehicles_type_check (type IN ('private', 'public'))
+  const normalizedType =
+    type === 'public' || type === 'tricycle' || type === 'jeepney'
+      ? 'public'
+      : 'private';
+
   const { data, error } = await supabase
     .from('vehicles')
     .insert({
       driver_id: targetDriverId,
       plate_number: plateNumber,
-      type,
+      type: normalizedType,
       model,
       capacity,
       is_active: true

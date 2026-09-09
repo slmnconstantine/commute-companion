@@ -79,8 +79,8 @@ export default function BecomeDriverScreen() {
             await addVehicle(
               profile.id,
               plateNumber.trim(),
-              vehicleType,
-              vehicleModel.trim(),
+              'private',
+              `${vehicleModel.trim()} (${vehicleType.toUpperCase()})`,
               vehicleType === 'motorcycle' ? '1' : vehicleType === 'van' ? '12' : '4'
             );
           }
@@ -90,7 +90,7 @@ export default function BecomeDriverScreen() {
 
         Alert.alert(
           'Application Submitted! 🎉',
-          'Your driver application and documents have been uploaded for review. You can now start posting rides!',
+          'Your driver application and documents have been submitted for review. Once verified by our team, you will be able to start posting rides.',
           [{ text: 'OK', onPress: () => router.back() }]
         );
       }
@@ -110,15 +110,15 @@ export default function BecomeDriverScreen() {
       [
         {
           text: 'Tricycle',
-          onPress: () => processDriverOverride('motorcycle', 'Tricycle (TODA)', '3'),
+          onPress: () => processDriverOverride('public', 'Tricycle (TODA)', '3'),
         },
         {
           text: 'Private Vehicle (Car)',
-          onPress: () => processDriverOverride('sedan', 'Sedan (Private)', '4'),
+          onPress: () => processDriverOverride('private', 'Sedan (Private)', '4'),
         },
         {
           text: 'Motorcycle',
-          onPress: () => processDriverOverride('motorcycle', 'Motorcycle', '1'),
+          onPress: () => processDriverOverride('private', 'Motorcycle', '1'),
         },
         {
           text: 'Cancel',

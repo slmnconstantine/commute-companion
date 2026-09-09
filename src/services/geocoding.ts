@@ -48,25 +48,28 @@ export async function geocode(query: string): Promise<GeocodingResult[]> {
   }
 }
 
-/** Search using Photon (better for autocomplete) */
-export async function searchPlaces(query: string): Promise<GeocodingResult[]> {
-  const normQuery = query.trim().toLowerCase();
+/** Search using Photon (better for autocomplete, biased to user location or Cebu City) */
+export async function searchPlaces(query: string, userLat?: number, userLng?: number): Promise<GeocodingResult[]> {
+  const normQuery = `${query.trim().toLowerCase()}_${userLat?.toFixed(2) ?? ''}_${userLng?.toFixed(2) ?? ''}`;
   if (searchPlacesCache.has(normQuery)) {
     return searchPlacesCache.get(normQuery)!;
   }
 
   try {
+    // Dynamic coordinate bias; defaults to Cebu City center (10.3157, 123.8854)
+    const lat = userLat !== undefined ? userLat : 10.3157;
+    const lon = userLng !== undefined ? userLng : 123.8854;
     const res = await fetch(
-      `${PHOTON_BASE_URL}?q=${encodeURIComponent(query)}&limit=5&lat=14.5995&lon=120.9842&lang=en`
+      `${PHOTON_BASE_URL}?q=${encodeURIComponent(query)}&limit=5&lat=${lat}&lon=${lon}&lang=en`
     );
     const data = await res.json();
-    const results = data.features.map((f: any) => ({
+    const results = (data.features || []).map((f: any) => ({
       lat: f.geometry.coordinates[1],
       lng: f.geometry.coordinates[0],
       displayName: [
         f.properties.name,
         f.properties.street,
-        f.properties.city || f.properties.county,
+        f.properties.city || f.properties.county || f.properties.district,
         f.properties.state,
       ].filter(Boolean).join(', '),
       type: f.properties.osm_value,
@@ -79,6 +82,33 @@ export async function searchPlaces(query: string): Promise<GeocodingResult[]> {
   }
 }
 
+/** Formats reverse-geocoded OSM payload into a clean, un-merged address */
+function formatStructuredOsmAddress(data: any): string {
+  if (!data) return 'Unknown location';
+  const addr = data.address;
+  if (!addr) return data.display_name || 'Unknown location';
+
+  const pointName = data.name || addr.amenity || addr.shop || addr.building || addr.road || addr.pedestrian;
+  // Use distinct barangay/suburb without concatenating overlapping quarter/suburb names (e.g. avoid 'T. Padilla, Carreta')
+  const barangay = addr.suburb || addr.quarter || addr.village || addr.neighbourhood;
+  const city = addr.city || addr.municipality || addr.town || addr.county;
+
+  const parts: string[] = [];
+  if (pointName) parts.push(pointName);
+  if (barangay && (!pointName || !pointName.toLowerCase().includes(barangay.toLowerCase()))) {
+    parts.push(barangay);
+  }
+  if (city && (!barangay || !barangay.toLowerCase().includes(city.toLowerCase()))) {
+    parts.push(city);
+  }
+
+  if (parts.length > 0) {
+    return parts.join(', ');
+  }
+
+  return data.display_name || 'Unknown location';
+}
+
 /** Reverse geocode coordinates to address */
 export async function reverseGeocode(lat: number, lng: number): Promise<string> {
   const cacheKey = `${lat.toFixed(4)},${lng.toFixed(4)}`;
@@ -88,11 +118,11 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string> 
 
   try {
     const res = await fetch(
-      `${NOMINATIM_BASE_URL}/reverse?lat=${lat}&lon=${lng}&format=json`,
+      `${NOMINATIM_BASE_URL}/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`,
       { headers: { 'User-Agent': 'CommutableCompanion/1.0' } }
     );
     const data = await res.json();
-    const displayName = data.display_name || 'Unknown location';
+    const displayName = formatStructuredOsmAddress(data);
     setBoundedCache(reverseGeocodeCache, cacheKey, displayName);
     return displayName;
   } catch {

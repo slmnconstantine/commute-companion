@@ -9,6 +9,8 @@ export default function SettingsLayout() {
       <Stack.Screen name="about" />
       <Stack.Screen name="terms-privacy" />
       <Stack.Screen name="report-bug" />
+      <Stack.Screen name="vehicle" />
+      <Stack.Screen name="transaction-summary" />
     </Stack>
   );
 }

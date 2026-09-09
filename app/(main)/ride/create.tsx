@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import {
-  View, Text, TextInput, StyleSheet, ScrollView, Pressable, Alert, Animated, Platform, Modal,
+  View, Text, TextInput, StyleSheet, ScrollView, Pressable, Alert, Animated, Platform, Modal, Image,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,18 +9,20 @@ import { Map, Camera, RasterSource, Layer, GeoJSONSource, Marker, type CameraRef
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { useLocation } from '@/hooks/useLocation';
-import { DEFAULT_DELTA } from '@/lib/constants';
+import { DEFAULT_DELTA, MAP_STYLE_LIGHT, MAP_STYLE_DARK } from '@/lib/constants';
 import { getRoute } from '@/services/routing';
 import { searchPlaces, GeocodingResult, reverseGeocode } from '@/services/geocoding';
 import { createTrip } from '@/services/trips';
 import { getVehicles } from '@/services/vehicles';
 import { Vehicle } from '@/types/database';
 import { calculateFare, formatCurrency } from '@/utils/fareCalculator';
+import { saveDriverLiveCapture } from '@/services/liveFaceVerification';
 import DatePickerModal from '@/components/ride/DatePickerModal';
 import TimePickerModal from '@/components/ride/TimePickerModal';
 import AnimatedMarker from '@/components/common/AnimatedMarker';
 import GlassCard from '@/components/common/GlassCard';
 import RouteLayer from '@/components/common/RouteLayer';
+import LiveFaceCaptureModal from '@/components/verification/LiveFaceCaptureModal';
 
 interface LocationData {
   lat: number;
@@ -41,7 +43,7 @@ const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 export default function CreateRideScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { theme } = useTheme();
+  const { theme, mode } = useTheme();
   const { profile } = useAuth();
   const { location, loading: locationLoading } = useLocation();
 
@@ -110,15 +112,26 @@ export default function CreateRideScreen() {
   const [departureTime, setDepartureTime] = useState(params.time || '');
   const [isFree, setIsFree] = useState(params.fare === '0' || params.fare === '0.00');
   const [loading, setLoading] = useState(false);
+  const [driverLivePhoto, setDriverLivePhoto] = useState<string | null>(null);
+  const [showLiveCaptureModal, setShowLiveCaptureModal] = useState(false);
+  const [captureConfidence, setCaptureConfidence] = useState<number>(98);
 
   // Prevent unverified accounts from creating rides
   useEffect(() => {
-    if (profile && (profile.role !== 'driver' || !profile.is_verified || !profile.verified_badge)) {
-      Alert.alert(
-        'Verification Required',
-        'Your driver application is currently under review. You will be able to create rides once your documents have been verified.',
-        [{ text: 'OK', onPress: () => router.back() }]
-      );
+    if (profile) {
+      if (profile.role !== 'driver') {
+        Alert.alert(
+          'Driver Account Required',
+          'Only registered drivers can create and post carpool rides. Please register as a driver in Profile settings.',
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
+      } else if (!profile.is_verified || !profile.verified_badge) {
+        Alert.alert(
+          'Verification Required',
+          'Your driver application is currently under review. You will be able to create rides once your documents have been verified.',
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
+      }
     }
   }, [profile]);
 
@@ -337,12 +350,31 @@ export default function CreateRideScreen() {
   const handleCreateTrip = async () => {
     if (!origin || !destination || !routeInfo || !fareBreakdown || !profile) return;
 
+    if (!driverLivePhoto) {
+      Alert.alert(
+        'Live Face Photo Required',
+        'For commuter safety and recognition, drivers must take a quick live face capture before publishing a ride.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Take Photo', onPress: () => setShowLiveCaptureModal(true) },
+        ]
+      );
+      return;
+    }
+
     const depTime = departureDate && departureTime
       ? new Date(`${departureDate}T${departureTime}`).toISOString()
       : new Date(Date.now() + 3600000).toISOString(); // Default 1 hour from now
 
     setLoading(true);
     try {
+      let finalPolyline = routeInfo?.polyline;
+      // If routeInfo is missing or was computed for different endpoints, fetch fresh route for current origin & destination
+      if (!finalPolyline || routeCoords.length === 0) {
+        const fresh = await getRoute(origin.lat, origin.lng, destination.lat, destination.lng);
+        if (fresh) finalPolyline = fresh.encodedPolyline;
+      }
+
       const { data, error } = await createTrip({
         driver_id: profile.id,
         vehicle_id: vehicle?.id || null as any,
@@ -352,7 +384,7 @@ export default function CreateRideScreen() {
         destination_lat: destination.lat,
         destination_lng: destination.lng,
         destination_label: destination.label,
-        route_polyline: routeInfo.polyline,
+        route_polyline: finalPolyline || null,
         departure_time: depTime,
         available_seats: availableSeats,
         fare_per_seat: finalFarePerSeat,
@@ -360,6 +392,12 @@ export default function CreateRideScreen() {
       });
 
       if (error) throw error;
+
+      // Broadcast and persist driver live face capture
+      if (data?.id) {
+        await saveDriverLiveCapture(data.id, profile.id, driverLivePhoto, captureConfidence);
+      }
+
       Alert.alert('Success!', 'Your ride has been published.', [
         { text: 'OK', onPress: () => router.back() },
       ]);
@@ -439,7 +477,7 @@ export default function CreateRideScreen() {
             logo={false}
             attribution={false}
             compass={false}
-            mapStyle={{ version: 8, sources: {}, layers: [] }}
+            mapStyle={(mode === 'dark' ? MAP_STYLE_DARK : MAP_STYLE_LIGHT) as any}
             onPress={handleMapPress}
           >
             <Camera
@@ -449,14 +487,6 @@ export default function CreateRideScreen() {
                 zoom: 14,
               }}
             />
-            <RasterSource
-              id="osm"
-              tiles={['https://tile.openstreetmap.org/{z}/{x}/{y}.png']}
-              tileSize={256}
-              maxzoom={19}
-            >
-              <Layer id="osm-layer" type="raster" source="osm" />
-            </RasterSource>
 
             {/* User location */}
             {location && (
@@ -767,6 +797,75 @@ export default function CreateRideScreen() {
             </Text>
           </View>
 
+          <View style={[styles.confirmCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Ionicons name="camera-reverse" size={18} color={theme.colors.primary} />
+                <Text style={[styles.confirmTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', marginBottom: 0 }]}>
+                  Driver Live Verification
+                </Text>
+              </View>
+              {driverLivePhoto ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Ionicons name="checkmark-circle" size={16} color={theme.colors.success} />
+                  <Text style={{ color: theme.colors.success, fontSize: 12, fontFamily: 'Inter-Medium' }}>Ready</Text>
+                </View>
+              ) : (
+                <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, backgroundColor: `${theme.colors.error}20` }}>
+                  <Text style={{ color: theme.colors.error, fontSize: 11, fontFamily: 'Inter-SemiBold' }}>Required</Text>
+                </View>
+              )}
+            </View>
+
+            {driverLivePhoto ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                <Image
+                  source={{ uri: driverLivePhoto }}
+                  style={{ width: 60, height: 60, borderRadius: 30, borderWidth: 2, borderColor: theme.colors.success }}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 14 }}>
+                    Live Photo Verified ({captureConfidence}%)
+                  </Text>
+                  <Text style={{ color: theme.colors.textMuted, fontSize: 12, fontFamily: 'Inter-Regular', marginTop: 2 }}>
+                    Commuters will see this photo when viewing your ride to recognize you.
+                  </Text>
+                </View>
+                <Pressable
+                  style={{ paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: theme.colors.border }}
+                  onPress={() => setShowLiveCaptureModal(true)}
+                >
+                  <Text style={{ color: theme.colors.text, fontSize: 12, fontFamily: 'Inter-Medium' }}>Retake</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View>
+                <Text style={{ color: theme.colors.textMuted, fontSize: 13, fontFamily: 'Inter-Regular', marginBottom: 12 }}>
+                  Take a quick live photo now so commuters can recognize you and your car before boarding.
+                </Text>
+                <Pressable
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    paddingVertical: 12,
+                    backgroundColor: `${theme.colors.primary}15`,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: theme.colors.primary,
+                  }}
+                  onPress={() => setShowLiveCaptureModal(true)}
+                >
+                  <Ionicons name="camera" size={18} color={theme.colors.primary} />
+                  <Text style={{ color: theme.colors.primary, fontFamily: 'Inter-SemiBold', fontSize: 14 }}>
+                    Take Live Photo
+                  </Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
+
           <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
             <Pressable
               style={[styles.publishButton, { backgroundColor: theme.colors.primary, opacity: loading ? 0.7 : 1 }]}
@@ -796,6 +895,18 @@ export default function CreateRideScreen() {
         onSelect={setDepartureTime}
         selectedTime={departureTime}
         theme={theme}
+      />
+
+      {/* ═══ Driver Live Face Capture Modal ═══ */}
+      <LiveFaceCaptureModal
+        visible={showLiveCaptureModal}
+        onClose={() => setShowLiveCaptureModal(false)}
+        onCaptureSuccess={(photoUri, base64, confidence) => {
+          setDriverLivePhoto(base64);
+          setCaptureConfidence(confidence);
+        }}
+        role="driver"
+        userName={profile?.full_name || 'Driver'}
       />
     </View>
   );

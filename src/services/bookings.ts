@@ -82,43 +82,48 @@ export async function getTripBookings(tripId: string): Promise<BookingWithCommut
 
 /** Update booking status */
 export async function updateBookingStatus(id: string, status: string): Promise<void> {
-  const { error, data } = await supabase.from('bookings').update({ status }).eq('id', id).select('*, trip:trips(driver_id), commuter:profiles!commuter_id(push_token)').single();
+  const { error, data } = await supabase
+    .from('bookings')
+    .update({ status })
+    .eq('id', id)
+    .neq('status', status)
+    .select('*, trip:trips(driver_id), commuter:profiles!commuter_id(push_token)')
+    .maybeSingle();
   
-  if (!error && data) {
-    const pushToken = (data.commuter as any)?.push_token;
-    if (pushToken) {
-      let title = 'Booking Update';
-      let body = `Your booking was updated to ${status}.`;
-      if (status === 'accepted') {
-        title = 'Ride Confirmed! 🎉';
-        body = 'The driver has accepted your booking request.';
-      } else if (status === 'rejected') {
-        title = 'Ride Declined';
-        body = 'The driver declined your booking request.';
-      }
-      await sendPushNotification(pushToken, title, body, { type: 'booking_update', status, bookingId: id, tripId: data.trip_id }, data.commuter_id);
-    }
-    if (status === 'accepted') {
-      // Schedule ride reminders for the commuter
-      try {
-        const { data: tripInfo } = await supabase
-          .from('trips')
-          .select('departure_time, origin_label, driver:profiles!driver_id(full_name)')
-          .eq('id', data.trip_id)
-          .single();
-        if (tripInfo) {
-          const driverName = (tripInfo.driver as any)?.full_name || 'your driver';
-          scheduleRideReminder(data.trip_id, tripInfo.departure_time, driverName, tripInfo.origin_label || '').catch(console.error);
-        }
-      } catch (e) {
-        console.error('[Reminders] Failed to schedule:', e);
-      }
-    } else if (status === 'rejected' || status === 'cancelled') {
-      cancelRideReminder(data.trip_id).catch(console.error);
-    }
-  }
-
   if (error) throw new Error(`DB Error: ${error.message} (Code: ${error.code})`);
+  if (!data) return; // Already in this status, idempotently skip duplicate push notifications
+
+  const pushToken = (data.commuter as any)?.push_token;
+  if (pushToken) {
+    let title = 'Booking Update';
+    let body = `Your booking was updated to ${status}.`;
+    if (status === 'accepted') {
+      title = 'Ride Confirmed! 🎉';
+      body = 'The driver has accepted your booking request.';
+    } else if (status === 'rejected') {
+      title = 'Ride Declined';
+      body = 'The driver declined your booking request.';
+    }
+    await sendPushNotification(pushToken, title, body, { type: 'booking_update', status, bookingId: id, tripId: data.trip_id }, data.commuter_id);
+  }
+  if (status === 'accepted') {
+    // Schedule ride reminders for the commuter
+    try {
+      const { data: tripInfo } = await supabase
+        .from('trips')
+        .select('departure_time, origin_label, driver:profiles!driver_id(full_name)')
+        .eq('id', data.trip_id)
+        .single();
+      if (tripInfo) {
+        const driverName = (tripInfo.driver as any)?.full_name || 'your driver';
+        scheduleRideReminder(data.trip_id, tripInfo.departure_time, driverName, tripInfo.origin_label || '').catch(console.error);
+      }
+    } catch (e) {
+      console.error('[Reminders] Failed to schedule:', e);
+    }
+  } else if (status === 'rejected' || status === 'cancelled') {
+    cancelRideReminder(data.trip_id).catch(console.error);
+  }
 }
 
 /** Delete a booking */
@@ -133,36 +138,36 @@ export async function confirmCommuterArrival(bookingId: string): Promise<void> {
     .from('bookings')
     .update({ commuter_confirmed: true })
     .eq('id', bookingId)
+    .eq('commuter_confirmed', false)
     .select('*, commuter:profiles!commuter_id(full_name), trip:trips(driver_id, driver:profiles!driver_id(push_token))')
-    .single();
+    .maybeSingle();
 
   if (updateError) throw new Error(`Failed to confirm commuter arrival: ${updateError.message}`);
+  if (!updatedBooking) return; // Already confirmed or duplicate call
 
-  if (updatedBooking) {
-    // If both confirmed, mark booking as completed
-    if (updatedBooking.driver_confirmed) {
-      const { error: statusError } = await supabase
-        .from('bookings')
-        .update({ status: 'completed' })
-        .eq('id', bookingId);
-      if (statusError) console.error('Failed to mark booking as completed:', statusError);
-      
-      // Check if all bookings for this trip are completed to complete the trip
-      await checkAndCompleteTrip(updatedBooking.trip_id);
-    }
+  // If both confirmed, mark booking as completed
+  if (updatedBooking.driver_confirmed) {
+    const { error: statusError } = await supabase
+      .from('bookings')
+      .update({ status: 'completed' })
+      .eq('id', bookingId);
+    if (statusError) console.error('Failed to mark booking as completed:', statusError);
+    
+    // Check if all bookings for this trip are completed to complete the trip
+    await checkAndCompleteTrip(updatedBooking.trip_id);
+  }
 
-    // Send push notification to the driver
-    const driverPushToken = (updatedBooking.trip as any)?.driver?.push_token;
-    const passengerName = (updatedBooking.commuter as any)?.full_name || 'A passenger';
-    if (driverPushToken) {
-      await sendPushNotification(
-        driverPushToken,
-        'Passenger Arrived! 🏁',
-        `${passengerName} has confirmed their arrival at the destination.`,
-        { type: 'passenger_arrival', bookingId },
-        (updatedBooking.trip as any)?.driver_id
-      );
-    }
+  // Send push notification to the driver
+  const driverPushToken = (updatedBooking.trip as any)?.driver?.push_token;
+  const passengerName = (updatedBooking.commuter as any)?.full_name || 'A passenger';
+  if (driverPushToken) {
+    await sendPushNotification(
+      driverPushToken,
+      'Passenger Arrived! 🏁',
+      `${passengerName} has confirmed their arrival at the destination.`,
+      { type: 'passenger_arrival', bookingId },
+      (updatedBooking.trip as any)?.driver_id
+    );
   }
 }
 
@@ -172,35 +177,35 @@ export async function confirmDriverArrival(bookingId: string): Promise<void> {
     .from('bookings')
     .update({ driver_confirmed: true })
     .eq('id', bookingId)
+    .eq('driver_confirmed', false)
     .select('*, commuter:profiles!commuter_id(push_token, full_name), trip:trips(driver_id)')
-    .single();
+    .maybeSingle();
 
   if (updateError) throw new Error(`Failed to confirm driver arrival: ${updateError.message}`);
+  if (!updatedBooking) return; // Already confirmed or duplicate call
 
-  if (updatedBooking) {
-    // If both confirmed, mark booking as completed
-    if (updatedBooking.commuter_confirmed) {
-      const { error: statusError } = await supabase
-        .from('bookings')
-        .update({ status: 'completed' })
-        .eq('id', bookingId);
-      if (statusError) console.error('Failed to mark booking as completed:', statusError);
+  // If both confirmed, mark booking as completed
+  if (updatedBooking.commuter_confirmed) {
+    const { error: statusError } = await supabase
+      .from('bookings')
+      .update({ status: 'completed' })
+      .eq('id', bookingId);
+    if (statusError) console.error('Failed to mark booking as completed:', statusError);
 
-      // Check if all bookings for this trip are completed to complete the trip
-      await checkAndCompleteTrip(updatedBooking.trip_id);
-    }
+    // Check if all bookings for this trip are completed to complete the trip
+    await checkAndCompleteTrip(updatedBooking.trip_id);
+  }
 
-    // Send push notification to the passenger
-    const commuterPushToken = (updatedBooking.commuter as any)?.push_token;
-    if (commuterPushToken) {
-      await sendPushNotification(
-        commuterPushToken,
-        'Driver Confirmed Arrival 🚗',
-        'Your driver has confirmed arrival at your destination. Tap to confirm.',
-        { type: 'driver_arrival', bookingId },
-        updatedBooking.commuter_id
-      );
-    }
+  // Send push notification to the passenger
+  const commuterPushToken = (updatedBooking.commuter as any)?.push_token;
+  if (commuterPushToken) {
+    await sendPushNotification(
+      commuterPushToken,
+      'Driver Confirmed Arrival 🚗',
+      'Your driver has confirmed arrival at your destination. Tap to confirm.',
+      { type: 'driver_arrival', bookingId },
+      updatedBooking.commuter_id
+    );
   }
 }
 

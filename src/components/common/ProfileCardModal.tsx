@@ -23,6 +23,8 @@ export default function ProfileCardModal({ userId, visible, onClose, onMention }
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
+  const [tripsCompleted, setTripsCompleted] = useState<number>(0);
+  const [tripsJoined, setTripsJoined] = useState<number>(0);
 
   useEffect(() => {
     if (!visible || !userId) return;
@@ -40,13 +42,33 @@ export default function ProfileCardModal({ userId, visible, onClose, onMention }
           setProfile(data as Profile);
 
           if (data.role === 'driver') {
-            const { data: vData } = await supabase
-              .from('vehicles')
-              .select('*')
-              .eq('driver_id', userId)
-              .eq('is_active', true)
-              .single();
-            if (vData) setVehicle(vData as Vehicle);
+            const [vRes, tripsRes] = await Promise.all([
+              supabase
+                .from('vehicles')
+                .select('*')
+                .eq('driver_id', userId)
+                .eq('is_active', true)
+                .maybeSingle(),
+              supabase
+                .from('trips')
+                .select('id', { count: 'exact', head: true })
+                .eq('driver_id', userId)
+                .eq('status', 'completed'),
+            ]);
+            if (vRes.data) setVehicle(vRes.data as Vehicle);
+            if (tripsRes.count !== null && tripsRes.count !== undefined) {
+              setTripsCompleted(tripsRes.count);
+            }
+          } else {
+            const { count: joinedCount } = await supabase
+              .from('bookings')
+              .select('id', { count: 'exact', head: true })
+              .eq('commuter_id', userId)
+              .in('status', ['accepted', 'completed', 'ongoing']);
+
+            if (joinedCount !== null && joinedCount !== undefined) {
+              setTripsJoined(joinedCount);
+            }
           }
         }
       } catch (e) {
@@ -112,29 +134,59 @@ export default function ProfileCardModal({ userId, visible, onClose, onMention }
                   <Badge label={profile.role === 'driver' ? 'Verified Driver 🚗' : 'Commuter 🚶'} variant={profile.role === 'driver' ? 'active' : 'pending'} />
                 </View>
 
-                {/* Ratings (shown for drivers) */}
-                {profile.role === 'driver' && (
+                {/* Stats Row: For Drivers, combine Trips Completed & Ratings. For Commuters, show Trips joined */}
+                {profile.role === 'driver' ? (
                   <View style={styles.statsRow}>
-                    <View style={[styles.statBox, { backgroundColor: theme.colors.background }]}>
+                    <View style={[styles.statBox, { backgroundColor: theme.colors.background, flex: vehicle ? 1.15 : 1 }]}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <Ionicons name="star" size={20} color={theme.colors.accent || '#F59E0B'} />
+                        <Ionicons name="star" size={19} color={theme.colors.accent || '#F59E0B'} />
                         <Text style={[styles.statValue, { color: theme.colors.text, fontFamily: 'Inter-Bold' }]}>
                           {profile.rating_avg ? profile.rating_avg.toFixed(1) : '5.0'}
                         </Text>
                       </View>
-                      <Text style={[styles.statLabel, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
-                        {profile.total_ratings || 0} Ratings
+                      <Text style={[styles.statLabel, { color: theme.colors.textMuted, fontFamily: 'Inter-Medium', textAlign: 'center', fontSize: 11 }]}>
+                        {tripsCompleted} {tripsCompleted === 1 ? 'Trip' : 'Trips'} Completed
+                      </Text>
+                      <Text style={[styles.statSubText, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 10 }]}>
+                        {profile.total_ratings || 0} {profile.total_ratings === 1 ? 'Rating' : 'Ratings'}
                       </Text>
                     </View>
                     
                     {vehicle && (
-                      <View style={[styles.statBox, { backgroundColor: theme.colors.background, flex: 2 }]}>
+                      <View style={[styles.statBox, { backgroundColor: theme.colors.background, flex: 1.35 }]}>
                         <Ionicons name="car-outline" size={20} color={theme.colors.primary} />
-                        <Text style={[styles.statValue, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>
+                        <Text style={[styles.statValue, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', textAlign: 'center' }]} numberOfLines={1}>
                           {vehicle.model}
                         </Text>
-                        <Text style={[styles.statLabel, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
+                        <Text style={[styles.statLabel, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 11, textAlign: 'center' }]} numberOfLines={1}>
                           {vehicle.plate_number} • {vehicle.capacity} seats
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                ) : (
+                  <View style={styles.statsRow}>
+                    <View style={[styles.statBox, { backgroundColor: theme.colors.background, flex: 1 }]}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Ionicons name="ticket-outline" size={20} color={theme.colors.primary} />
+                        <Text style={[styles.statValue, { color: theme.colors.text, fontFamily: 'Inter-Bold', fontSize: 18 }]}>
+                          {tripsJoined}
+                        </Text>
+                      </View>
+                      <Text style={[styles.statLabel, { color: theme.colors.textMuted, fontFamily: 'Inter-Medium' }]}>
+                        {tripsJoined === 1 ? 'Trip Joined' : 'Trips Joined'}
+                      </Text>
+                    </View>
+                    {(profile.total_ratings || 0) > 0 && (
+                      <View style={[styles.statBox, { backgroundColor: theme.colors.background, flex: 1 }]}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Ionicons name="star" size={18} color={theme.colors.accent || '#F59E0B'} />
+                          <Text style={[styles.statValue, { color: theme.colors.text, fontFamily: 'Inter-Bold' }]}>
+                            {profile.rating_avg ? profile.rating_avg.toFixed(1) : '5.0'}
+                          </Text>
+                        </View>
+                        <Text style={[styles.statLabel, { color: theme.colors.textMuted, fontFamily: 'Inter-Medium' }]}>
+                          {profile.total_ratings} {profile.total_ratings === 1 ? 'Rating' : 'Ratings'}
                         </Text>
                       </View>
                     )}
@@ -259,6 +311,9 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: 12,
+  },
+  statSubText: {
+    fontSize: 10,
   },
   actionButtonsContainer: {
     marginTop: 8,

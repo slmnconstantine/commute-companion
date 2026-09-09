@@ -125,6 +125,7 @@ export default function RidesScreen() {
   const [recentDriverTrips, setRecentDriverTrips] = useState<TripWithDriver[]>([]);
   const [recentCommuterRequests, setRecentCommuterRequests] = useState<Route[]>([]);
   const [availableRides, setAvailableRides] = useState<TripWithDriver[]>([]);
+  const [commuterBookings, setCommuterBookings] = useState<Record<string, 'pending' | 'accepted' | 'ongoing' | 'completed'>>({});
   const [rideRequests, setRideRequests] = useState<CommuterRequest[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -382,6 +383,37 @@ export default function RidesScreen() {
       const allRides = await getTrips({ limit: 50 });
       setAvailableRides(allRides.filter(t => t.status === 'open' || t.status === 'full' || t.status === 'ongoing'));
 
+      // Load user's commuter bookings to detect joined trips
+      const joinedMap: Record<string, 'pending' | 'accepted' | 'ongoing' | 'completed'> = {};
+      if (profile?.id) {
+        try {
+          const { data: userBookings } = await supabase
+            .from('bookings')
+            .select('id, trip_id, status')
+            .eq('commuter_id', profile.id)
+            .in('status', ['accepted', 'pending', 'ongoing']);
+
+          if (userBookings) {
+            userBookings.forEach((b: any) => {
+              joinedMap[b.trip_id] = b.status;
+            });
+          }
+        } catch (bErr) {
+          console.warn('Failed to load user bookings in rides tab:', bErr);
+        }
+
+        // Also check bookings already populated on allRides
+        allRides.forEach((t) => {
+          if (t.bookings) {
+            const myBooking = t.bookings.find((b) => b.commuter_id === profile.id);
+            if (myBooking && ['accepted', 'pending', 'ongoing'].includes(myBooking.status)) {
+              joinedMap[t.id] = myBooking.status as any;
+            }
+          }
+        });
+      }
+      setCommuterBookings(joinedMap);
+
       // Load active ride request and past requests for the user
       if (profile?.id) {
         const { data: routesData, error: routesError } = await supabase
@@ -519,9 +551,15 @@ export default function RidesScreen() {
       );
     }
 
-    // Status Filter: 'open' shows only open rides, plus ongoing rides if they still have available seats. 'all' shows open, full, and ongoing
+    // Status Filter: 'open' shows only open rides, plus ongoing rides if they still have available seats.
+    // Trips joined by the commuter are always kept visible so they don't lose track of their rides!
     if (filterStatus === 'open') {
-      result = result.filter(trip => trip.status === 'open' || (trip.status === 'ongoing' && trip.available_seats > 0));
+      result = result.filter(trip => 
+        commuterBookings[trip.id] === 'accepted' || 
+        commuterBookings[trip.id] === 'ongoing' ||
+        trip.status === 'open' || 
+        (trip.status === 'ongoing' && trip.available_seats > 0)
+      );
     }
 
     // Max Fare Filter
@@ -529,8 +567,20 @@ export default function RidesScreen() {
       result = result.filter(trip => trip.fare_per_seat <= filterMaxFare);
     }
 
-    // Sorting
+    // Sorting: Joined trips come FIRST at the very top, then requested trips, then remaining
     result.sort((a, b) => {
+      const aJoined = commuterBookings[a.id] === 'accepted' || commuterBookings[a.id] === 'ongoing';
+      const bJoined = commuterBookings[b.id] === 'accepted' || commuterBookings[b.id] === 'ongoing';
+
+      if (aJoined && !bJoined) return -1;
+      if (!aJoined && bJoined) return 1;
+
+      const aPending = commuterBookings[a.id] === 'pending';
+      const bPending = commuterBookings[b.id] === 'pending';
+
+      if (aPending && !bPending) return -1;
+      if (!aPending && bPending) return 1;
+
       if (sortBy === 'price_asc') {
         return a.fare_per_seat - b.fare_per_seat;
       }
@@ -544,7 +594,7 @@ export default function RidesScreen() {
     });
 
     return result;
-  }, [availableRides, filterStatus, filterMaxFare, sortBy, searchQuery]);
+  }, [availableRides, filterStatus, filterMaxFare, sortBy, searchQuery, commuterBookings]);
 
   useFocusEffect(
     useCallback(() => {
@@ -611,7 +661,7 @@ export default function RidesScreen() {
                 <Ionicons name="search" size={20} color={theme.colors.textMuted} />
                 <TextInput
                   style={[styles.searchInput, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]}
-                  placeholder="Search for a location..."
+                  placeholder="Search posted rides by place name..."
                   placeholderTextColor={theme.colors.textMuted}
                   value={searchQuery}
                   onChangeText={setSearchQuery}
@@ -690,8 +740,8 @@ export default function RidesScreen() {
                 >
                   <Ionicons name="navigate-circle" size={28} color={theme.colors.primary} />
                   <View style={styles.setRouteInfo}>
-                    <Text style={[{ color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 14 }]}>Set Your Commute Route</Text>
-                    <Text style={[{ color: theme.colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 12 }]}>Pin your origin & destination on the map</Text>
+                    <Text style={[{ color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 14 }]}>Pin Route on Map</Text>
+                    <Text style={[{ color: theme.colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 12 }]}>Pin your commute corridor to match carpools along your way</Text>
                   </View>
                   <Ionicons name="chevron-forward" size={18} color={theme.colors.primary} />
                 </Pressable>
@@ -778,13 +828,22 @@ export default function RidesScreen() {
                   <TripSkeletonCard theme={theme} />
                 </>
               ) : filteredAndSortedRides.length > 0 ? (
-                filteredAndSortedRides.map((trip, i) => (
-                  <AnimatedListItem key={trip.id} index={i}>
-                    <View style={{ marginBottom: 14 }}>
-                      <TripCard trip={trip} onPress={() => router.push(`/(main)/ride/${trip.id}`)} />
-                    </View>
-                  </AnimatedListItem>
-                ))
+                filteredAndSortedRides.map((trip, i) => {
+                  const userStatus = commuterBookings[trip.id];
+                  const isJoined = userStatus === 'accepted' || userStatus === 'ongoing';
+                  return (
+                    <AnimatedListItem key={trip.id} index={i}>
+                      <View style={{ marginBottom: 14 }}>
+                        <TripCard
+                          trip={trip}
+                          isJoined={isJoined}
+                          userBookingStatus={userStatus}
+                          onPress={() => router.push(`/(main)/ride/${trip.id}`)}
+                        />
+                      </View>
+                    </AnimatedListItem>
+                  );
+                })
               ) : (
                 <EmptyState
                   icon="funnel-outline"

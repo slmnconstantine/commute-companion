@@ -79,8 +79,8 @@ function RootLayoutNav() {
     if (!session && !inAuthGroup) {
       if (hasCompletedOnboarding === false) {
         router.replace('/(auth)/onboarding');
-      } else if (hasCompletedOnboarding === true) {
-        router.replace('/(auth)/welcome');
+      } else {
+        router.replace('/(auth)/sign-in');
       }
     } else if (session && inAuthGroup) {
       // Soft Gate logic

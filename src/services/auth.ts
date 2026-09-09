@@ -1,8 +1,10 @@
 import { supabase } from '@/lib/supabase';
 
 /** Send password reset email */
-export async function resetPassword(email: string): Promise<{ error: Error | null }> {
-  const { error } = await supabase.auth.resetPasswordForEmail(email);
+export async function resetPassword(email: string, redirectTo?: string): Promise<{ error: Error | null }> {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: redirectTo || 'commute-companion://reset-password',
+  });
   return { error: error as Error | null };
 }
 

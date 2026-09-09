@@ -16,33 +16,39 @@ export async function sendMessage(
     .single();
 
   if (data && !error) {
-    // Notify other members of the chat
-    const { data: membersData } = await supabase
-      .from('chat_members')
-      .select('user_id')
-      .eq('chat_room_id', chatRoomId);
-      
-    if (membersData && membersData.length > 0) {
-      const userIds = membersData.map(m => m.user_id).filter(id => id !== senderId);
-      
-      if (userIds.length > 0) {
-        const { data: profilesData } = await supabase
-          .from('profiles')
-          .select('id, push_token')
-          .in('id', userIds);
+    // Notify other members of the chat asynchronously in background so sending returns instantly
+    (async () => {
+      try {
+        const { data: membersData } = await supabase
+          .from('chat_members')
+          .select('user_id')
+          .eq('chat_room_id', chatRoomId);
           
-        if (profilesData) {
-          const senderName = (data.sender as any)?.full_name || 'Someone';
-          const notificationTitle = isAlert ? `🚨 Alert from ${senderName}` : `New message from ${senderName}`;
+        if (membersData && membersData.length > 0) {
+          const userIds = membersData.map(m => m.user_id).filter(id => id !== senderId);
           
-          profilesData.forEach((user: any) => {
-            if (user.push_token) {
-              sendPushNotification(user.push_token, notificationTitle, content, { type: 'chat', chatRoomId }, user.id);
+          if (userIds.length > 0) {
+            const { data: profilesData } = await supabase
+              .from('profiles')
+              .select('id, push_token')
+              .in('id', userIds);
+              
+            if (profilesData) {
+              const senderName = (data.sender as any)?.full_name || 'Someone';
+              const notificationTitle = isAlert ? `🚨 Alert from ${senderName}` : `New message from ${senderName}`;
+              
+              profilesData.forEach((user: any) => {
+                if (user.push_token) {
+                  sendPushNotification(user.push_token, notificationTitle, content, { type: 'chat', chatRoomId }, user.id);
+                }
+              });
             }
-          });
+          }
         }
+      } catch (err) {
+        console.warn('Background push notification error:', err);
       }
-    }
+    })();
   }
 
   return { data: data as Message | null, error: error as Error | null };

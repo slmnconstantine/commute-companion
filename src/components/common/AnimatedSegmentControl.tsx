@@ -18,6 +18,7 @@ interface AnimatedSegmentControlProps<T extends string> {
   backgroundColor?: string;
   activeTextColor?: string;
   inactiveTextColor?: string;
+  fontSize?: number;
   /** Custom style */
   style?: any;
 }
@@ -30,6 +31,7 @@ export default function AnimatedSegmentControl<T extends string>({
   backgroundColor = '#F8F7F4',
   activeTextColor = '#FFFFFF',
   inactiveTextColor = '#64748B',
+  fontSize,
   style,
 }: AnimatedSegmentControlProps<T>) {
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -93,6 +95,7 @@ export default function AnimatedSegmentControl<T extends string>({
           <Text
             style={[
               styles.segmentText,
+              fontSize ? { fontSize } : null,
               {
                 color: activeIndex === index ? activeTextColor : inactiveTextColor,
                 fontFamily: activeIndex === index ? 'Inter-SemiBold' : 'Inter-Medium',

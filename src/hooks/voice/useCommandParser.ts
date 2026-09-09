@@ -34,14 +34,20 @@ const OFFLINE_FALLBACK_INTENTS: IntentPattern[] = [
     requiresConfirmation: true
   },
   {
-    pattern: /(?:go\s+to|navigate\s+to|show|open|take\s+me\s+to)\s+(home|hub|rides|activity|community|profile|settings|set\s+route)/i,
+    pattern: /(?:go\s+to|navigate\s+to|show|open|take\s+me\s+to)\s+(home|hub|rides?|activity|activities|community(?:\s+hub)?|profile|settings|set\s+route)/i,
     command: 'NAVIGATE',
     params: (match) => {
       let screen = match[1].toLowerCase().replace(/\s+/g, '');
       if (screen === 'setroute') screen = 'set-route';
+      if (screen === 'communityhub' || screen === 'hub') screen = 'community';
+      if (screen === 'ride') screen = 'rides';
+      if (screen === 'activities') screen = 'activity';
       return { screen };
     },
-    spokenReply: (match, params) => `Navigating to the ${params.screen} screen.`,
+    spokenReply: (match, params) => {
+      const name = params.screen === 'community' ? 'Community Hub' : params.screen;
+      return `Navigating to ${name}.`;
+    },
     requiresConfirmation: false
   },
   {
@@ -68,7 +74,7 @@ const OFFLINE_FALLBACK_INTENTS: IntentPattern[] = [
 ];
 
 function matchOfflineIntent(text: string, context: any): AssistantCommand | null {
-  const cleanText = text.trim();
+  const cleanText = text.trim().replace(/[.,!?;:]+$/, '').trim();
   for (const intent of OFFLINE_FALLBACK_INTENTS) {
     const match = cleanText.match(intent.pattern);
     if (match) {

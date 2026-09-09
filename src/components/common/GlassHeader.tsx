@@ -25,16 +25,18 @@ export default function GlassHeader({
   const isDark = mode === 'dark';
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 8 }, style]}>
-      <View
-        style={[
-          styles.content,
-          {
-            borderBottomColor: theme.colors.border,
-            backgroundColor: isDark ? 'rgba(17, 24, 39, 0.85)' : 'rgba(255, 255, 255, 0.90)',
-          },
-        ]}
-      >
+    <View
+      style={[
+        styles.container,
+        {
+          paddingTop: Math.max(insets.top, 12),
+          backgroundColor: isDark ? 'rgba(17, 24, 39, 0.95)' : 'rgba(255, 255, 255, 0.96)',
+          borderBottomColor: theme.colors.border,
+        },
+        style,
+      ]}
+    >
+      <View style={styles.content}>
         <View style={styles.leftRow}>
           {onBack && (
             <BouncyPressable
@@ -91,14 +93,14 @@ const styles = StyleSheet.create({
     width: '100%',
     overflow: 'hidden',
     zIndex: 100,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   content: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 10,
   },
   leftRow: {
     flexDirection: 'row',

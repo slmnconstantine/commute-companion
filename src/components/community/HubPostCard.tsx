@@ -1,7 +1,6 @@
 import React, { useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import SafeLottieView from '@/components/common/SafeLottieView';
 import { useTheme } from '@/context/ThemeContext';
 import { HubPostWithAuthor } from '@/types/database';
 import { formatRelativeTime } from '@/utils/dateFormatter';
@@ -202,24 +201,13 @@ function HubPostCard({
           {onLike && (
             <Pressable style={styles.actionBtn} onPress={handleLikePress} hitSlop={8}>
               <Animated.View style={{ transform: [{ scale: likeScale }] }}>
-                {post.user_has_liked ? (
-                  <SafeLottieView
-                    source={require('../../../assets/animations/micro-heart.json')}
-                    autoPlay
-                    loop={false}
-                    fallbackIcon="heart"
-                    fallbackColor={theme.colors.error}
-                    style={{ width: 22, height: 22 }}
-                  />
-                ) : (
-                  <Ionicons
-                    name="heart-outline"
-                    size={18}
-                    color={theme.colors.textMuted}
-                  />
-                )}
+                <Ionicons
+                  name={post.user_has_liked ? 'heart' : 'heart-outline'}
+                  size={18}
+                  color={post.user_has_liked ? (theme.colors.error || '#EF4444') : theme.colors.textMuted}
+                />
               </Animated.View>
-              <Text style={[styles.actionText, { color: post.user_has_liked ? theme.colors.error : theme.colors.textMuted }]}>
+              <Text style={[styles.actionText, { color: post.user_has_liked ? (theme.colors.error || '#EF4444') : theme.colors.textMuted }]}>
                 {post.likes_count || 0}
               </Text>
             </Pressable>

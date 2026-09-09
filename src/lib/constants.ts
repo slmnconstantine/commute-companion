@@ -30,6 +30,12 @@ export const DEFAULT_LONGITUDE = 120.9842;
 export const DEFAULT_DELTA = 0.05;
 
 // ---------------------------------------------------------------------------
+// Map Styles (Free OpenFreeMap & OpenStreetMap, no API key required, no watermark)
+// ---------------------------------------------------------------------------
+export const MAP_STYLE_LIGHT = 'https://tiles.openfreemap.org/styles/positron';
+export const MAP_STYLE_DARK = 'https://tiles.openfreemap.org/styles/dark';
+
+// ---------------------------------------------------------------------------
 // API endpoints (free / open-source geocoding & routing)
 // ---------------------------------------------------------------------------
 export const OSRM_BASE_URL = 'https://router.project-osrm.org/route/v1/driving';

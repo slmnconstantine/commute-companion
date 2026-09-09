@@ -63,9 +63,9 @@ export default function ProfileScreen() {
 
   const memberSince = profile?.created_at
     ? new Date(profile.created_at).toLocaleDateString('en-PH', {
-        month: 'short',
-        year: 'numeric',
-      })
+      month: 'short',
+      year: 'numeric',
+    })
     : 'N/A';
 
   const handleSignOut = () => {
@@ -121,21 +121,26 @@ export default function ProfileScreen() {
           label: 'Verification',
           onPress: () => router.push('/(main)/verification' as any),
         },
+        {
+          icon: 'stats-chart-outline',
+          label: 'Transaction Summary',
+          onPress: () => router.push('/(main)/settings/transaction-summary' as any),
+        },
         ...(isDriver
           ? [
-              {
-                icon: 'car-outline' as const,
-                label: 'My Vehicle',
-                onPress: () =>
-                  router.push('/(main)/settings/vehicle' as any),
-              },
-              {
-                icon: 'refresh-outline' as const,
-                label: 'Reset Driver Role',
-                onPress: handleResetDriverRole,
-                color: theme.colors.warning || '#F59E0B',
-              },
-            ]
+            {
+              icon: 'car-outline' as const,
+              label: 'My Vehicle',
+              onPress: () =>
+                router.push('/(main)/settings/vehicle' as any),
+            },
+            {
+              icon: 'refresh-outline' as const,
+              label: 'Reset Driver Role',
+              onPress: handleResetDriverRole,
+              color: theme.colors.warning || '#F59E0B',
+            },
+          ]
           : []),
       ],
     },
@@ -705,12 +710,14 @@ const styles = StyleSheet.create({
   balanceCard: {
     marginHorizontal: 20,
     marginBottom: 24,
-    padding: 20,
+    padding: 18,
     borderRadius: 16,
     borderWidth: 1,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 12,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
@@ -718,6 +725,7 @@ const styles = StyleSheet.create({
   },
   balanceInfo: {
     flex: 1,
+    minWidth: 140,
   },
   balanceHeader: {
     flexDirection: 'row',
@@ -729,5 +737,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 12,
+    flexShrink: 0,
   },
 });
