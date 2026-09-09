@@ -1,8 +1,9 @@
 import { supabase } from '@/lib/supabase';
 import { Booking, BookingWithTrip, BookingWithCommuter } from '@/types/database';
 import { sendPushNotification } from './pushNotifications';
-import { updateTripStatus } from './trips';
+import { updateTripStatus, cancelExpiredTrips } from './trips';
 import { scheduleRideReminder, cancelRideReminder } from './rideReminders';
+import { isOlderThan24Hours } from '@/utils/dateFormatter';
 
 /** Create a booking request */
 export async function createBooking(bookingData: Omit<Booking, 'id' | 'created_at'>): Promise<{ data: Booking | null; error: Error | null }> {
@@ -45,6 +46,11 @@ export async function createBooking(bookingData: Omit<Booking, 'id' | 'created_a
 
 /** Get bookings for a commuter with trip details */
 export async function getCommuterBookings(commuterId: string): Promise<BookingWithTrip[]> {
+  // Trigger auto-cancellation of expired trips in background
+  cancelExpiredTrips().catch(err => {
+    console.error('Background cancelExpiredTrips failed in getCommuterBookings:', err);
+  });
+
   const { data, error } = await supabase
     .from('bookings')
     .select(`*, trip:trips(*, driver:profiles!driver_id(*), vehicle:vehicles!vehicle_id(*)), reviews(*)`)
@@ -54,11 +60,20 @@ export async function getCommuterBookings(commuterId: string): Promise<BookingWi
 
   const bookings = (data || []) as BookingWithTrip[];
 
-  // Self-healing: if a trip was completed/cancelled but the booking got stuck in pending/accepted
+  // Self-healing: if a trip was completed/cancelled or is an expired open ride, fix stuck bookings
   return bookings.map(b => {
-    if (b.trip && (b.trip.status === 'completed' || b.trip.status === 'cancelled')) {
+    const isTripExpiredOpen = b.trip && ['open', 'full'].includes(b.trip.status) && isOlderThan24Hours(b.trip.departure_time);
+
+    if (b.trip && isTripExpiredOpen) {
+      b.trip.status = 'cancelled';
+      supabase.from('trips').update({ status: 'cancelled' }).eq('id', b.trip.id).then(({ error: e }) => {
+        if (e) console.error('Error auto-cancelling trip in getCommuterBookings:', e);
+      });
+    }
+
+    if (b.trip && (b.trip.status === 'completed' || b.trip.status === 'cancelled' || isTripExpiredOpen)) {
       if (b.status === 'pending' || b.status === 'accepted') {
-        const newStatus = b.trip.status === 'cancelled' ? 'rejected' : 'completed';
+        const newStatus = (b.trip.status === 'cancelled' || isTripExpiredOpen) ? 'cancelled' : 'completed';
         // Fire and forget update to fix it in the database
         supabase.from('bookings').update({ status: newStatus }).eq('id', b.id).then(({ error }) => { if (error) console.error(error); });
         // Instantly reflect the correct status in the UI
@@ -68,6 +83,7 @@ export async function getCommuterBookings(commuterId: string): Promise<BookingWi
     return b;
   });
 }
+
 
 /** Get bookings for a trip (driver sees who booked) */
 export async function getTripBookings(tripId: string): Promise<BookingWithCommuter[]> {

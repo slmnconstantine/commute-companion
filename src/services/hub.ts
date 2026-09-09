@@ -252,6 +252,13 @@ export const createPost = async (
 };
 
 export const deletePost = async (postId: string, userId: string): Promise<boolean> => {
+  try {
+    await supabase.from('post_comments').delete().eq('post_id', postId);
+    await supabase.from('post_likes').delete().eq('post_id', postId);
+  } catch (err) {
+    console.warn('Non-fatal error cleaning up post comments/likes:', err);
+  }
+
   const { error } = await supabase
     .from('hub_posts')
     .delete()
@@ -262,6 +269,58 @@ export const deletePost = async (postId: string, userId: string): Promise<boolea
     return false;
   }
   return true;
+};
+
+export const deleteMultiplePosts = async (postIds: string[], userId: string): Promise<boolean> => {
+  if (!postIds || postIds.length === 0) return true;
+
+  try {
+    await supabase.from('post_comments').delete().in('post_id', postIds);
+    await supabase.from('post_likes').delete().in('post_id', postIds);
+  } catch (err) {
+    console.warn('Non-fatal error cleaning up post comments/likes:', err);
+  }
+
+  const { error } = await supabase
+    .from('hub_posts')
+    .delete()
+    .in('id', postIds)
+    .eq('author_id', userId);
+
+  if (error) {
+    handleServiceError('Error deleting multiple posts:', error);
+    return false;
+  }
+  return true;
+};
+
+/** Fetch user's posts that are approaching 1 week (>= 6 days) or past 1 week old */
+export const getUserExpiringPosts = async (userId: string, minDaysOld: number = 6): Promise<HubPostWithAuthor[]> => {
+  const cutoffDate = new Date(Date.now() - minDaysOld * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('hub_posts')
+    .select(`
+      *,
+      author:profiles!hub_posts_author_id_fkey(*),
+      post_likes(count),
+      post_comments(count)
+    `)
+    .eq('author_id', userId)
+    .lte('created_at', cutoffDate)
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    handleServiceError('Error fetching expiring user posts:', error);
+    return [];
+  }
+
+  return (data || []).map(post => ({
+    ...post,
+    author: Array.isArray(post.author) ? post.author[0] : post.author,
+    likes_count: post.post_likes?.[0]?.count || 0,
+    comments_count: post.post_comments?.[0]?.count || 0,
+    user_has_liked: false,
+  })) as HubPostWithAuthor[];
 };
 
 export const updatePost = async (postId: string, userId: string, statusTag: string, message: string): Promise<HubPostWithAuthor | null> => {
@@ -298,3 +357,4 @@ export const deleteAllUserPosts = async (userId: string, routeHash?: string): Pr
   }
   return true;
 };
+

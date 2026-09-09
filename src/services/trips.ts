@@ -6,6 +6,7 @@ import { generateRouteHash, isJsonLabel } from '@/utils/routeHash';
 import { getChatRoom } from './chatRooms';
 import { sendMessage } from './messages';
 import { cancelRideReminder } from './rideReminders';
+import { isOlderThan24Hours } from '@/utils/dateFormatter';
 
 /** Create a new trip */
 export async function createTrip(tripData: Omit<Trip, 'id' | 'created_at'>): Promise<{ data: Trip | null; error: Error | null }> {
@@ -23,6 +24,65 @@ export async function createTrip(tripData: Omit<Trip, 'id' | 'created_at'>): Pro
   return { data: data as Trip | null, error: error as Error | null };
 }
 
+/**
+ * Automatically cancels open/full rides that are 1 day (24 hours) past their departure time.
+ * Also marks any pending or accepted bookings on those rides as cancelled.
+ */
+export async function cancelExpiredTrips(): Promise<number> {
+  try {
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    // 1. Find all trips that are 'open' or 'full' with departure_time < oneDayAgo
+    const { data: expiredTrips, error: fetchError } = await supabase
+      .from('trips')
+      .select('id')
+      .in('status', ['open', 'full'])
+      .lt('departure_time', oneDayAgo);
+
+    if (fetchError) {
+      console.error('Error fetching expired trips in cancelExpiredTrips:', fetchError);
+      return 0;
+    }
+
+    if (!expiredTrips || expiredTrips.length === 0) {
+      return 0;
+    }
+
+    const tripIds = expiredTrips.map((t) => t.id);
+
+    // 2. Update these trips to 'cancelled'
+    const { error: updateTripError } = await supabase
+      .from('trips')
+      .update({ status: 'cancelled' })
+      .in('id', tripIds);
+
+    if (updateTripError) {
+      console.error('Error updating expired trips to cancelled:', updateTripError);
+    }
+
+    // 3. Update all pending / accepted bookings for these trips to 'cancelled'
+    const { error: updateBookingsError } = await supabase
+      .from('bookings')
+      .update({ status: 'cancelled' })
+      .in('trip_id', tripIds)
+      .in('status', ['pending', 'accepted']);
+
+    if (updateBookingsError) {
+      console.error('Error cancelling bookings for expired trips:', updateBookingsError);
+    }
+
+    // 4. Cancel any ride reminders for these trips
+    for (const tripId of tripIds) {
+      cancelRideReminder(tripId).catch(() => {});
+    }
+
+    return tripIds.length;
+  } catch (err) {
+    console.error('Unexpected error in cancelExpiredTrips:', err);
+    return 0;
+  }
+}
+
 /** Get trips with driver info, filtered */
 export async function getTrips(filters?: {
   status?: string;
@@ -30,6 +90,11 @@ export async function getTrips(filters?: {
   limit?: number;
   offset?: number;
 }): Promise<TripWithDriver[]> {
+  // Trigger background auto-cancellation of expired open rides
+  cancelExpiredTrips().catch((err) => {
+    console.error('Background cancelExpiredTrips failed in getTrips:', err);
+  });
+
   let query = supabase
     .from('trips')
     .select(`*, driver:profiles!driver_id(*), vehicle:vehicles!vehicle_id(*), bookings(*, reviews(*))`);
@@ -42,7 +107,23 @@ export async function getTrips(filters?: {
 
   const { data, error } = await query;
   if (error) throw error;
-  return (data || []) as TripWithDriver[];
+
+  let trips = (data || []) as TripWithDriver[];
+
+  // Self-heal: mark in-memory trips as cancelled if they are open/full and >24h past departure
+  trips = trips.map((t) => {
+    if (['open', 'full'].includes(t.status) && isOlderThan24Hours(t.departure_time)) {
+      return { ...t, status: 'cancelled' };
+    }
+    return t;
+  });
+
+  // If filtered specifically by status (e.g. 'open'), filter out the newly auto-cancelled ones
+  if (filters?.status) {
+    trips = trips.filter((t) => t.status === filters.status);
+  }
+
+  return trips;
 }
 
 /** Get single trip by ID */
@@ -55,8 +136,22 @@ export async function getTripById(id: string): Promise<TripWithDriver | null> {
     
   if (error || !data) return null;
 
-  return data as TripWithDriver;
+  const trip = data as TripWithDriver;
+
+  // Self-heal if this trip was open/full but is 1 day past departure
+  if (['open', 'full'].includes(trip.status) && isOlderThan24Hours(trip.departure_time)) {
+    trip.status = 'cancelled';
+    supabase.from('trips').update({ status: 'cancelled' }).eq('id', id).then(({ error: e }) => {
+      if (e) console.error('Error auto-cancelling expired trip in getTripById:', e);
+    });
+    supabase.from('bookings').update({ status: 'cancelled' }).eq('trip_id', id).in('status', ['pending', 'accepted']).then(({ error: e }) => {
+      if (e) console.error('Error auto-cancelling bookings in getTripById:', e);
+    });
+  }
+
+  return trip;
 }
+
 
 /** Update trip status */
 export async function updateTripStatus(id: string, status: string): Promise<{ error: Error | null }> {

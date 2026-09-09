@@ -6,6 +6,7 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "channel": "development",
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
         "EXPO_PUBLIC_SUPABASE_URL": "https://fkkmxlgpcfjdtmpjgojr.supabase.co",
@@ -17,6 +18,7 @@
     },
     "preview": {
       "distribution": "internal",
+      "channel": "preview",
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
         "EXPO_PUBLIC_SUPABASE_URL": "https://fkkmxlgpcfjdtmpjgojr.supabase.co",
@@ -27,6 +29,7 @@
       }
     },
     "production": {
+      "channel": "production",
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://fkkmxlgpcfjdtmpjgojr.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZra214bGdwY2ZqZHRtcGpnb2pyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzNzcyODAsImV4cCI6MjA5NTk1MzI4MH0.PUVLees9NoMwT6gHnPQI6h7orF_-APXwUDuJnLtVVg4"

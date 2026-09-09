@@ -36,3 +36,12 @@ export function formatMessageTime(dateString: string): string {
   if (isToday(date)) return format(date, 'h:mm a');
   return format(date, 'MMM d, h:mm a');
 }
+
+/** Check if a date string is more than 24 hours (1 day) in the past */
+export function isOlderThan24Hours(dateStr?: string | null): boolean {
+  if (!dateStr) return false;
+  const time = new Date(dateStr).getTime();
+  if (isNaN(time)) return false;
+  return Date.now() - time > 24 * 60 * 60 * 1000;
+}
+

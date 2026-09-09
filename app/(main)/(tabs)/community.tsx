@@ -30,7 +30,8 @@ import { useAuth } from '@/context/AuthContext';
 import EmptyState from '@/components/common/EmptyState';
 import GlassCard from '@/components/common/GlassCard';
 import HubPostSkeleton from '@/components/common/HubPostSkeleton';
-import { getPosts, toggleLike, createPost, getComments, createComment, deletePost, updatePost } from '@/services/hub';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getPosts, toggleLike, createPost, getComments, createComment, deletePost, updatePost, getUserExpiringPosts, deleteMultiplePosts } from '@/services/hub';
 import { HubPostWithAuthor, PostCommentWithAuthor } from '@/types/database';
 import HubPostCard, { STATUS_CONFIG } from '@/components/community/HubPostCard';
 import ProfileCardModal from '@/components/common/ProfileCardModal';
@@ -70,7 +71,7 @@ function RouteBanner({ theme, activeRoute }: { theme: any; activeRoute: any }) {
   );
 }
 
-// Simple time ago formatter for comments
+// Simple time ago formatter for comments and stale posts
 function formatCommentTime(dateStr: string) {
   try {
     const date = new Date(dateStr);
@@ -83,11 +84,15 @@ function formatCommentTime(dateStr: string) {
     if (diffMins < 1) return 'Just now';
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
-    return `${diffDays}d ago`;
+    if (diffDays === 1) return '1 day ago';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    const diffWeeks = Math.floor(diffDays / 7);
+    return `${diffWeeks} ${diffWeeks === 1 ? 'week' : 'weeks'} ago`;
   } catch (e) {
     return '';
   }
 }
+
 
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
@@ -122,6 +127,100 @@ export default function CommunityScreen() {
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
 
+  // Expiring/Old posts cleanup state
+  const [expiringPosts, setExpiringPosts] = useState<HubPostWithAuthor[]>([]);
+  const [showExpiringBanner, setShowExpiringBanner] = useState(true);
+
+  const loadPosts = useCallback(async (): Promise<void> => {
+    if (!activeRoute || !activeRoute.route_hash || !profile) {
+      setLoading(false);
+      return;
+    }
+    const data = await getPosts(activeRoute.route_hash, profile.id);
+    setPosts(data);
+    setLoading(false);
+  }, [activeRoute, profile]);
+
+  const handleExecuteCleanUp = useCallback(async (staleList: HubPostWithAuthor[]): Promise<void> => {
+    if (!profile?.id || staleList.length === 0) return;
+
+    const staleIds = staleList.map((p) => p.id);
+
+    // Optimistically update current view
+    setPosts((prev) => prev.filter((p) => !staleIds.includes(p.id)));
+    setExpiringPosts([]);
+    setShowExpiringBanner(false);
+
+    const success = await deleteMultiplePosts(staleIds, profile.id);
+    if (success) {
+      Alert.alert(
+        'Cleaned Up! ✨',
+        staleList.length === 1
+          ? 'Your older post was deleted. Thank you for keeping the Community Hub fresh!'
+          : `${staleList.length} older posts were deleted. Thank you for keeping the Community Hub fresh!`
+      );
+    } else {
+      Alert.alert('Error', 'Failed to delete some older posts.');
+      loadPosts();
+    }
+  }, [profile?.id, loadPosts]);
+
+  const promptCleanUp = useCallback((staleList: HubPostWithAuthor[]): void => {
+    if (staleList.length === 0) return;
+
+    const count = staleList.length;
+    const title = 'Clean Up Older Posts? 🧹';
+    const message = count === 1
+      ? `You have a community post from ${formatCommentTime(staleList[0].created_at)}:\n\n"${staleList[0].message.slice(0, 75)}${staleList[0].message.length > 75 ? '...' : ''}"\n\nWould it be alright to delete it to keep information in the Community Hub fresh and relevant?`
+      : `You have ${count} community posts approaching or past 1 week old.\n\nWould it be alright to delete them to keep information in the Community Hub fresh and relevant for other commuters?`;
+
+    Alert.alert(
+      title,
+      message,
+      [
+        {
+          text: 'Keep for Now',
+          style: 'cancel',
+          onPress: async () => {
+            if (profile?.id) {
+              await AsyncStorage.setItem(`@hub_stale_prompt_${profile.id}`, Date.now().toString());
+            }
+          },
+        },
+        {
+          text: count === 1 ? 'Delete Post' : 'Delete Posts',
+          style: 'destructive',
+          onPress: () => handleExecuteCleanUp(staleList),
+        },
+      ]
+    );
+  }, [profile?.id, handleExecuteCleanUp]);
+
+  const checkExpiringPosts = useCallback(async (): Promise<void> => {
+    if (!profile?.id) return;
+    try {
+      // Find user posts >= 6 days old (approaching a week or past 1 week)
+      const stale = await getUserExpiringPosts(profile.id, 6);
+      setExpiringPosts(stale);
+
+      if (stale.length === 0) return;
+
+      // Check if user was already prompted within the last 24 hours
+      const storageKey = `@hub_stale_prompt_${profile.id}`;
+      const lastPromptStr = await AsyncStorage.getItem(storageKey);
+      if (lastPromptStr) {
+        const lastPromptTime = parseInt(lastPromptStr, 10);
+        if (Date.now() - lastPromptTime < 24 * 60 * 60 * 1000) {
+          return;
+        }
+      }
+
+      promptCleanUp(stale);
+    } catch (err) {
+      console.warn('Failed to check expiring hub posts:', err);
+    }
+  }, [profile?.id, promptCleanUp]);
+
   // Listen for incoming mention from navigation
   useEffect(() => {
     if (mention) {
@@ -141,32 +240,28 @@ export default function CommunityScreen() {
     }
   }, [postId, posts]);
 
-  const loadPosts = useCallback(async () => {
-    if (!activeRoute || !activeRoute.route_hash || !profile) {
-      setLoading(false);
-      return;
-    }
-    const data = await getPosts(activeRoute.route_hash, profile.id);
-    setPosts(data);
-    setLoading(false);
-  }, [activeRoute, profile]);
-
   useEffect(() => {
-    loadPosts();
-  }, [loadPosts]);
+    loadPosts().then(() => {
+      checkExpiringPosts();
+    });
+  }, [loadPosts, checkExpiringPosts]);
 
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener('refresh_data', () => {
       loadPosts();
+      checkExpiringPosts();
     });
     return () => sub.remove();
-  }, [loadPosts]);
+  }, [loadPosts, checkExpiringPosts]);
+
 
   const onRefresh = async () => {
     setRefreshing(true);
     await loadPosts();
+    await checkExpiringPosts();
     setRefreshing(false);
   };
+
 
   const handleLike = async (postId: string, currentlyLiked: boolean) => {
     if (!profile) return;
@@ -342,8 +437,45 @@ export default function CommunityScreen() {
       ) : (
         <>
           <RouteBanner theme={theme} activeRoute={activeRoute} />
+
+          {expiringPosts.length > 0 && showExpiringBanner && (
+            <View
+              style={[
+                styles.expiringBanner,
+                {
+                  backgroundColor: `${theme.colors.warning}14`,
+                  borderColor: `${theme.colors.warning}35`,
+                },
+              ]}
+            >
+              <View style={styles.expiringBannerLeft}>
+                <Ionicons name="sparkles" size={18} color={theme.colors.warning} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.expiringBannerTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>
+                    Clean Up Older Posts ({expiringPosts.length})
+                  </Text>
+                  <Text style={[styles.expiringBannerDesc, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
+                    You have updates past or approaching 1 week. Delete them to keep info fresh?
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.expiringBannerActions}>
+                <Pressable
+                  onPress={() => promptCleanUp(expiringPosts)}
+                  style={[styles.expiringBannerBtn, { backgroundColor: theme.colors.primary }]}
+                >
+                  <Text style={{ color: '#fff', fontSize: 12, fontFamily: 'Inter-SemiBold' }}>Clean Up</Text>
+                </Pressable>
+                <Pressable onPress={() => setShowExpiringBanner(false)} hitSlop={8} style={{ padding: 4 }}>
+                  <Ionicons name="close" size={16} color={theme.colors.textMuted} />
+                </Pressable>
+              </View>
+            </View>
+          )}
+
           <ScrollView
             style={styles.feed}
+
             contentContainerStyle={styles.feedContent}
             showsVerticalScrollIndicator={false}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}
@@ -671,7 +803,44 @@ const styles = StyleSheet.create({
   routeBannerDotRed: { width: 8, height: 8, borderRadius: 4 },
   routeBannerLabels: { flex: 1, gap: 4 },
   routeBannerMeta: { flexDirection: 'row', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(13, 148, 136, 0.15)' },
+  expiringBanner: {
+    marginHorizontal: 20,
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  expiringBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 10,
+  },
+  expiringBannerTitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+  },
+  expiringBannerDesc: {
+    fontSize: 11,
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  expiringBannerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginLeft: 8,
+  },
+  expiringBannerBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
   feed: { flex: 1 },
+
   feedContent: { paddingHorizontal: 20, paddingBottom: 100 },
   postCard: { borderRadius: 16, padding: 16, marginBottom: 14, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 8, elevation: 4 },
   authorRow: { flexDirection: 'row', alignItems: 'center' },

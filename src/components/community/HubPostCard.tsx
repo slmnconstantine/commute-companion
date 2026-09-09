@@ -125,6 +125,10 @@ function HubPostCard({
     onLike(post.id, !!post.user_has_liked);
   };
 
+  const postAgeDays = (Date.now() - new Date(post.created_at).getTime()) / (24 * 60 * 60 * 1000);
+  const isApproachingWeek = postAgeDays >= 6 && postAgeDays < 7;
+  const isPastWeek = postAgeDays >= 7;
+
   return (
     <Pressable
       style={({ pressed }) => [
@@ -154,9 +158,35 @@ function HubPostCard({
             <Text style={[styles.authorName, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]} numberOfLines={1}>
               {post.author?.full_name}
             </Text>
-            <Text style={[styles.timestamp, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
-              {formatRelativeTime(post.created_at)}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <Text style={[styles.timestamp, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
+                {formatRelativeTime(post.created_at)}
+              </Text>
+              {currentUserId && post.author_id === currentUserId && (isApproachingWeek || isPastWeek) && (
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 3,
+                    paddingHorizontal: 5,
+                    paddingVertical: 1,
+                    borderRadius: 4,
+                    backgroundColor: isPastWeek ? `${theme.colors.error}18` : `${theme.colors.warning}18`,
+                  }}
+                >
+                  <Ionicons name="time-outline" size={10} color={isPastWeek ? theme.colors.error : theme.colors.warning} />
+                  <Text
+                    style={{
+                      fontSize: 9,
+                      fontFamily: 'Inter-Medium',
+                      color: isPastWeek ? theme.colors.error : theme.colors.warning,
+                    }}
+                  >
+                    {isPastWeek ? 'Past 1 week' : 'Approaching 1w'}
+                  </Text>
+                </View>
+              )}
+            </View>
           </View>
         </Pressable>
 
