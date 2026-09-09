@@ -30,7 +30,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useNotifications } from '@/context/NotificationContext';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { getCommuterBookings } from '@/services/bookings';
-import { getDriverTrips } from '@/services/trips';
+import { getDriverTrips, cancelExpiredTrips } from '@/services/trips';
 import EmptyState from '@/components/common/EmptyState';
 import Skeleton from '@/components/common/Skeleton';
 import TripCard from '@/components/ride/TripCard';
@@ -136,7 +136,12 @@ const ActivityCard = React.memo(function ActivityCard({
   onReview?: () => void;
   onPress?: () => void;
 }) {
-  const statusInfo = STATUS_STYLES[booking.status] || STATUS_STYLES.pending;
+  const isTripExpiredOpen = ['open', 'full'].includes(booking.trip?.status) && isOlderThan24Hours(booking.trip?.departure_time);
+  const isTripCancelled = booking.trip?.status === 'cancelled';
+  const effectiveStatus = (isTripExpiredOpen || isTripCancelled) && (booking.status === 'pending' || booking.status === 'accepted')
+    ? 'cancelled'
+    : booking.status;
+  const statusInfo = STATUS_STYLES[effectiveStatus] || STATUS_STYLES.pending;
   const statusColor = theme.colors[statusInfo.colorKey];
 
   return (
@@ -402,6 +407,9 @@ export default function ActivityScreen() {
     if (!profile?.id) return;
     setLoading(true);
     try {
+      await cancelExpiredTrips().catch((err) => {
+        console.warn('cancelExpiredTrips error in activity loadData:', err);
+      });
       const data = await getCommuterBookings(profile.id);
       setBookings(data);
       if (profile.role === 'driver') {
@@ -470,14 +478,18 @@ export default function ActivityScreen() {
       .filter((b) => {
         const departureTime = b.trip.departure_time || b.created_at;
         const olderThan24h = isOlderThan24Hours(departureTime);
+        const isTripExpiredOpen = ['open', 'full'].includes(b.trip.status) && olderThan24h;
+        const isTripCancelled = b.trip.status === 'cancelled';
+        const isBookingCancelled = ['cancelled', 'rejected', 'dropped_off_early'].includes(b.status);
 
-        // 4 Segment Categorization with 24-Hour Auto-Archive Rule
+        // 4 Segment Categorization with 24-Hour Auto-Archive Rule & Auto-Cancellation
         if (activeSegment === 'Active') {
+          if (isTripExpiredOpen || isTripCancelled || isBookingCancelled) return false;
           return ['pending', 'accepted', 'open', 'full', 'ongoing'].includes(b.status);
         } else if (activeSegment === 'Completed') {
           return b.status === 'completed' && !olderThan24h;
         } else if (activeSegment === 'Cancelled') {
-          return ['cancelled', 'rejected', 'dropped_off_early'].includes(b.status);
+          return isBookingCancelled || isTripCancelled || isTripExpiredOpen;
         } else if (activeSegment === 'Archived') {
           return b.status === 'completed' && olderThan24h;
         }
@@ -524,14 +536,17 @@ export default function ActivityScreen() {
       .filter((t) => {
         const departureTime = t.departure_time || t.created_at;
         const olderThan24h = isOlderThan24Hours(departureTime);
+        const isExpiredOpen = ['open', 'full'].includes(t.status) && olderThan24h;
+        const isCancelled = t.status === 'cancelled';
 
-        // 4 Segment Categorization with 24-Hour Auto-Archive Rule
+        // 4 Segment Categorization with 24-Hour Auto-Archive Rule & Auto-Cancellation
         if (activeSegment === 'Active') {
+          if (isExpiredOpen || isCancelled) return false;
           return ['open', 'full', 'ongoing'].includes(t.status);
         } else if (activeSegment === 'Completed') {
           return t.status === 'completed' && !olderThan24h;
         } else if (activeSegment === 'Cancelled') {
-          return t.status === 'cancelled';
+          return isCancelled || isExpiredOpen;
         } else if (activeSegment === 'Archived') {
           return t.status === 'completed' && olderThan24h;
         }
@@ -566,6 +581,7 @@ export default function ActivityScreen() {
         }
       });
   }, [driverTrips, activeSegment, roleFilter, isDriver, searchQuery, paymentFilter, datePreset, customStart, customEnd]);
+
 
   // Total count for current view
   const totalCount = filteredBookings.length + filteredDriverTrips.length;

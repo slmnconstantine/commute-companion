@@ -14,7 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { TripWithDriver } from '@/types/database';
-import { formatDepartureTime } from '@/utils/dateFormatter';
+import { formatDepartureTime, isOlderThan24Hours } from '@/utils/dateFormatter';
 import { formatCurrency } from '@/utils/fareCalculator';
 import Avatar from '@/components/common/Avatar';
 import Badge from '@/components/common/Badge';
@@ -104,6 +104,9 @@ function TripCard({ trip, onPress, loading = false, isJoined, userBookingStatus 
     }).start();
   };
 
+  const isExpiredOpen = ['open', 'full'].includes(trip.status) && isOlderThan24Hours(trip.departure_time);
+  const effectiveTripStatus = isExpiredOpen ? 'cancelled' : trip.status;
+
   const userBooking = trip.bookings?.find((b) => b.commuter_id === profile?.id);
   const effectiveIsJoined = Boolean(
     isJoined ||
@@ -117,14 +120,14 @@ function TripCard({ trip, onPress, loading = false, isJoined, userBookingStatus 
   );
 
   const getStatusColor = () => {
+    if (effectiveTripStatus === 'cancelled') return theme.colors.error;
     if (effectiveIsJoined) return theme.colors.success;
     if (effectiveIsPending) return theme.colors.warning;
-    switch (trip.status) {
+    switch (effectiveTripStatus) {
       case 'open': return theme.colors.success;
       case 'full': return theme.colors.warning;
       case 'ongoing': return theme.colors.info;
       case 'completed': return theme.colors.info;
-      case 'cancelled': return theme.colors.error;
       default: return theme.colors.primary;
     }
   };
@@ -188,7 +191,12 @@ function TripCard({ trip, onPress, loading = false, isJoined, userBookingStatus 
               </Text>
             </View>
           )}
-          {effectiveIsJoined ? (
+          {effectiveTripStatus === 'cancelled' ? (
+            <Badge
+              label="Cancelled"
+              variant="cancelled"
+            />
+          ) : effectiveIsJoined ? (
             <Badge
               label="Joined"
               variant="joined"
@@ -200,17 +208,18 @@ function TripCard({ trip, onPress, loading = false, isJoined, userBookingStatus 
             />
           ) : (
             <Badge
-              label={trip.status}
+              label={effectiveTripStatus}
               variant={
-                trip.status === 'open' || trip.status === 'full'
+                effectiveTripStatus === 'open' || effectiveTripStatus === 'full'
                   ? 'pending'
-                  : trip.status === 'ongoing'
+                  : effectiveTripStatus === 'ongoing'
                     ? 'active'
                     : 'completed'
               }
             />
           )}
         </View>
+
       </View>
 
       {/* Route */}

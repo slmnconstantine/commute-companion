@@ -31,7 +31,8 @@ import EmptyState from '@/components/common/EmptyState';
 import Avatar from '@/components/common/Avatar';
 import { supabase } from '@/lib/supabase';
 
-import { getDriverTrips, getTrips } from '@/services/trips';
+import { getDriverTrips, getTrips, cancelExpiredTrips } from '@/services/trips';
+import { isOlderThan24Hours } from '@/utils/dateFormatter';
 import { getCommuterRequests, CommuterRequest } from '@/services/rideRequests';
 import type { TripWithDriver, Route } from '@/types/database';
 import AnimatedSegmentControl from '@/components/common/AnimatedSegmentControl';
@@ -379,9 +380,12 @@ export default function RidesScreen() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
+      await cancelExpiredTrips().catch(err => {
+        console.warn('cancelExpiredTrips in rides loadData:', err);
+      });
       // Load all open rides (in a real app, this would use activeRoute to filter nearby rides via PostGIS)
       const allRides = await getTrips({ limit: 50 });
-      setAvailableRides(allRides.filter(t => t.status === 'open' || t.status === 'full' || t.status === 'ongoing'));
+      setAvailableRides(allRides.filter(t => (t.status === 'open' || t.status === 'full' || t.status === 'ongoing') && !isOlderThan24Hours(t.departure_time)));
 
       // Load user's commuter bookings to detect joined trips
       const joinedMap: Record<string, 'pending' | 'accepted' | 'ongoing' | 'completed'> = {};
