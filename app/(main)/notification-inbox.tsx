@@ -1,15 +1,17 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
+import { useNotifications } from '@/context/NotificationContext';
 import EmptyState from '@/components/common/EmptyState';
 import NotificationSkeleton from '@/components/common/NotificationSkeleton';
 import BouncyPressable from '@/components/common/BouncyPressable';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { getUserNotifications, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification, deleteAllNotifications, AppNotification } from '@/services/notifications';
+import { supabase } from '@/lib/supabase';
 
 import { handleNotificationNavigation } from '@/utils/notificationRouter';
 
@@ -18,6 +20,7 @@ export default function NotificationInboxScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { profile } = useAuth();
+  const { refreshUnreadCount } = useNotifications();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -27,16 +30,42 @@ export default function NotificationInboxScreen() {
     try {
       const data = await getUserNotifications(profile.id);
       setNotifications(data);
+      refreshUnreadCount();
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
     }
-  }, [profile]);
+  }, [profile, refreshUnreadCount]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadNotifications();
+    }, [loadNotifications])
+  );
 
   useEffect(() => {
-    loadNotifications();
-  }, [loadNotifications]);
+    if (!profile?.id) return;
+    const channel = supabase
+      .channel(`user_notifications_${profile.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${profile.id}`,
+        },
+        () => {
+          loadNotifications();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [profile?.id, loadNotifications]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -46,8 +75,9 @@ export default function NotificationInboxScreen() {
 
   const handleNotificationPress = async (notification: AppNotification) => {
     if (!notification.read) {
-      await markNotificationAsRead(notification.id);
+      await markNotificationAsRead(notification.id, profile?.id);
       setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, read: true } : n));
+      refreshUnreadCount();
     }
 
     // Direct routing to the specific feature/screen
@@ -58,17 +88,20 @@ export default function NotificationInboxScreen() {
     if (!profile) return;
     await markAllNotificationsAsRead(profile.id);
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    refreshUnreadCount();
   };
 
   const handleDeleteNotification = async (id: string) => {
-    await deleteNotification(id);
+    await deleteNotification(id, profile?.id);
     setNotifications(prev => prev.filter(n => n.id !== id));
+    refreshUnreadCount();
   };
 
   const handleClearAll = async () => {
     if (!profile) return;
     await deleteAllNotifications(profile.id);
     setNotifications([]);
+    refreshUnreadCount();
   };
 
   const getRelativeTime = (dateStr: string) => {

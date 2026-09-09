@@ -24,9 +24,11 @@ interface TripCardProps {
   trip?: TripWithDriver;
   onPress?: () => void;
   loading?: boolean;
+  isJoined?: boolean;
+  userBookingStatus?: string | null;
 }
 
-function TripCard({ trip, onPress, loading = false }: TripCardProps) {
+function TripCard({ trip, onPress, loading = false, isJoined, userBookingStatus }: TripCardProps) {
   const { theme, mode } = useTheme();
   const { profile } = useAuth();
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -102,7 +104,21 @@ function TripCard({ trip, onPress, loading = false }: TripCardProps) {
     }).start();
   };
 
+  const userBooking = trip.bookings?.find((b) => b.commuter_id === profile?.id);
+  const effectiveIsJoined = Boolean(
+    isJoined ||
+    userBookingStatus === 'accepted' ||
+    userBookingStatus === 'ongoing' ||
+    (userBooking && ['accepted', 'ongoing'].includes(userBooking.status))
+  );
+  const effectiveIsPending = Boolean(
+    userBookingStatus === 'pending' ||
+    (!effectiveIsJoined && userBooking && userBooking.status === 'pending')
+  );
+
   const getStatusColor = () => {
+    if (effectiveIsJoined) return theme.colors.success;
+    if (effectiveIsPending) return theme.colors.warning;
     switch (trip.status) {
       case 'open': return theme.colors.success;
       case 'full': return theme.colors.warning;
@@ -151,11 +167,17 @@ function TripCard({ trip, onPress, loading = false }: TripCardProps) {
           <Text style={[styles.driverName, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>
             {trip.driver?.full_name}
           </Text>
-          <View style={styles.ratingRow}>
-            <Ionicons name="star" size={14} color={theme.colors.accent} />
-            <Text style={[styles.ratingText, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
-              {trip.driver?.rating_avg?.toFixed(1) || 'New'}
-            </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={styles.ratingRow}>
+              <Ionicons name="star" size={13} color={theme.colors.accent} />
+              <Text style={[styles.ratingText, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
+                {trip.driver?.rating_avg?.toFixed(1) || 'New'}
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 5, paddingVertical: 1.5, borderRadius: 4, backgroundColor: `${theme.colors.success}15` }}>
+              <Ionicons name="shield-checkmark" size={10} color={theme.colors.success} />
+              <Text style={{ color: theme.colors.success, fontSize: 9, fontFamily: 'Inter-SemiBold' }}>Live Verified</Text>
+            </View>
           </View>
         </View>
         <View style={styles.badgeRow}>
@@ -166,16 +188,28 @@ function TripCard({ trip, onPress, loading = false }: TripCardProps) {
               </Text>
             </View>
           )}
-          <Badge
-            label={trip.status}
-            variant={
-              trip.status === 'open' || trip.status === 'full'
-                ? 'pending'
-                : trip.status === 'ongoing'
-                  ? 'active'
-                  : 'completed'
-            }
-          />
+          {effectiveIsJoined ? (
+            <Badge
+              label="Joined"
+              variant="joined"
+            />
+          ) : effectiveIsPending ? (
+            <Badge
+              label="Requested"
+              variant="pending"
+            />
+          ) : (
+            <Badge
+              label={trip.status}
+              variant={
+                trip.status === 'open' || trip.status === 'full'
+                  ? 'pending'
+                  : trip.status === 'ongoing'
+                    ? 'active'
+                    : 'completed'
+              }
+            />
+          )}
         </View>
       </View>
 

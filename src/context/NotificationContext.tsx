@@ -1,19 +1,22 @@
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import * as Notifications from 'expo-notifications';
 import * as Haptics from 'expo-haptics';
-import { Alert, Animated } from 'react-native';
+import { Alert, Animated, AppState, AppStateStatus } from 'react-native';
 import { router } from 'expo-router';
 import NotificationBanner from '@/components/notifications/NotificationBanner';
 import NotificationPopup from '@/components/notifications/NotificationPopup';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { handleNotificationNavigation } from '@/utils/notificationRouter';
+import { createNotification, getUnreadNotificationsCount } from '@/services/notifications';
 
 interface NotificationContextType {
   driverPendingCount: number;
   commuterUpcomingCount: number;
+  unreadCount: number;
   refreshCounts: () => Promise<void>;
+  refreshUnreadCount: () => Promise<void>;
   showInAppNotification: (title: string, body: string, data?: any) => void;
   // Alert preference states
   pushEnabled: boolean;
@@ -35,6 +38,21 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const { profile } = useAuth();
   const [driverPendingCount, setDriverPendingCount] = useState(0);
   const [commuterUpcomingCount, setCommuterUpcomingCount] = useState(0);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const refreshUnreadCount = useCallback(async () => {
+    if (!profile?.id) return;
+    try {
+      const count = await getUnreadNotificationsCount(profile.id);
+      setUnreadCount(count);
+    } catch (e) {
+      console.warn('Failed to refresh unread count:', e);
+    }
+  }, [profile?.id]);
+
+  useEffect(() => {
+    refreshUnreadCount();
+  }, [refreshUnreadCount]);
 
   // In-app notification state
   const [activeNotification, setActiveNotification] = useState<{
@@ -312,17 +330,30 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       const { title, body, data } = notification.request.content;
       console.log('[PUSH] Received in-app match notification:', title, body, data);
       
+      // Store in notifications so it persists and appears in Notification Inbox
+      if (profile?.id && title) {
+        createNotification(
+          profile.id,
+          title,
+          body || '',
+          (data as any)?.type ? String((data as any).type) : 'general',
+          data
+        ).then(() => {
+          refreshUnreadCount();
+        }).catch(console.error);
+      }
+
       const { pushEnabled: push, rideAlerts: ride, chatAlerts: chat } = prefsRef.current;
       if (!push) {
         console.log('[PUSH] Suppressed in foreground: pushEnabled is false');
         return;
       }
       if (data) {
-        if ((data.type === 'ride_matched' || data.type === 'trip_update') && !ride) {
+        if (((data as any).type === 'ride_matched' || (data as any).type === 'trip_update') && !ride) {
           console.log('[PUSH] Suppressed in foreground: rideAlerts is false');
           return;
         }
-        if ((data.type === 'chat' || data.type === 'new_message') && !chat) {
+        if (((data as any).type === 'chat' || (data as any).type === 'new_message') && !chat) {
           console.log('[PUSH] Suppressed in foreground: chatAlerts is false');
           return;
         }
@@ -337,19 +368,82 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
     // 2. Background Tap Listener: Auto-route to the matching ride page, chatroom, community post, or verification
     const backgroundSub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const { data } = response.notification.request.content;
+      const { title, body, data } = response.notification.request.content;
       console.log('[PUSH] User tapped background notification:', data);
+
+      if (profile?.id && title) {
+        createNotification(
+          profile.id,
+          title,
+          body || '',
+          (data as any)?.type ? String((data as any).type) : 'general',
+          data
+        ).then(() => {
+          refreshUnreadCount();
+        }).catch(console.error);
+      }
 
       if (data) {
         handleNotificationNavigation(router, data);
       }
     });
 
+    // 3. Check if app was opened from a notification while killed
+    Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (response?.notification?.request?.content) {
+        const { title, body, data } = response.notification.request.content;
+        if (profile?.id && title) {
+          createNotification(
+            profile.id,
+            title,
+            body || '',
+            (data as any)?.type ? String((data as any).type) : 'general',
+            data
+          ).then(() => {
+            refreshUnreadCount();
+          }).catch(console.error);
+        }
+      }
+    });
+
+    // 4. Ingest any notifications sitting in the OS notification shade
+    const syncPresentedNotifications = async () => {
+      if (!profile?.id) return;
+      try {
+        const presented = await Notifications.getPresentedNotificationsAsync();
+        for (const notif of presented) {
+          const { title, body, data } = notif.request.content;
+          if (title) {
+            await createNotification(
+              profile.id,
+              title,
+              body || '',
+              (data as any)?.type ? String((data as any).type) : 'general',
+              data
+            );
+          }
+        }
+        await refreshUnreadCount();
+      } catch (err) {
+        console.warn('Error syncing presented notifications:', err);
+      }
+    };
+
+    syncPresentedNotifications();
+
+    const appStateSub = AppState.addEventListener('change', (nextState: AppStateStatus) => {
+      if (nextState === 'active') {
+        syncPresentedNotifications();
+        refreshUnreadCount();
+      }
+    });
+
     return () => {
       foregroundSub.remove();
       backgroundSub.remove();
+      appStateSub.remove();
     };
-  }, [profile?.id]);
+  }, [profile?.id, refreshUnreadCount]);
 
   const handleBannerPress = () => {
     if (!activeNotification) return;
@@ -362,7 +456,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       value={{
         driverPendingCount,
         commuterUpcomingCount,
+        unreadCount,
         refreshCounts,
+        refreshUnreadCount,
         showInAppNotification,
         pushEnabled,
         rideAlerts,

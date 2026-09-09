@@ -32,6 +32,7 @@ function shouldShowDateSeparator(messages: MessageWithSender[], index: number): 
 }
 
 import { getChatRoomWithTrip } from '@/services/chatRooms';
+import { LIVE_FACE_PREFIX } from '@/services/liveFaceVerification';
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -46,35 +47,117 @@ export default function ChatScreen() {
   const [sending, setSending] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const sendScale = useRef(new Animated.Value(1)).current;
+  const channelRef = useRef<any>(null);
+  const profilesCacheRef = useRef<Record<string, any>>({});
+
+  // Preload current user profile into sender cache
+  useEffect(() => {
+    if (profile?.id) {
+      profilesCacheRef.current[profile.id] = profile;
+    }
+  }, [profile]);
 
   useEffect(() => {
     if (!id) return;
     loadMessages();
     loadRoomDetails();
 
-    // Realtime subscription
+    // High-performance Realtime: Broadcast (sub-50ms) + Postgres Changes (fallback)
     const channel = supabase
-      .channel(`chat:${id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_room_id=eq.${id}` },
-        async (payload) => {
-          // Fetch the full message with sender
-          const { data } = await supabase
-            .from('messages')
-            .select('*, sender:profiles!sender_id(*)')
-            .eq('id', payload.new.id)
-            .single();
-          if (data) {
+      .channel(`chat:${id}`, {
+        config: {
+          broadcast: { self: false },
+        },
+      })
+      .on(
+        'broadcast',
+        { event: 'new_message' },
+        (event) => {
+          const incomingMsg = event.payload as MessageWithSender;
+          if (incomingMsg && incomingMsg.id && !incomingMsg.content?.startsWith(LIVE_FACE_PREFIX)) {
+            if (incomingMsg.sender_id && incomingMsg.sender) {
+              profilesCacheRef.current[incomingMsg.sender_id] = incomingMsg.sender;
+            }
             setMessages((prev) => {
-              if (prev.find(m => m.id === data.id)) return prev;
-              return [...prev, data as MessageWithSender];
+              if (
+                prev.some(
+                  (m) =>
+                    m.id === incomingMsg.id ||
+                    (m.sender_id === incomingMsg.sender_id &&
+                      m.content === incomingMsg.content &&
+                      Math.abs(new Date(m.created_at).getTime() - new Date(incomingMsg.created_at).getTime()) < 3000)
+                )
+              ) {
+                return prev;
+              }
+              return [...prev, incomingMsg];
             });
+            setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 30);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_room_id=eq.${id}` },
+        async (payload) => {
+          const newMsg = payload.new as any;
+          if (!newMsg || newMsg.content?.startsWith(LIVE_FACE_PREFIX)) return;
+
+          setMessages((prev) => {
+            // If message already rendered (via broadcast or optimistic temp), update ID seamlessly
+            const tempMatch = prev.find(
+              (m) => m.id.startsWith('temp_') && m.sender_id === newMsg.sender_id && m.content === newMsg.content
+            );
+            if (tempMatch) {
+              return prev.map((m) =>
+                m.id === tempMatch.id ? ({ ...m, id: newMsg.id, created_at: newMsg.created_at } as MessageWithSender) : m
+              );
+            }
+
+            if (prev.some((m) => m.id === newMsg.id)) {
+              return prev;
+            }
+
+            // Immediately display with cached sender profile (0ms delay)
+            const cachedSender =
+              profilesCacheRef.current[newMsg.sender_id] ||
+              (newMsg.sender_id === profile?.id ? profile : { id: newMsg.sender_id, full_name: 'Member' });
+
+            return [...prev, { ...newMsg, sender: cachedSender } as MessageWithSender];
+          });
+          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 30);
+
+          // If sender profile is unknown, fetch in background without delaying display
+          if (!profilesCacheRef.current[newMsg.sender_id] && newMsg.sender_id !== profile?.id) {
+            supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', newMsg.sender_id)
+              .single()
+              .then(({ data }) => {
+                if (data) {
+                  profilesCacheRef.current[newMsg.sender_id] = data;
+                  setMessages((prev) =>
+                    prev.map((m) =>
+                      m.sender_id === newMsg.sender_id && (!m.sender || m.sender.full_name === 'Member')
+                        ? { ...m, sender: data }
+                        : m
+                    )
+                  );
+                }
+              });
           }
         }
       )
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
-  }, [id]);
+    channelRef.current = channel;
+
+    return () => {
+      supabase.removeChannel(channel);
+      channelRef.current = null;
+    };
+  }, [id, profile?.id]);
 
   const loadRoomDetails = async () => {
     if (!id) return;
@@ -90,7 +173,13 @@ export default function ChatScreen() {
     if (!id) return;
     try {
       const msgs = await getMessages(id);
-      setMessages(msgs);
+      msgs.forEach((m) => {
+        if (m.sender_id && m.sender) {
+          profilesCacheRef.current[m.sender_id] = m.sender;
+        }
+      });
+      setMessages(msgs.filter((m) => !m.content?.startsWith(LIVE_FACE_PREFIX)));
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 50);
     } catch (e) {
       console.error('Failed to load messages:', e);
     }
@@ -124,25 +213,53 @@ export default function ChatScreen() {
     if (!newMessage.trim() || !id || !profile) return;
     const content = newMessage.trim();
 
+    // 1. Immediately clear input so user can type next message right away
+    setNewMessage('');
+
+    // Micro-animation for send button
     Animated.sequence([
-      Animated.timing(sendScale, { toValue: 0.85, duration: 100, useNativeDriver: true }),
+      Animated.timing(sendScale, { toValue: 0.85, duration: 80, useNativeDriver: true }),
       Animated.spring(sendScale, { toValue: 1, friction: 4, useNativeDriver: true }),
     ]).start();
 
-    setSending(true);
+    // 2. Optimistic UI: Display message instantly (0ms delay)
+    const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const optimisticMsg: MessageWithSender = {
+      id: tempId,
+      chat_room_id: id,
+      sender_id: profile.id,
+      content,
+      is_alert: false,
+      created_at: new Date().toISOString(),
+      sender: profile,
+    };
+
+    setMessages((prev) => [...prev, optimisticMsg]);
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 30);
+
+    // 3. Ultra-fast Broadcast to peers over WebSocket (<50ms delivery)
+    channelRef.current?.send({
+      type: 'broadcast',
+      event: 'new_message',
+      payload: optimisticMsg,
+    });
+
+    // 4. Persist to database in background
     try {
       const { data: sent, error } = await sendMessage(id, profile.id, content);
       if (sent && !error) {
-        setMessages((prev) => {
-          if (prev.find(m => m.id === sent.id)) return prev;
-          return [...prev, { ...sent, sender: profile } as MessageWithSender];
-        });
+        setMessages((prev) =>
+          prev.map((m) => (m.id === tempId ? ({ ...sent, sender: profile } as MessageWithSender) : m))
+        );
+      } else if (error) {
+        // Rollback optimistic message if error occurred
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
+        setNewMessage(content);
       }
-      setNewMessage('');
     } catch (e) {
       console.error('Failed to send message:', e);
-    } finally {
-      setSending(false);
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      setNewMessage(content);
     }
   };
 
@@ -314,9 +431,9 @@ export default function ChatScreen() {
           />
           <Animated.View style={{ transform: [{ scale: sendScale }] }}>
             <Pressable
-              style={[styles.sendBtn, { backgroundColor: theme.colors.primary, opacity: !newMessage.trim() || sending ? 0.5 : 1 }]}
+              style={[styles.sendBtn, { backgroundColor: theme.colors.primary, opacity: !newMessage.trim() ? 0.5 : 1 }]}
               onPress={handleSend}
-              disabled={!newMessage.trim() || sending}
+              disabled={!newMessage.trim()}
             >
               <Ionicons name="send" size={20} color="#fff" />
             </Pressable>

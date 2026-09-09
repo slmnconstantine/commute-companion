@@ -13,15 +13,31 @@ export function useCommandExecutor() {
   const router = useRouter();
 
   const handleNavigate = (cmd: AssistantCommand) => {
-    const screen = cmd.params.screen?.toLowerCase();
+    const screen = (cmd.params.screen || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
     switch (screen) {
-      case 'set-route': return router.push('/(main)/ride/set-route');
-      case 'home': return router.push('/(main)/(tabs)/');
+      case 'set-route':
+      case 'setroute':
+        return router.push('/(main)/ride/set-route');
+      case 'home':
+        return router.push('/(main)/(tabs)/');
       case 'hub':
-      case 'community': return router.push('/(main)/(tabs)/community');
-      case 'rides': return router.push('/(main)/(tabs)/rides');
+      case 'community':
+      case 'communityhub':
+        return router.push('/(main)/(tabs)/community');
+      case 'rides':
+      case 'ride':
+        return router.push('/(main)/(tabs)/rides');
       case 'activity':
-      case 'profile': return router.push(`/(main)/(tabs)/${screen}` as any);
+      case 'activities':
+      case 'history':
+      case 'transactions':
+        return router.push('/(main)/(tabs)/activity');
+      case 'profile':
+      case 'account':
+      case 'settings':
+        return router.push('/(main)/(tabs)/profile');
+      default:
+        return router.push('/(main)/(tabs)/');
     }
   };
 
@@ -53,7 +69,21 @@ export function useCommandExecutor() {
   };
 
   const handleAcceptBooking = async (cmd: AssistantCommand, currentContext: any, profile: any) => {
-    const tripId = currentContext?.selectedTripId;
+    let tripId = currentContext?.selectedTripId || currentContext?.tripId || currentContext?.activeTripId;
+
+    if (!tripId && profile?.id) {
+      const { data: activeTrips } = await supabase
+        .from('trips')
+        .select('id')
+        .eq('driver_id', profile.id)
+        .in('status', ['open', 'full', 'ongoing'])
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (activeTrips && activeTrips.length > 0) {
+        tripId = activeTrips[0].id;
+      }
+    }
+
     if (!tripId) return;
 
     const bookings = await getTripBookings(tripId);
@@ -75,9 +105,13 @@ export function useCommandExecutor() {
     try {
       const trip = await getTripById(tripId);
       if (trip) {
-        const seatsBooked = trip.fare_per_seat > 0 ? Math.round(targetBooking.fare_paid / trip.fare_per_seat) : 1;
+        const seatsBooked = trip.fare_per_seat > 0 ? Math.round(targetBooking.fare_paid / trip.fare_per_seat) : (targetBooking.seats_booked || 1);
         const newAvailableSeats = Math.max(0, trip.available_seats - seatsBooked);
-        await supabase.from('trips').update({ available_seats: newAvailableSeats }).eq('id', trip.id);
+        const updates: any = { available_seats: newAvailableSeats };
+        if (newAvailableSeats <= 0 && (trip.status === 'open' || trip.status === 'full')) {
+          updates.status = 'full';
+        }
+        await supabase.from('trips').update(updates).eq('id', trip.id);
       }
     } catch (seatErr) {
       console.error('Error updating available seats via voice accept:', seatErr);
@@ -98,6 +132,7 @@ export function useCommandExecutor() {
     }
 
     DeviceEventEmitter.emit('refresh_data');
+    DeviceEventEmitter.emit('booking_updated', { bookingId: targetBooking.id, status: 'accepted', tripId });
   };
 
   const handleDraftMessage = async (cmd: AssistantCommand, currentContext: any, profile: any) => {

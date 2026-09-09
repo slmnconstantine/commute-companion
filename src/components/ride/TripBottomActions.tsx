@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { formatCurrency } from '@/utils/fareCalculator';
 import { BookingWithCommuter, TripWithDriver } from '@/types/database';
@@ -14,6 +14,7 @@ interface TripBottomActionsProps {
   showChatButton: boolean;
   chatRoomId: string | null;
   processingBookingId: string | null;
+  isUpdatingTrip?: boolean;
   handleLeaveTrip: (id: string) => void;
   handleCommuterArrival: (id: string) => void;
   handleUpdateTripStatus: (status: 'ongoing' | 'completed') => void;
@@ -31,6 +32,7 @@ export default function TripBottomActions({
   showChatButton,
   chatRoomId,
   processingBookingId,
+  isUpdatingTrip = false,
   handleLeaveTrip,
   handleCommuterArrival,
   handleUpdateTripStatus,
@@ -70,6 +72,25 @@ export default function TripBottomActions({
         </View>
       )}
 
+      {/* Rejected Booking State with Rebook CTA */}
+      {!isDriver && userBooking && userBooking.status === 'rejected' && (
+        <View style={[styles.bottomCTA, { backgroundColor: theme.colors.surface, paddingBottom: insets.bottom + 16, borderTopColor: theme.colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
+          <View style={{ flex: 1, marginRight: 12 }}>
+            <Text style={{ color: theme.colors.error, fontFamily: 'Inter-SemiBold', fontSize: 14 }}>Booking Declined</Text>
+            <Text style={{ color: theme.colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 12 }}>The driver declined your request.</Text>
+          </View>
+          {trip.status === 'open' && trip.available_seats > 0 && (
+            <BouncyPressable
+              style={[styles.ctaButton, { backgroundColor: theme.colors.primary, paddingHorizontal: 18, paddingVertical: 10 }]}
+              hapticType="medium"
+              onPress={() => router.push(`/(main)/ride/book/${id}`)}
+            >
+              <Text style={[styles.ctaButtonText, { fontSize: 14 }]}>Request Again</Text>
+            </BouncyPressable>
+          )}
+        </View>
+      )}
+
       {/* Open Trip Chat CTA (Commuter) */}
       {!isDriver && showChatButton && trip.status !== 'ongoing' && (
         <View style={[styles.bottomCTA, { backgroundColor: theme.colors.surface, paddingBottom: insets.bottom + 16, borderTopColor: theme.colors.border, gap: 12 }]}>
@@ -95,12 +116,17 @@ export default function TripBottomActions({
                   flexDirection: 'row',
                   gap: 6,
                   flexShrink: 0,
+                  opacity: processingBookingId === userBooking.id ? 0.6 : 1,
                 }
               ]}
               onPress={() => handleLeaveTrip(userBooking.id)}
               disabled={processingBookingId === userBooking.id}
             >
-              <Ionicons name="exit-outline" size={16} color={theme.colors.error} />
+              {processingBookingId === userBooking.id ? (
+                <ActivityIndicator size="small" color={theme.colors.error} />
+              ) : (
+                <Ionicons name="exit-outline" size={16} color={theme.colors.error} />
+              )}
               <Text style={[styles.ctaButtonText, { color: theme.colors.error, fontSize: 13 }]} numberOfLines={1}>Leave Trip</Text>
             </Pressable>
           )}
@@ -112,10 +138,23 @@ export default function TripBottomActions({
         <View style={[styles.bottomCTA, { backgroundColor: theme.colors.surface, paddingBottom: insets.bottom + 16, borderTopColor: theme.colors.border, flexDirection: 'column', gap: 12, alignItems: 'stretch' }]}>
           {!userBooking.commuter_confirmed ? (
             <Pressable
-              style={[styles.ctaButton, { backgroundColor: theme.colors.success, flexDirection: 'row', gap: 8 }]}
+              style={[
+                styles.ctaButton,
+                {
+                  backgroundColor: theme.colors.success,
+                  flexDirection: 'row',
+                  gap: 8,
+                  opacity: isUpdatingTrip ? 0.7 : 1,
+                }
+              ]}
               onPress={() => handleCommuterArrival(userBooking.id)}
+              disabled={isUpdatingTrip}
             >
-              <Ionicons name="checkmark-circle" size={20} color="#fff" />
+              {isUpdatingTrip ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="checkmark-circle" size={20} color="#fff" />
+              )}
               <Text style={styles.ctaButtonText}>Confirm Arrival</Text>
             </Pressable>
           ) : (
@@ -144,12 +183,17 @@ export default function TripBottomActions({
                 shadowOpacity: 0,
                 flexDirection: 'row',
                 gap: 8,
+                opacity: processingBookingId === userBooking.id ? 0.6 : 1,
               }
             ]}
             onPress={() => handleEndRideEarly(userBooking.id)}
             disabled={processingBookingId === userBooking.id}
           >
-            <Ionicons name="exit-outline" size={20} color={theme.colors.error} />
+            {processingBookingId === userBooking.id ? (
+              <ActivityIndicator size="small" color={theme.colors.error} />
+            ) : (
+              <Ionicons name="exit-outline" size={20} color={theme.colors.error} />
+            )}
             <Text style={[styles.ctaButtonText, { color: theme.colors.error }]}>End Ride Early</Text>
           </Pressable>
         </View>
@@ -173,20 +217,46 @@ export default function TripBottomActions({
         <View style={[styles.bottomCTA, { backgroundColor: theme.colors.surface, paddingBottom: insets.bottom + 16, borderTopColor: theme.colors.border, flexDirection: 'column', gap: 12, alignItems: 'stretch' }]}>
           {(trip.status === 'open' || trip.status === 'full') && (
             <Pressable
-              style={[styles.ctaButton, { backgroundColor: theme.colors.success, flexDirection: 'row', gap: 8 }]}
+              style={[
+                styles.ctaButton,
+                {
+                  backgroundColor: theme.colors.success,
+                  flexDirection: 'row',
+                  gap: 8,
+                  opacity: isUpdatingTrip ? 0.7 : 1,
+                }
+              ]}
               onPress={() => handleUpdateTripStatus('ongoing')}
+              disabled={isUpdatingTrip}
             >
-              <Ionicons name="car" size={20} color="#fff" />
+              {isUpdatingTrip ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="car" size={20} color="#fff" />
+              )}
               <Text style={styles.ctaButtonText}>Set Off (Start Trip)</Text>
             </Pressable>
           )}
 
           {trip.status === 'ongoing' && (
             <Pressable
-              style={[styles.ctaButton, { backgroundColor: theme.colors.primary, flexDirection: 'row', gap: 8 }]}
+              style={[
+                styles.ctaButton,
+                {
+                  backgroundColor: theme.colors.primary,
+                  flexDirection: 'row',
+                  gap: 8,
+                  opacity: isUpdatingTrip ? 0.7 : 1,
+                }
+              ]}
               onPress={() => handleUpdateTripStatus('completed')}
+              disabled={isUpdatingTrip}
             >
-              <Ionicons name="checkmark-circle" size={20} color="#fff" />
+              {isUpdatingTrip ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="checkmark-circle" size={20} color="#fff" />
+              )}
               <Text style={styles.ctaButtonText}>Complete Trip</Text>
             </Pressable>
           )}

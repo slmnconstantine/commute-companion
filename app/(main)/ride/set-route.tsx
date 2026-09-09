@@ -357,7 +357,11 @@ export default function SetRouteScreen() {
             logo={false}
             attribution={false}
             compass={false}
-            mapStyle={{ version: 8, sources: {}, layers: [] }}
+            mapStyle={
+              mode === 'dark'
+                ? 'https://tiles.openfreemap.org/styles/dark'
+                : 'https://tiles.openfreemap.org/styles/positron'
+            }
             onPress={handleMapPress}
           >
             <Camera
@@ -367,18 +371,6 @@ export default function SetRouteScreen() {
                 zoom: 14,
               }}
             />
-            <RasterSource
-              id="osm"
-              tiles={[
-                mode === 'dark'
-                  ? 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'
-                  : 'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png'
-              ]}
-              tileSize={256}
-              maxzoom={19}
-            >
-              <Layer id="osm-layer" type="raster" source="osm" />
-            </RasterSource>
 
             {/* User location indicator */}
             {location && (

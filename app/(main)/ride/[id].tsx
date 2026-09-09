@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Image, DeviceEventEmitter } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
@@ -13,7 +13,7 @@ import { getTripById, updateTripStatus, hasActiveTrip } from '@/services/trips';
 import { getTripBookings, updateBookingStatus, deleteBooking, confirmCommuterArrival, confirmDriverArrival } from '@/services/bookings';
 import { getOrCreateChatRoom, joinChatRoom, getChatRoom } from '@/services/chatRooms';
 import { sendMessage } from '@/services/messages';
-import { decodePolyline } from '@/services/routing';
+import { decodePolyline, getRoute } from '@/services/routing';
 import { supabase } from '@/lib/supabase';
 import { formatDepartureTime } from '@/utils/dateFormatter';
 import { formatCurrency, calculateFare, getDriverPayout } from '@/utils/fareCalculator';
@@ -22,12 +22,14 @@ import * as Location from 'expo-location';
 import Avatar from '@/components/common/Avatar';
 import Badge from '@/components/common/Badge';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
-import { TripWithDriver, BookingWithCommuter } from '@/types/database';
+import { TripWithDriver, BookingWithCommuter, Trip } from '@/types/database';
 import DriverBookingsList from '@/components/ride/DriverBookingsList';
 import TripBottomActions from '@/components/ride/TripBottomActions';
 import RouteLayer from '@/components/common/RouteLayer';
 import AnimatedMarker from '@/components/common/AnimatedMarker';
 import ProfileCardModal from '@/components/common/ProfileCardModal';
+import { getDriverLiveCapture, getTripCommuterCaptures, LiveFaceRecord } from '@/services/liveFaceVerification';
+import LiveFacePreviewModal from '@/components/verification/LiveFacePreviewModal';
 import ETAOverlay from '@/components/ride/ETAOverlay';
 import SOSButton from '@/components/ride/SOSButton';
 import { recordCancellation, getCancellationWarning } from '@/utils/cancellationTracker';
@@ -70,6 +72,7 @@ export default function TripDetailScreen() {
   const [bookings, setBookings] = useState<BookingWithCommuter[]>([]);
   const [chatRoomId, setChatRoomId] = useState<string | null>(null);
   const [processingBookingId, setProcessingBookingId] = useState<string | null>(null);
+  const [isUpdatingTrip, setIsUpdatingTrip] = useState(false);
   const [hasPromptedArrival, setHasPromptedArrival] = useState(false);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
@@ -118,6 +121,12 @@ export default function TripDetailScreen() {
   const totalSeatsBooked = validBookings.reduce((sum, b) => sum + (b.seats_booked || 1), 0);
   const displaySeats = trip?.status === 'completed' ? totalSeatsBooked : trip?.available_seats;
 
+  // Live face capture states
+  const [driverLiveRecord, setDriverLiveRecord] = useState<LiveFaceRecord | null>(null);
+  const [commuterLiveRecords, setCommuterLiveRecords] = useState<Record<string, LiveFaceRecord>>({});
+  const [showDriverLivePreview, setShowDriverLivePreview] = useState(false);
+  const [previewPassenger, setPreviewPassenger] = useState<{ name: string; photoUri: string; pickup?: string } | null>(null);
+
   // Compute ETA & remaining distance during ongoing trips
   const etaInfo = React.useMemo(() => {
     if (!trip || trip.status !== 'ongoing' || !driverLiveLocation || routeCoords.length < 2) return null;
@@ -137,29 +146,119 @@ export default function TripDetailScreen() {
     }, [id])
   );
 
-  const loadTrip = async () => {
+  const loadTrip = async (showLoadingSpinner = true) => {
     if (!id) return;
-    setLoading(true);
+    if (showLoadingSpinner) setLoading(true);
     try {
-      const [data, bookingsData, chatRoom] = await Promise.all([
+      const [data, bookingsData, chatRoom, driverCap, commuterCaps] = await Promise.all([
         getTripById(id),
         getTripBookings(id),
-        getChatRoom(id)
+        getChatRoom(id),
+        getDriverLiveCapture(id),
+        getTripCommuterCaptures(id),
       ]);
 
       setTrip(data);
       if (data?.route_polyline) {
-        setRouteCoords(decodePolyline(data.route_polyline));
+        const decoded = decodePolyline(data.route_polyline);
+        if (decoded.length >= 2 && data.origin_lat && data.destination_lat) {
+          const start = decoded[0];
+          const end = decoded[decoded.length - 1];
+          const startDist = Math.hypot(start.longitude - data.origin_lng, start.latitude - data.origin_lat);
+          const endDist = Math.hypot(end.longitude - data.destination_lng, end.latitude - data.destination_lat);
+          if (startDist < 0.015 && endDist < 0.015) {
+            setRouteCoords(decoded);
+          } else {
+            // Polyline does not align with pickup/dropoff endpoints, re-fetch accurate road route
+            getRoute(data.origin_lat, data.origin_lng, data.destination_lat, data.destination_lng)
+              .then(fresh => {
+                if (fresh?.coordinates?.length) {
+                  setRouteCoords(fresh.coordinates);
+                  supabase
+                    .from('trips')
+                    .update({ route_polyline: fresh.encodedPolyline })
+                    .eq('id', data.id)
+                    .then(() => {});
+                } else {
+                  setRouteCoords(decoded);
+                }
+              })
+              .catch(() => setRouteCoords(decoded));
+          }
+        } else {
+          setRouteCoords(decoded);
+        }
+      } else if (data?.origin_lat && data?.destination_lat) {
+        getRoute(data.origin_lat, data.origin_lng, data.destination_lat, data.destination_lng)
+          .then(fresh => {
+            if (fresh?.coordinates?.length) setRouteCoords(fresh.coordinates);
+          })
+          .catch(() => {});
       }
 
       setBookings(bookingsData);
       if (chatRoom) setChatRoomId(chatRoom.id);
+      if (driverCap) setDriverLiveRecord(driverCap);
+      if (commuterCaps) setCommuterLiveRecords(commuterCaps);
     } catch (e) {
-      Alert.alert('Error', 'Failed to load trip details.');
+      if (showLoadingSpinner) Alert.alert('Error', 'Failed to load trip details.');
     } finally {
-      setLoading(false);
+      if (showLoadingSpinner) setLoading(false);
     }
   };
+
+  // Real-time synchronization for bookings, trip updates, and local voice commands
+  useEffect(() => {
+    if (!id) return;
+
+    const subRefresh = DeviceEventEmitter.addListener('refresh_data', () => {
+      loadTrip(false);
+    });
+
+    const subBooking = DeviceEventEmitter.addListener('booking_updated', (data?: { bookingId?: string; status?: string; tripId?: string }) => {
+      if (data?.bookingId) {
+        setBookings(prev => prev.map(b => b.id === data.bookingId ? { ...b, status: (data.status as any) || 'accepted' } : b));
+      }
+      loadTrip(false);
+    });
+
+    const channel = supabase
+      .channel(`trip-live-sync-${id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'bookings',
+          filter: `trip_id=eq.${id}`,
+        },
+        () => {
+          // Silent background reload
+          loadTrip(false);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'trips',
+          filter: `id=eq.${id}`,
+        },
+        (payload) => {
+          if (payload.new) {
+            setTrip(prev => prev ? { ...prev, ...(payload.new as any) } : (payload.new as any));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subRefresh.remove();
+      subBooking.remove();
+      supabase.removeChannel(channel);
+    };
+  }, [id]);
 
   // Handle Live Tracking
   useEffect(() => {
@@ -440,22 +539,30 @@ export default function TripDetailScreen() {
   };
 
   const handleCommuterArrival = async (bookingId: string) => {
+    if (isUpdatingTrip) return;
+    setIsUpdatingTrip(true);
     try {
       await confirmCommuterArrival(bookingId);
       Alert.alert('Arrived! 🎉', 'You have confirmed your arrival. Waiting for the driver to confirm.');
-      await loadTrip();
+      await loadTrip(false);
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Failed to confirm arrival');
+    } finally {
+      setIsUpdatingTrip(false);
     }
   };
 
   const handleDriverArrival = async (bookingId: string) => {
+    if (isUpdatingTrip) return;
+    setIsUpdatingTrip(true);
     try {
       await confirmDriverArrival(bookingId);
       Alert.alert('Arrival Confirmed! 🏁', 'You have confirmed drop-off for this passenger.');
-      await loadTrip();
+      await loadTrip(false);
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Failed to confirm arrival');
+    } finally {
+      setIsUpdatingTrip(false);
     }
   };
 
@@ -477,7 +584,7 @@ export default function TripDetailScreen() {
               }
               setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: 'dropped_off_early' as any } : b));
               Alert.alert('Ride Ended', 'You have successfully ended your ride.');
-              await loadTrip();
+              await loadTrip(false);
             } catch (e: any) {
               Alert.alert('Error', e.message || 'Failed to end ride early');
             } finally {
@@ -490,6 +597,8 @@ export default function TripDetailScreen() {
   };
 
   const handleUpdateTripStatus = async (newStatus: 'ongoing' | 'completed') => {
+    if (isUpdatingTrip) return;
+
     if (newStatus === 'ongoing') {
       if (profile?.id) {
         const hasActive = await hasActiveTrip(profile.id);
@@ -507,12 +616,16 @@ export default function TripDetailScreen() {
           {
             text: 'Set Off',
             onPress: async () => {
+              if (isUpdatingTrip) return;
+              setIsUpdatingTrip(true);
               try {
                 await updateTripStatus(id as string, 'ongoing');
                 setTrip(prev => prev ? { ...prev, status: 'ongoing' } : null);
                 Alert.alert('Success', 'Trip started! Drive safely.');
               } catch (e: any) {
                 Alert.alert('Error', e.message || 'Failed to update trip status');
+              } finally {
+                setIsUpdatingTrip(false);
               }
             }
           }
@@ -530,6 +643,8 @@ export default function TripDetailScreen() {
           {
             text: 'Complete',
             onPress: async () => {
+              if (isUpdatingTrip) return;
+              setIsUpdatingTrip(true);
               try {
                 // Bulk driver confirm unconfirmed accepted bookings
                 const unconfirmed = bookings.filter(b => b.status === 'accepted' && !b.driver_confirmed);
@@ -540,9 +655,11 @@ export default function TripDetailScreen() {
                 await updateTripStatus(id as string, 'completed');
                 setTrip(prev => prev ? { ...prev, status: 'completed' } : null);
                 router.push(`/(main)/ride/trip-summary?tripId=${id}` as any);
-                await loadTrip();
+                await loadTrip(false);
               } catch (e: any) {
                 Alert.alert('Error', e.message || 'Failed to update trip status');
+              } finally {
+                setIsUpdatingTrip(false);
               }
             }
           }
@@ -597,8 +714,8 @@ export default function TripDetailScreen() {
           compass={false}
           mapStyle={
             mode === 'dark'
-              ? 'https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json'
-              : 'https://basemaps.cartocdn.com/gl/voyager-nolabels-gl-style/style.json'
+              ? 'https://tiles.openfreemap.org/styles/dark'
+              : 'https://tiles.openfreemap.org/styles/positron'
           }
         >
           <Camera
@@ -742,6 +859,7 @@ export default function TripDetailScreen() {
             </Text>
           </View>
 
+
           {/* Route */}
           <View style={[styles.routeCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
             <View style={styles.routeRow}>
@@ -782,6 +900,33 @@ export default function TripDetailScreen() {
                   {trip.vehicle.model} • {trip.vehicle.plate_number}
                 </Text>
               )}
+              {driverLiveRecord ? (
+                <Pressable
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    marginTop: 6,
+                    paddingVertical: 5,
+                    paddingHorizontal: 10,
+                    borderRadius: 8,
+                    backgroundColor: `${theme.colors.success}15`,
+                    alignSelf: 'flex-start',
+                    borderWidth: 1,
+                    borderColor: theme.colors.success,
+                  }}
+                  onPress={() => setShowDriverLivePreview(true)}
+                >
+                  {driverLiveRecord.photoUri ? (
+                    <Image source={{ uri: driverLiveRecord.photoUri }} style={{ width: 18, height: 18, borderRadius: 9 }} />
+                  ) : (
+                    <Ionicons name="shield-checkmark" size={14} color={theme.colors.success} />
+                  )}
+                  <Text style={{ color: theme.colors.success, fontSize: 11, fontFamily: 'Inter-SemiBold' }}>
+                    View Driver Live Photo
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
           </View>
 
@@ -815,6 +960,8 @@ export default function TripDetailScreen() {
               handleRemovePassenger={handleRemovePassenger}
               handleDriverArrival={handleDriverArrival}
               onAvatarPress={(userId) => { setSelectedProfileId(userId); setProfileModalVisible(true); }}
+              commuterLiveRecords={commuterLiveRecords}
+              onViewPassengerPhoto={(passenger) => setPreviewPassenger(passenger)}
             />
           )}
         </BottomSheetScrollView>
@@ -830,6 +977,7 @@ export default function TripDetailScreen() {
         showChatButton={!!showChatButton}
         chatRoomId={chatRoomId}
         processingBookingId={processingBookingId}
+        isUpdatingTrip={isUpdatingTrip}
         handleLeaveTrip={handleLeaveTrip}
         handleCommuterArrival={handleCommuterArrival}
         handleUpdateTripStatus={handleUpdateTripStatus}
@@ -843,6 +991,27 @@ export default function TripDetailScreen() {
         userId={selectedProfileId}
         visible={profileModalVisible}
         onClose={() => setProfileModalVisible(false)}
+      />
+
+
+      {/* Driver Live Photo Preview Modal (for Commuters) */}
+      <LiveFacePreviewModal
+        visible={showDriverLivePreview}
+        onClose={() => setShowDriverLivePreview(false)}
+        photoUri={driverLiveRecord?.photoUri || trip?.driver?.avatar_url}
+        userName={trip?.driver?.full_name || 'Driver'}
+        role="driver"
+        timestamp={driverLiveRecord?.timestamp}
+      />
+
+      {/* Passenger Live Photo Preview Modal (for Drivers at pickup) */}
+      <LiveFacePreviewModal
+        visible={!!previewPassenger}
+        onClose={() => setPreviewPassenger(null)}
+        photoUri={previewPassenger?.photoUri}
+        userName={previewPassenger?.name || 'Passenger'}
+        role="commuter"
+        pickupLocation={previewPassenger?.pickup || trip?.origin_label}
       />
     </View>
   );
@@ -867,7 +1036,7 @@ const styles = StyleSheet.create({
   deleteBtn: { position: 'absolute', right: 16, width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 4, zIndex: 10 },
   focusBtn: { position: 'absolute', width: 40, height: 40, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 4, zIndex: 10 },
   content: { flex: 1 },
-  contentInner: { padding: 20, gap: 16, paddingBottom: 120 },
+  contentInner: { padding: 20, gap: 16, paddingBottom: 170 },
   statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   timeText: { fontSize: 14 },
   routeCard: { borderRadius: 16, borderWidth: 1, padding: 16 },

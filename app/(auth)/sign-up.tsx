@@ -76,9 +76,15 @@ export default function SignUpScreen() {
     setLoading(true);
     try {
       // All users default to 'commuter' role
-      const { error } = await signUp(email.trim(), password, username.trim(), fullName.trim(), 'commuter');
+      const { error, session } = await signUp(email.trim(), password, username.trim(), fullName.trim(), 'commuter');
       if (error) {
         Alert.alert('Registration Failed', error.message || 'Could not create account.');
+      } else if (session) {
+        Alert.alert(
+          'Welcome to Commute Companion! 🎉',
+          'Your account has been created successfully.',
+          [{ text: 'Get Started', onPress: () => router.replace('/(main)/(tabs)') }]
+        );
       } else {
         Alert.alert(
           'Account Created!',
@@ -201,7 +207,6 @@ export default function SignUpScreen() {
                 setPassword(t);
                 setErrors((e) => ({ ...e, password: '' }));
               }}
-              placeholder="Min. 8 characters"
               icon="lock-closed-outline"
               secureTextEntry={!showPassword}
               rightIcon={showPassword ? 'eye-off-outline' : 'eye-outline'}

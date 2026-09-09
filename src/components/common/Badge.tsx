@@ -19,7 +19,9 @@ type BadgeVariant =
   | 'active'
   | 'completed'
   | 'cancelled'
-  | 'accepted';
+  | 'accepted'
+  | 'rejected'
+  | 'joined';
 
 interface BadgeProps {
   /** Display text */
@@ -36,6 +38,7 @@ function useVariantColors(variant: BadgeVariant) {
   const { theme } = useTheme();
 
   const map: Record<BadgeVariant, { bg: string; text: string }> = {
+    joined: { bg: theme.colors.success, text: theme.colors.success },
     verified: { bg: theme.colors.success, text: theme.colors.success },
     active: { bg: theme.colors.success, text: theme.colors.success },
     accepted: { bg: theme.colors.success, text: theme.colors.success },
@@ -45,9 +48,21 @@ function useVariantColors(variant: BadgeVariant) {
     completed: { bg: theme.colors.info, text: theme.colors.info },
     commuter: { bg: theme.colors.primary, text: theme.colors.primary },
     cancelled: { bg: theme.colors.error, text: theme.colors.error },
+    rejected: { bg: theme.colors.error, text: theme.colors.error },
   };
 
   return map[variant];
+}
+
+/** Format status string into clean Title Case (e.g., "accepted" -> "Accepted", "in_progress" -> "In Progress") */
+function formatBadgeLabel(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/[_-]/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
 }
 
 /** Convert a hex colour to rgba with given alpha */
@@ -64,6 +79,7 @@ export default function Badge({ label, variant }: BadgeProps) {
   const { bg, text } = useVariantColors(variant);
 
   const bgOpacity = variant === 'unverified' ? 0.3 : 0.15;
+  const formattedLabel = formatBadgeLabel(label);
 
   return (
     <View
@@ -76,7 +92,7 @@ export default function Badge({ label, variant }: BadgeProps) {
       ]}
     >
       <Text style={[styles.label, theme.typography.small, { color: text }]}>
-        {label}
+        {formattedLabel}
       </Text>
     </View>
   );

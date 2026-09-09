@@ -11,7 +11,7 @@ interface AuthContextType {
   profile: Profile | null;
   isLoading: boolean;
   signIn: (identifier: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, username: string, fullName: string, role: 'driver' | 'commuter') => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, username: string, fullName: string, role: 'driver' | 'commuter') => Promise<{ error: Error | null; session?: Session | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   updateProfile: (updates: Partial<Profile>) => Promise<{ error: Error | null }>;
@@ -23,7 +23,7 @@ const AuthContext = createContext<AuthContextType>({
   profile: null,
   isLoading: true,
   signIn: async () => ({ error: null }),
-  signUp: async () => ({ error: null }),
+  signUp: async () => ({ error: null, session: null }),
   signOut: async () => {},
   refreshProfile: async () => {},
   updateProfile: async () => ({ error: null }),
@@ -141,12 +141,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { role, full_name: fullName, username } },
+      options: {
+        data: { role, full_name: fullName, username },
+        emailRedirectTo: 'commute-companion://',
+      },
     });
     
-    if (error) return { error: error as Error | null };
+    if (error) return { error: error as Error | null, session: null };
     
-    return { error: null };
+    return { error: null, session: data.session };
   };
 
   const signOut = async () => {

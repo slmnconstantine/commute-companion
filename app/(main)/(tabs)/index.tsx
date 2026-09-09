@@ -46,63 +46,28 @@ import RouteLayer from '@/components/common/RouteLayer';
 import AnimatedMarker from '@/components/common/AnimatedMarker';
 import GlassCard from '@/components/common/GlassCard';
 import ProfileCardModal from '@/components/common/ProfileCardModal';
+import { useNotifications } from '@/context/NotificationContext';
 
 
 
-// ── Stable mapStyle constants (MUST be outside component to avoid re-renders) ──
-const LIGHT_MAP_STYLE = {
-  version: 8 as const,
-  sources: {
-    osm: {
-      type: 'raster' as const,
-      tiles: [
-        'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
-        'https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
-        'https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
-        'https://d.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
-      ],
-      tileSize: 256,
-    },
-  },
-  layers: [
-    {
-      id: 'osm-tiles',
-      type: 'raster' as const,
-      source: 'osm',
-    },
-  ],
-};
-
-const DARK_MAP_STYLE = {
-  version: 8 as const,
-  sources: {
-    osm: {
-      type: 'raster' as const,
-      tiles: [
-        'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png',
-        'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png',
-        'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png',
-        'https://d.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png',
-      ],
-      tileSize: 256,
-    },
-  },
-  layers: [
-    {
-      id: 'osm-tiles',
-      type: 'raster' as const,
-      source: 'osm',
-    },
-  ],
-};
+// ── Stable mapStyle constants (OpenFreeMap: free vector styles, no watermark, no API key required) ──
+const LIGHT_MAP_STYLE = 'https://tiles.openfreemap.org/styles/positron';
+const DARK_MAP_STYLE = 'https://tiles.openfreemap.org/styles/dark';
 
 export default function HomeScreen() {
   const { theme, mode } = useTheme();
   const { profile } = useAuth();
   const { activeRoute } = useRoute();
+  const { unreadCount, refreshUnreadCount } = useNotifications();
   const { location, address, loading: locationLoading } = useLocation();
   const router = useRouter();
   const cameraRef = useRef<CameraRef>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshUnreadCount();
+    }, [refreshUnreadCount])
+  );
 
   const [routePolyline, setRoutePolyline] = React.useState<any>(null);
   const [nearbyRidesCount, setNearbyRidesCount] = React.useState<number | null>(null);
@@ -412,44 +377,65 @@ export default function HomeScreen() {
 
   React.useEffect(() => {
     async function fetchActiveRoutePolyline() {
-      // 1. If there is an active ongoing trip, use its route polyline
-      if (activeOngoingTrip?.route_polyline) {
-        try {
-          const coords = decodePolyline(activeOngoingTrip.route_polyline).map((c: any) => [c.longitude, c.latitude]);
-          setRoutePolyline({
-            type: 'Feature',
-            geometry: { type: 'LineString', coordinates: coords }
-          });
-          if (cameraRef.current) {
-            const lats = coords.map(c => c[1]);
-            const lngs = coords.map(c => c[0]);
-            const sw = [Math.min(...lngs), Math.min(...lats)];
-            const ne = [Math.max(...lngs), Math.max(...lats)];
-            cameraRef.current.fitBounds(
-              [sw[0], sw[1], ne[0], ne[1]],
-              { padding: { top: 50, bottom: 50, left: 50, right: 50 }, duration: 1000 }
-            );
-          }
-        } catch (err) {
-          console.error('Error decoding ongoing trip polyline:', err);
-        }
-        return;
-      }
-
-      // 2. Otherwise, check if activeRoute exists
-      if (!activeRoute) {
+      const targetRoute = activeOngoingTrip || activeRoute;
+      if (!targetRoute) {
         setRoutePolyline(null);
         return;
       }
-      const route = await getRoute(
-        activeRoute.origin_lat,
-        activeRoute.origin_lng,
-        activeRoute.destination_lat,
-        activeRoute.destination_lng
-      );
-      if (route) {
-        // MapLibre uses [longitude, latitude]
-        const coords = route.coordinates.map(c => [c.longitude, c.latitude]);
+
+      const oLat = targetRoute.origin_lat;
+      const oLng = targetRoute.origin_lng;
+      const dLat = targetRoute.destination_lat;
+      const dLng = targetRoute.destination_lng;
+
+      if (!oLat || !oLng || !dLat || !dLng) {
+        setRoutePolyline(null);
+        return;
+      }
+
+      let coords: [number, number][] | null = null;
+
+      // 1. If targetRoute has a route_polyline, verify it connects near origin and destination
+      if (targetRoute.route_polyline) {
+        try {
+          const decoded = decodePolyline(targetRoute.route_polyline).map((c: any) => [c.longitude, c.latitude] as [number, number]);
+          if (decoded.length >= 2) {
+            const startCoord = decoded[0];
+            const endCoord = decoded[decoded.length - 1];
+            // Check if start of polyline is within ~1.5km of origin and end is within ~1.5km of destination
+            const startDist = Math.hypot(startCoord[0] - oLng, startCoord[1] - oLat);
+            const endDist = Math.hypot(endCoord[0] - dLng, endCoord[1] - dLat);
+
+            if (startDist < 0.015 && endDist < 0.015) {
+              coords = decoded;
+            }
+          }
+        } catch (err) {
+          console.error('Error decoding route polyline:', err);
+        }
+      }
+
+      // 2. If no valid matching polyline, dynamically compute the real road route connecting Pickup and Drop-off
+      if (!coords) {
+        try {
+          const freshRoute = await getRoute(oLat, oLng, dLat, dLng);
+          if (freshRoute?.coordinates?.length) {
+            coords = freshRoute.coordinates.map(c => [c.longitude, c.latitude]);
+            // If it's an ongoing trip with a mismatched or missing polyline in DB, self-heal it
+            if (activeOngoingTrip?.id && freshRoute.encodedPolyline) {
+              supabase
+                .from('trips')
+                .update({ route_polyline: freshRoute.encodedPolyline })
+                .eq('id', activeOngoingTrip.id)
+                .then(() => {});
+            }
+          }
+        } catch (err) {
+          console.error('Error calculating route between pickup and dropoff:', err);
+        }
+      }
+
+      if (coords && coords.length > 0) {
         setRoutePolyline({
           type: 'Feature',
           geometry: { type: 'LineString', coordinates: coords }
@@ -463,9 +449,19 @@ export default function HomeScreen() {
           const ne = [Math.max(...lngs), Math.max(...lats)];
           cameraRef.current.fitBounds(
             [sw[0], sw[1], ne[0], ne[1]],
-            { padding: { top: 120, bottom: 380, left: 50, right: 80 }, duration: 1000 }
+            {
+              padding: {
+                top: activeOngoingTrip ? 140 : 80,
+                bottom: 330,
+                left: 50,
+                right: 70,
+              },
+              duration: 1000,
+            }
           );
         }
+      } else {
+        setRoutePolyline(null);
       }
     }
     fetchActiveRoutePolyline();
@@ -611,41 +607,65 @@ export default function HomeScreen() {
       </Map>
 
       {/* ── Floating Search Bar / Active Trip Banner ────────────── */}
-      <SafeAreaView style={styles.searchOverlay} edges={['top']}>
+      <SafeAreaView style={styles.searchOverlay} edges={['top']} pointerEvents="box-none">
         {activeOngoingTrip ? (
-          <Pressable
-            style={({ pressed }) => [
-              styles.ongoingBanner,
-              {
-                shadowColor: theme.colors.success,
-                transform: [{ scale: pressed ? 0.97 : 1 }],
-              },
-            ]}
-            onPress={() => router.push(`/(main)/ride/${activeOngoingTrip.id}`)}
-          >
-            <LinearGradient
-              colors={['#22C55E', '#16A34A']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.bannerGradient}
+          <View style={styles.bannerContainer} pointerEvents="box-none">
+            <Pressable
+              style={({ pressed }) => [
+                styles.ongoingBanner,
+                {
+                  shadowColor: theme.colors.success,
+                  transform: [{ scale: pressed ? 0.98 : 1 }],
+                },
+              ]}
+              onPress={() => router.push(`/(main)/ride/${activeOngoingTrip.id}`)}
             >
-              <View style={styles.bannerLeft}>
-                <Animated.View style={[styles.pulseDot, { opacity: bannerPulseAnim }]} />
-                <View style={styles.bannerInfo}>
-                  <Text style={styles.bannerTitle}>Active Trip in Progress</Text>
-                  <Text style={styles.bannerSubtitle} numberOfLines={1}>
-                    To: {activeOngoingTrip.destination_label.split(',')[0]}
-                  </Text>
+              <LinearGradient
+                colors={['#22C55E', '#16A34A']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.bannerGradient}
+              >
+                <View style={styles.bannerLeft}>
+                  <Animated.View style={[styles.pulseDot, { opacity: bannerPulseAnim }]} />
+                  <View style={styles.bannerInfo}>
+                    <Text style={styles.bannerTitle}>Active Trip in Progress</Text>
+                    <Text style={styles.bannerSubtitle} numberOfLines={1}>
+                      To: {activeOngoingTrip.destination_label.split(',')[0]}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-              <View style={styles.bannerRight}>
-                <Text style={styles.bannerActionText}>Resume</Text>
-                <Ionicons name="navigate-circle" size={22} color="#fff" />
-              </View>
-            </LinearGradient>
-          </Pressable>
+                <View style={styles.bannerRight}>
+                  <Text style={styles.bannerActionText}>Resume</Text>
+                  <Ionicons name="navigate-circle" size={22} color="#fff" />
+                </View>
+              </LinearGradient>
+            </Pressable>
+
+            {/* Notification Bell moved down below the full-width banner */}
+            <View style={styles.bellUnderBannerRow} pointerEvents="box-none">
+              <GlassCard
+                backgroundColor={theme.colors.glassBackground}
+                borderColor={theme.colors.glassBorder}
+                borderRadius={16}
+                style={styles.bellGlass}
+              >
+                <Pressable
+                  style={styles.bellBtn}
+                  onPress={() => router.push('/(main)/notification-inbox')}
+                >
+                  <Ionicons name="notifications-outline" size={24} color={theme.colors.text} />
+                  {unreadCount > 0 && (
+                    <View style={styles.unreadBadge}>
+                      <Text style={styles.unreadBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                    </View>
+                  )}
+                </Pressable>
+              </GlassCard>
+            </View>
+          </View>
         ) : (
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', width: '100%' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', width: '100%' }} pointerEvents="box-none">
             <GlassCard
               backgroundColor={theme.colors.glassBackground}
               borderColor={theme.colors.glassBorder}
@@ -657,6 +677,11 @@ export default function HomeScreen() {
                 onPress={() => router.push('/(main)/notification-inbox')}
               >
                 <Ionicons name="notifications-outline" size={24} color={theme.colors.text} />
+                {unreadCount > 0 && (
+                  <View style={styles.unreadBadge}>
+                    <Text style={styles.unreadBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                  </View>
+                )}
               </Pressable>
             </GlassCard>
           </View>
@@ -846,8 +871,6 @@ const styles = StyleSheet.create({
     zIndex: 10,
     paddingHorizontal: 16,
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 8 : 0,
-    flexDirection: 'row',
-    gap: 8,
   },
   searchBarGlass: {
     flex: 1,
@@ -865,6 +888,42 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  bannerContainer: {
+    width: '100%',
+    gap: 8,
+  },
+  bellUnderBannerRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    width: '100%',
+  },
+  bannerWithBellRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    width: '100%',
+  },
+  unreadBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: '#fff',
+  },
+  unreadBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
+    fontFamily: 'Inter-Bold',
+    textAlign: 'center',
   },
   searchBarInner: {
     flex: 1,
@@ -1014,7 +1073,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   ongoingBanner: {
-    flex: 1,
+    width: '100%',
     borderRadius: 16,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.35,

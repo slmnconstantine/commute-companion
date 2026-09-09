@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '@/components/common/Avatar';
 import Badge from '@/components/common/Badge';
@@ -18,6 +18,8 @@ interface DriverBookingsListProps {
   handleRemovePassenger: (b: BookingWithCommuter) => void;
   handleDriverArrival: (id: string) => void;
   onAvatarPress: (userId: string) => void;
+  commuterLiveRecords?: Record<string, any>;
+  onViewPassengerPhoto?: (passenger: { name: string; photoUri: string; pickup?: string }) => void;
 }
 
 export default function DriverBookingsList({
@@ -32,6 +34,8 @@ export default function DriverBookingsList({
   handleRemovePassenger,
   handleDriverArrival,
   onAvatarPress,
+  commuterLiveRecords,
+  onViewPassengerPhoto,
 }: DriverBookingsListProps) {
   if (bookings.length === 0) return null;
 
@@ -39,84 +43,205 @@ export default function DriverBookingsList({
 
   return (
     <View style={[styles.driverCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-      <Text style={[{ color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 16, marginBottom: 8 }]}>Booking Requests</Text>
-      {bookings.map(booking => (
-        <View key={booking.id} style={[styles.bookingItem, { borderBottomColor: theme.colors.border }]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-            <Pressable onPress={() => booking.commuter?.id && onAvatarPress(booking.commuter.id)}>
-              <Avatar uri={booking.commuter?.avatar_url} name={booking.commuter?.full_name || ''} size="sm" />
-            </Pressable>
-            <View style={{ marginLeft: 10, flex: 1, alignItems: 'flex-start' }}>
-              <Text style={{ color: theme.colors.text, fontFamily: 'Inter-Medium', marginBottom: 4 }} numberOfLines={1}>
-                {booking.commuter?.full_name}
-              </Text>
-              <Badge label={booking.status} variant={booking.status === 'accepted' ? 'accepted' : booking.status === 'pending' ? 'pending' : 'cancelled'} />
-            </View>
-          </View>
-
-          {booking.status === 'pending' && (
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <Pressable
-                style={[styles.actionBtn, { backgroundColor: theme.colors.error + '20' }]}
-                onPress={() => handleRejectBooking(booking)}
-                disabled={processingBookingId === booking.id}
-              >
-                <Ionicons name="close" size={20} color={theme.colors.error} />
-              </Pressable>
-              <Pressable
-                style={[styles.actionBtn, { backgroundColor: theme.colors.success + '20' }]}
-                onPress={() => handleAcceptBooking(booking)}
-                disabled={processingBookingId === booking.id}
-              >
-                <Ionicons name="checkmark" size={20} color={theme.colors.success} />
-              </Pressable>
-            </View>
-          )}
-
-          {booking.status === 'accepted' && (trip.status === 'open' || trip.status === 'full') && (
-            <Pressable
-              style={[styles.actionBtn, { backgroundColor: theme.colors.error + '20' }]}
-              onPress={() => handleRemovePassenger(booking)}
-              disabled={processingBookingId === booking.id}
-            >
-              <Ionicons name="trash-outline" size={18} color={theme.colors.error} />
-            </Pressable>
-          )}
-
-          {booking.status === 'accepted' && trip.status === 'ongoing' && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              {!booking.driver_confirmed ? (
-                <Pressable
-                  style={[styles.actionBtn, { backgroundColor: theme.colors.success + '20', width: 'auto', paddingHorizontal: 12 }]}
-                  onPress={() => handleDriverArrival(booking.id)}
-                  disabled={processingBookingId === booking.id}
-                >
-                  <Text style={{ color: theme.colors.success, fontSize: 12, fontFamily: 'Inter-SemiBold' }}>Confirm Arrival</Text>
-                </Pressable>
-              ) : (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                  <Ionicons name="checkmark-circle" size={16} color={theme.colors.success} />
-                  <Text style={{ color: theme.colors.success, fontSize: 12, fontFamily: 'Inter-Medium' }}>Arrived</Text>
-                </View>
-              )}
-            </View>
-          )}
+      <View style={styles.cardHeader}>
+        <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
+          Booking Requests
+        </Text>
+        <View style={[styles.countBadge, { backgroundColor: theme.colors.primary + '18' }]}>
+          <Text style={[styles.countText, { color: theme.colors.primary }]}>
+            {bookings.length}
+          </Text>
         </View>
-      ))}
+      </View>
 
+      {bookings.map((booking, index) => {
+        const commuterCapture = commuterLiveRecords?.[booking.commuter_id] || commuterLiveRecords?.[booking.id];
+        const isLast = index === bookings.length - 1;
+
+        return (
+          <View
+            key={booking.id}
+            style={[
+              styles.bookingItem,
+              !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.colors.border },
+            ]}
+          >
+            {/* Top Row: Passenger Info + Primary Action / Status */}
+            <View style={styles.itemTopRow}>
+              <Pressable
+                onPress={() => booking.commuter?.id && onAvatarPress(booking.commuter.id)}
+                style={styles.avatarWrap}
+              >
+                <Avatar
+                  uri={booking.commuter?.avatar_url}
+                  name={booking.commuter?.full_name || ''}
+                  size="md"
+                />
+              </Pressable>
+
+              <View style={styles.commuterInfo}>
+                <Text
+                  style={[styles.commuterName, { color: theme.colors.text }]}
+                  numberOfLines={1}
+                >
+                  {booking.commuter?.full_name || 'Commuter'}
+                </Text>
+
+                <View style={styles.seatsFareRow}>
+                  <Text style={[styles.seatsFareText, { color: theme.colors.textMuted }]}>
+                    {booking.seats_booked || 1} {(booking.seats_booked || 1) === 1 ? 'seat' : 'seats'}
+                    {booking.fare_paid != null && ` • ${formatCurrency(booking.fare_paid)}`}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Right Side: Status or Action */}
+              <View style={styles.actionCol}>
+                {booking.status === 'pending' && (
+                  <View style={styles.decisionBtnsRow}>
+                    <Pressable
+                      style={[styles.decisionBtn, { backgroundColor: theme.colors.error + '15', borderColor: theme.colors.error + '40' }]}
+                      onPress={() => handleRejectBooking(booking)}
+                      disabled={processingBookingId === booking.id}
+                      hitSlop={6}
+                    >
+                      <Ionicons name="close" size={18} color={theme.colors.error} />
+                    </Pressable>
+                    <Pressable
+                      style={[styles.decisionBtn, { backgroundColor: theme.colors.success + '15', borderColor: theme.colors.success + '40' }]}
+                      onPress={() => handleAcceptBooking(booking)}
+                      disabled={processingBookingId === booking.id}
+                      hitSlop={6}
+                    >
+                      <Ionicons name="checkmark" size={18} color={theme.colors.success} />
+                    </Pressable>
+                  </View>
+                )}
+
+                {booking.status === 'accepted' && (trip.status === 'open' || trip.status === 'full') && (
+                  <View style={styles.statusAndRemoveRow}>
+                    <Badge label="Accepted" variant="accepted" />
+                    <Pressable
+                      style={[styles.iconBtn, { backgroundColor: theme.colors.error + '15' }]}
+                      onPress={() => handleRemovePassenger(booking)}
+                      disabled={processingBookingId === booking.id}
+                      hitSlop={6}
+                    >
+                      <Ionicons name="trash-outline" size={16} color={theme.colors.error} />
+                    </Pressable>
+                  </View>
+                )}
+
+                {booking.status === 'accepted' && trip.status === 'ongoing' && (
+                  <View style={styles.arrivalCol}>
+                    {!booking.driver_confirmed ? (
+                      <Pressable
+                        style={[
+                          styles.arrivalConfirmBtn,
+                          {
+                            backgroundColor: `${theme.colors.success}18`,
+                            borderColor: theme.colors.success,
+                          },
+                        ]}
+                        onPress={() => handleDriverArrival(booking.id)}
+                        disabled={processingBookingId === booking.id}
+                      >
+                        <Ionicons name="location-outline" size={14} color={theme.colors.success} />
+                        <Text style={[styles.arrivalConfirmText, { color: theme.colors.success }]}>
+                          Confirm Arrival
+                        </Text>
+                      </Pressable>
+                    ) : (
+                      <View style={[styles.arrivedBadge, { backgroundColor: `${theme.colors.success}15` }]}>
+                        <Ionicons name="checkmark-circle" size={15} color={theme.colors.success} />
+                        <Text style={[styles.arrivedText, { color: theme.colors.success }]}>
+                          Arrived
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {booking.status !== 'pending' && booking.status !== 'accepted' && (
+                  <Badge
+                    label={booking.status}
+                    variant={booking.status === 'completed' ? 'completed' : 'cancelled'}
+                  />
+                )}
+              </View>
+            </View>
+
+            {/* Sub Row: Live Photo Button (if captured) */}
+            {commuterCapture && (
+              <View style={styles.itemMetaRow}>
+                <Pressable
+                  style={[
+                    styles.livePhotoBtn,
+                    {
+                      backgroundColor: `${theme.colors.success}12`,
+                      borderColor: `${theme.colors.success}40`,
+                    },
+                  ]}
+                  onPress={() => onViewPassengerPhoto?.({
+                    name: booking.commuter?.full_name || 'Passenger',
+                    photoUri: commuterCapture.photoUri,
+                    pickup: trip.origin_label,
+                  })}
+                >
+                  {commuterCapture.photoUri ? (
+                    <Image source={{ uri: commuterCapture.photoUri }} style={styles.livePhotoThumb} />
+                  ) : (
+                    <Ionicons name="camera" size={13} color={theme.colors.success} />
+                  )}
+                  <Text style={[styles.livePhotoBtnText, { color: theme.colors.success }]}>
+                    View Passenger Live Photo
+                  </Text>
+                  <Ionicons name="chevron-forward" size={12} color={theme.colors.success} />
+                </Pressable>
+              </View>
+            )}
+          </View>
+        );
+      })}
+
+      {/* Financial Breakdown */}
       {acceptedBookings.length > 0 && (
-        <View style={{ marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: theme.colors.border, gap: 8 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            <Text style={{ color: theme.colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 14 }}>To Collect</Text>
-            <Text style={{ color: theme.colors.text, fontFamily: 'Inter-Medium', fontSize: 14 }}>{formatCurrency(totalCollectedFare)}</Text>
+        <View
+          style={[
+            styles.financialCard,
+            {
+              backgroundColor: theme.colors.surfaceMuted || `${theme.colors.border}15`,
+              borderColor: theme.colors.border,
+            },
+          ]}
+        >
+          <View style={styles.financialRow}>
+            <Text style={[styles.financialLabel, { color: theme.colors.textMuted }]}>
+              To Collect
+            </Text>
+            <Text style={[styles.financialVal, { color: theme.colors.text }]}>
+              {formatCurrency(totalCollectedFare)}
+            </Text>
           </View>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            <Text style={{ color: theme.colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 14 }}>Platform fee (10%)</Text>
-            <Text style={{ color: theme.colors.error, fontFamily: 'Inter-Medium', fontSize: 14 }}>-{formatCurrency(driverPayoutDetails.platformFee)}</Text>
+
+          <View style={styles.financialRow}>
+            <Text style={[styles.financialLabel, { color: theme.colors.textMuted }]}>
+              Platform fee (10%)
+            </Text>
+            <Text style={[styles.financialVal, { color: theme.colors.error }]}>
+              -{formatCurrency(driverPayoutDetails.platformFee)}
+            </Text>
           </View>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
-            <Text style={{ color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 15 }}>Net Earnings</Text>
-            <Text style={{ color: theme.colors.success, fontFamily: 'Inter-Bold', fontSize: 15 }}>{formatCurrency(driverPayoutDetails.netPayout)}</Text>
+
+          <View style={[styles.financialDivider, { backgroundColor: theme.colors.border }]} />
+
+          <View style={styles.financialRow}>
+            <Text style={[styles.financialTotalLabel, { color: theme.colors.text }]}>
+              Net Earnings
+            </Text>
+            <Text style={[styles.financialTotalVal, { color: theme.colors.success }]}>
+              {formatCurrency(driverPayoutDetails.netPayout)}
+            </Text>
           </View>
         </View>
       )}
@@ -133,18 +258,163 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     alignItems: 'stretch',
   },
-  bookingItem: {
+  cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
+    marginBottom: 10,
   },
-  actionBtn: {
-    width: 36,
-    height: 36,
+  headerTitle: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 16,
+  },
+  countBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     borderRadius: 10,
+  },
+  countText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Bold',
+  },
+  bookingItem: {
+    paddingVertical: 12,
+    gap: 8,
+  },
+  itemTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  avatarWrap: {
+    marginRight: 12,
+  },
+  commuterInfo: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  commuterName: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 15,
+    marginBottom: 2,
+  },
+  seatsFareRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  seatsFareText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 13,
+  },
+  actionCol: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  decisionBtnsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  decisionBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  statusAndRemoveRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  iconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  arrivalCol: {
+    alignItems: 'flex-end',
+  },
+  arrivalConfirmBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  arrivalConfirmText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+  },
+  arrivedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  arrivedText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+  },
+  itemMetaRow: {
+    paddingLeft: 48,
+  },
+  livePhotoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  livePhotoThumb: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+  },
+  livePhotoBtnText: {
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
+  },
+  financialCard: {
+    marginTop: 14,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 8,
+  },
+  financialRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  financialLabel: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 13,
+  },
+  financialVal: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 13,
+  },
+  financialDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginVertical: 2,
+  },
+  financialTotalLabel: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 14,
+  },
+  financialTotalVal: {
+    fontFamily: 'Inter-Bold',
+    fontSize: 15,
   },
 });

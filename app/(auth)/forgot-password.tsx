@@ -54,7 +54,14 @@ export default function ForgotPasswordScreen() {
     try {
       const { error: resetError } = await resetPassword(email.trim());
       if (resetError) {
-        Alert.alert('Error', resetError.message);
+        if (resetError.message?.includes('Error sending recovery email')) {
+          Alert.alert(
+            'Unable to Send Email',
+            'Supabase failed to deliver the password recovery email.\n\n• If Custom SMTP is enabled in Supabase, verify your SMTP credentials and that your sender domain is verified.\n• If using the default Supabase mailer, the hourly rate limit (30 emails/hr) may have been reached.'
+          );
+        } else {
+          Alert.alert('Error', resetError.message);
+        }
       } else {
         setSent(true);
       }
