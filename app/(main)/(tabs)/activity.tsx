@@ -31,6 +31,7 @@ import { useNotifications } from '@/context/NotificationContext';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { getCommuterBookings } from '@/services/bookings';
 import { getDriverTrips, cancelExpiredTrips } from '@/services/trips';
+import { purgeArchivedLiveCaptures } from '@/services/liveFaceVerification';
 import EmptyState from '@/components/common/EmptyState';
 import Skeleton from '@/components/common/Skeleton';
 import TripCard from '@/components/ride/TripCard';
@@ -306,7 +307,7 @@ const ActivityCard = React.memo(function ActivityCard({
                   { color: theme.colors.textMuted, marginLeft: 4 },
                 ]}
               >
-                Rated {booking.reviews![0].rating}★
+                Rated {booking.reviews![0].rating} / 5
               </Text>
             </View>
           )}
@@ -409,6 +410,9 @@ export default function ActivityScreen() {
     try {
       await cancelExpiredTrips().catch((err) => {
         console.warn('cancelExpiredTrips error in activity loadData:', err);
+      });
+      purgeArchivedLiveCaptures().catch((err) => {
+        console.warn('purgeArchivedLiveCaptures error in activity loadData:', err);
       });
       const data = await getCommuterBookings(profile.id);
       setBookings(data);

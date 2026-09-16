@@ -7,8 +7,8 @@
  */
 
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
-
+import { View, Text, StyleSheet, Pressable, Animated, Alert } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/context/ThemeContext';
@@ -270,6 +270,49 @@ function TripCard({ trip, onPress, loading = false, isJoined, userBookingStatus 
           )}
         </View>
       </View>
+
+      {/* Driver GCash Details & 1-Tap Copy */}
+      {trip.driver?.gcash_number ? (
+        <View style={[styles.gcashRow, { backgroundColor: `${theme.colors.primary}08`, borderColor: `${theme.colors.primary}22` }]}>
+          <View style={styles.gcashLeft}>
+            <View style={[styles.gcashIconBadge, { backgroundColor: `${theme.colors.primary}18` }]}>
+              <Ionicons name="wallet-outline" size={13} color={theme.colors.primary} />
+            </View>
+            <View style={{ flexShrink: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text style={[styles.gcashLabel, { color: theme.colors.primary, fontFamily: 'Inter-SemiBold' }]}>
+                  GCash:
+                </Text>
+                <Text style={[styles.gcashNumber, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]}>
+                  {trip.driver.gcash_number}
+                </Text>
+              </View>
+              {trip.driver.gcash_name ? (
+                <Text style={[styles.gcashName, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]} numberOfLines={1}>
+                  {trip.driver.gcash_name}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+          <Pressable
+            style={({ pressed }) => [
+              styles.copyBtn,
+              { backgroundColor: `${theme.colors.primary}18`, opacity: pressed ? 0.7 : 1 },
+            ]}
+            hitSlop={8}
+            onPress={async (e) => {
+              e.stopPropagation();
+              await Clipboard.setStringAsync(trip.driver!.gcash_number!);
+              Alert.alert('Copied!', `Driver GCash number (${trip.driver!.gcash_number}) copied to clipboard.`);
+            }}
+          >
+            <Ionicons name="copy-outline" size={12} color={theme.colors.primary} />
+            <Text style={[styles.copyBtnText, { color: theme.colors.primary, fontFamily: 'Inter-SemiBold' }]}>
+              Copy
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
       </View>
     </Pressable>
     </Animated.View>
@@ -391,6 +434,51 @@ const styles = StyleSheet.create({
   },
   perSeat: {
     fontSize: 12,
+  },
+  gcashRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 2,
+    gap: 8,
+  },
+  gcashLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  gcashIconBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gcashLabel: {
+    fontSize: 12,
+  },
+  gcashNumber: {
+    fontSize: 13,
+  },
+  gcashName: {
+    fontSize: 11,
+    marginTop: 1,
+  },
+  copyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  copyBtnText: {
+    fontSize: 11,
   },
 });
 

@@ -77,3 +77,9 @@ export async function uploadDriverDocument(userId: string, base64Data: string, d
   const path = `${userId}/${docType}_${Date.now()}.jpg`;
   return uploadImage(DOCUMENTS_BUCKET, path, base64Data);
 }
+
+/** Upload GCash payment / reservation receipt image */
+export async function uploadPaymentReceipt(userId: string, base64Data: string, bookingId?: string): Promise<string | null> {
+  const path = `${userId}/receipt_${bookingId || Date.now()}_${Date.now()}.jpg`;
+  return uploadImage(DOCUMENTS_BUCKET, path, base64Data);
+}

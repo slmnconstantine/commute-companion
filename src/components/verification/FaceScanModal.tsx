@@ -173,7 +173,7 @@ export default function FaceScanModal({
                   <Ionicons name="checkmark-circle" size={56} color={theme.colors.success} />
                 </View>
                 <Text style={[styles.stepTitle, { color: theme.colors.text, fontFamily: 'Inter-Bold' }]}>
-                  Identity Confirmed! 🛡️
+                  Identity Confirmed!
                 </Text>
                 <Text style={[styles.stepDesc, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
                   {userName}'s identity matches the registered profile with {confidence}% confidence. You are ready for a safe ride!

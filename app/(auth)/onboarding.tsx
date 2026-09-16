@@ -17,8 +17,8 @@ const SLIDES = [
     description: 'The smartest way to share rides, reduce traffic, and save money on your daily commute.',
     icon: 'car-sport',
     badge: 'Carpool Ecosystem',
-    tag1: '👥 2+ Companion',
-    tag2: '🌿 Save ₱150/day',
+    tag1: { icon: 'people', text: '2+ Companion' },
+    tag2: { icon: 'leaf', text: 'Save ₱150/day' },
   },
   {
     id: '2',
@@ -26,8 +26,8 @@ const SLIDES = [
     description: 'Set your regular commute route and we will match you with drivers going the same way.',
     icon: 'navigate',
     badge: 'Smart Route Matching',
-    tag1: '⚡ Instant Match',
-    tag2: '📍 Door-to-Door',
+    tag1: { icon: 'flash', text: 'Instant Match' },
+    tag2: { icon: 'location', text: 'Door-to-Door' },
   },
   {
     id: '3',
@@ -35,8 +35,8 @@ const SLIDES = [
     description: 'All users are verified with government IDs to ensure a secure environment for everyone.',
     icon: 'shield-checkmark',
     badge: 'ID Verified Safety',
-    tag1: '🛡️ Govt ID Checked',
-    tag2: '⭐ 5.0 Rated Peers',
+    tag1: { icon: 'shield-checkmark', text: 'Govt ID Checked' },
+    tag2: { icon: 'star', text: '5.0 Rated Peers' },
   },
 ];
 
@@ -48,8 +48,8 @@ function OnboardingHeroGraphic({
 }: {
   icon: string;
   badge: string;
-  tag1: string;
-  tag2: string;
+  tag1: { icon: string; text: string };
+  tag2: { icon: string; text: string };
 }) {
   const isLight = true;
 
@@ -171,13 +171,14 @@ function OnboardingHeroGraphic({
             },
           ]}
         >
+          <Ionicons name={tag1.icon as any} size={14} color="#0057FF" style={{ marginRight: 6 }} />
           <Text
             style={[
               heroStyles.satelliteText,
               { color: isLight ? '#0F172A' : '#FFFFFF', fontFamily: 'Inter-SemiBold' },
             ]}
           >
-            {tag1}
+            {tag1.text}
           </Text>
         </View>
       </Animated.View>
@@ -194,13 +195,14 @@ function OnboardingHeroGraphic({
             },
           ]}
         >
+          <Ionicons name={tag2.icon as any} size={14} color="#0057FF" style={{ marginRight: 6 }} />
           <Text
             style={[
               heroStyles.satelliteText,
               { color: isLight ? '#0F172A' : '#FFFFFF', fontFamily: 'Inter-SemiBold' },
             ]}
           >
-            {tag2}
+            {tag2.text}
           </Text>
         </View>
       </Animated.View>
@@ -279,6 +281,8 @@ const heroStyles = StyleSheet.create({
     zIndex: 10,
   },
   satelliteCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 20,
@@ -362,6 +366,7 @@ export default function OnboardingScreen() {
     if (currentIndex < SLIDES.length - 1) {
       flatListRef.current?.scrollToIndex({ index: currentIndex + 1 });
     } else {
+      await AsyncStorage.setItem('@onboarding_complete', 'true');
       await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
       router.replace('/(auth)/welcome');
     }

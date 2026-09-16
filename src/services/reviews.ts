@@ -22,7 +22,7 @@ async function notifyReviewee(reviewData: Omit<Review, 'id' | 'created_at'>) {
 
       await sendPushNotification(
         profileData.push_token,
-        'New Review Received ⭐',
+        'New Review Received',
         `${reviewerName} rated you ${reviewData.rating} stars: "${reviewData.comment || ''}"`,
         { type: 'review', bookingId: reviewData.booking_id }
       );

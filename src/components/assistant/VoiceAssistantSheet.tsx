@@ -1,9 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Pressable, ScrollView, TextInput,
   Dimensions,
 } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, withSequence, withDelay, withRepeat, runOnJS, Easing, interpolate } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, withSequence, withDelay, withRepeat, runOnJS, Easing, interpolate, Extrapolation } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -122,9 +122,39 @@ export default function VoiceAssistantSheet() {
   const { state, conversation, stopRecording, cancel, confirmAction, processTextInput, startRecording } = useVoiceAssistant();
 
   const [inputValue, setInputValue] = useState('');
-  const slideAnim = useSharedValue(400);
+  const slideAnim = useSharedValue(650);
   const scrollViewRef = useRef<ScrollView>(null);
   const statePulse = useSharedValue(0.5);
+
+  const isVisible = (state !== 'idle' && state !== 'error') || conversation.length > 0;
+  const [isRendered, setIsRendered] = useState(false);
+  const isClosingRef = useRef(false);
+
+  const finalizeClose = useCallback(() => {
+    isClosingRef.current = false;
+    setIsRendered(false);
+    cancel();
+  }, [cancel]);
+
+  // Spring down closing animation
+  const handleSpringClose = useCallback((velocity?: number) => {
+    if (isClosingRef.current) return;
+    isClosingRef.current = true;
+    slideAnim.value = withSpring(
+      650,
+      {
+        damping: 18,
+        stiffness: 220,
+        mass: 0.65,
+        velocity: velocity ?? 0,
+      },
+      (finished) => {
+        if (finished) {
+          runOnJS(finalizeClose)();
+        }
+      }
+    );
+  }, [finalizeClose, slideAnim]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -135,23 +165,20 @@ export default function VoiceAssistantSheet() {
     }
   }, [conversation, state]);
 
-  const isVisible = (state !== 'idle' && state !== 'error') || conversation.length > 0;
-
-  // Sheet slide animation
+  // Sheet slide in / out animation
   useEffect(() => {
     if (isVisible) {
+      setIsRendered(true);
+      isClosingRef.current = false;
       slideAnim.value = withSpring(0, {
-        damping: 15,
-        stiffness: 300,
-        mass: 0.5,
+        damping: 16,
+        stiffness: 260,
+        mass: 0.6,
       });
-    } else {
-      slideAnim.value = withTiming(400, {
-        duration: 250,
-        easing: Easing.in(Easing.cubic),
-      });
+    } else if (isRendered && !isClosingRef.current) {
+      handleSpringClose();
     }
-  }, [isVisible]);
+  }, [isVisible, isRendered, handleSpringClose, slideAnim]);
 
   // State pulse animation
   useEffect(() => {
@@ -167,6 +194,7 @@ export default function VoiceAssistantSheet() {
 
   const pan = Gesture.Pan()
     .onChange((event) => {
+      if (isClosingRef.current) return;
       if (event.translationY > 0) {
         slideAnim.value = event.translationY;
       } else {
@@ -174,10 +202,12 @@ export default function VoiceAssistantSheet() {
       }
     })
     .onEnd((event) => {
-      if (event.translationY > 100 || event.velocityY > 500) {
-        runOnJS(cancel)();
+      if (isClosingRef.current) return;
+      if (event.translationY > 80 || event.velocityY > 400) {
+        // Spring down with user drag velocity
+        handleSpringClose(event.velocityY);
       } else {
-        slideAnim.value = withSpring(0, { damping: 15, stiffness: 300 });
+        slideAnim.value = withSpring(0, { damping: 16, stiffness: 260, mass: 0.6 });
       }
     });
 
@@ -185,11 +215,15 @@ export default function VoiceAssistantSheet() {
     transform: [{ translateY: slideAnim.value }],
   }));
 
+  const animatedBackdropStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(slideAnim.value, [0, 450], [0.35, 0], Extrapolation.CLAMP),
+  }));
+
   const pulseStyle = useAnimatedStyle(() => ({
     opacity: statePulse.value,
   }));
 
-  if (!isVisible && state !== 'error') return null;
+  if (!isRendered) return null;
 
   const stateConfig = STATE_CONFIG[state] || { label: state === 'idle' ? 'Conversation' : state, icon: state === 'idle' ? 'chatbubble-ellipses' : 'ellipse' };
   const stateColor = stateConfig.color === 'error' ? theme.colors.error : theme.colors.primary;
@@ -197,6 +231,18 @@ export default function VoiceAssistantSheet() {
 
   return (
     <View style={styles.overlay} pointerEvents="box-none">
+      {/* Backdrop with tap to spring down */}
+      <Animated.View
+        style={[
+          StyleSheet.absoluteFill,
+          { backgroundColor: '#000000' },
+          animatedBackdropStyle,
+        ]}
+        pointerEvents="box-none"
+      >
+        <Pressable style={StyleSheet.absoluteFill} onPress={() => handleSpringClose()} />
+      </Animated.View>
+
       <GestureDetector gesture={pan}>
         <Animated.View
           style={[
@@ -222,7 +268,7 @@ export default function VoiceAssistantSheet() {
             </View>
 
           <Pressable
-            onPress={cancel}
+            onPress={() => handleSpringClose()}
             style={({ pressed }) => [
               styles.closeBtn,
               { backgroundColor: `${theme.colors.textMuted}12`, opacity: pressed ? 0.7 : 1 },
@@ -331,7 +377,7 @@ export default function VoiceAssistantSheet() {
                       styles.cancelBtn,
                       { borderColor: theme.colors.border, opacity: pressed ? 0.7 : 1 },
                     ]}
-                    onPress={cancel}
+                    onPress={() => handleSpringClose()}
                   >
                     <Ionicons name="close-circle-outline" size={18} color={theme.colors.textMuted} />
                     <Text style={[styles.confirmBtnText, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>Cancel</Text>

@@ -6,7 +6,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { updateProfile, updateVerification } from '@/services/profiles';
-import { pickImage, takePhoto, uploadGovernmentId } from '@/services/storage';
+import { uploadGovernmentId } from '@/services/storage';
+import DocumentCaptureModal from '@/components/verification/DocumentCaptureModal';
 
 export default function VerificationScreen() {
   const router = useRouter();
@@ -15,18 +16,13 @@ export default function VerificationScreen() {
   const { profile, refreshProfile } = useAuth();
 
   const [idImage, setIdImage] = useState<string | null>(null);
+  const [showCaptureModal, setShowCaptureModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const isVerified = !!(profile?.is_verified && profile?.verified_badge);
   const isPending = !!(profile?.government_id_url && !profile?.is_verified);
 
-  const handlePickImage = async () => {
-    const base64 = await pickImage();
-    if (base64) setIdImage(base64);
-  };
-
-  const handleTakePhoto = async () => {
-    const base64 = await takePhoto();
-    if (base64) setIdImage(base64);
+  const handleCaptureSuccess = (base64: string) => {
+    setIdImage(base64);
   };
 
   const handleSubmit = async () => {
@@ -43,7 +39,7 @@ export default function VerificationScreen() {
       
       await refreshProfile();
       Alert.alert(
-        'Verification Submitted ⏳', 
+        'Verification Submitted', 
         'Your ID image has been submitted successfully and is now pending admin review.', 
         [{ text: 'OK', onPress: () => router.back() }]
       );
@@ -85,7 +81,7 @@ export default function VerificationScreen() {
       await refreshProfile();
 
       Alert.alert(
-        'Verification Success! 🎉',
+        'Verification Success!',
         'Your commuter account is now verified! The verified badge is active on your profile.'
       );
     } catch (e: any) {
@@ -115,7 +111,7 @@ export default function VerificationScreen() {
         </View>
 
         <Text style={[styles.title, { color: theme.colors.text, fontFamily: 'Inter-Bold' }]}>
-          {isVerified ? 'You are Verified!' : isPending ? 'Verification Pending Review ⏳' : 'Verify Your Identity'}
+          {isVerified ? 'You are Verified!' : isPending ? 'Verification Pending Review' : 'Verify Your Identity'}
         </Text>
         <Text style={[styles.subtitle, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
           {isVerified 
@@ -130,22 +126,38 @@ export default function VerificationScreen() {
             {idImage ? (
               <View style={styles.imagePreviewContainer}>
                 <Image source={{ uri: `data:image/jpeg;base64,${idImage}` }} style={styles.imagePreview} />
+                <Pressable style={styles.retakeBtn} onPress={() => setShowCaptureModal(true)}>
+                  <Ionicons name="camera-reverse" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.retakeBtnText}>Retake Photo</Text>
+                </Pressable>
                 <Pressable style={styles.changeBtn} onPress={() => setIdImage(null)}>
                   <Ionicons name="close-circle" size={24} color={theme.colors.error} />
                 </Pressable>
               </View>
             ) : (
-              <View style={styles.actionButtons}>
-                <Pressable style={[styles.uploadBtn, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]} onPress={handleTakePhoto}>
-                  <Ionicons name="camera-outline" size={24} color={theme.colors.primary} />
-                  <Text style={[styles.uploadText, { color: theme.colors.text }]}>Take a Photo</Text>
-                </Pressable>
-                
-                <Pressable style={[styles.uploadBtn, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]} onPress={handlePickImage}>
-                  <Ionicons name="image-outline" size={24} color={theme.colors.primary} />
-                  <Text style={[styles.uploadText, { color: theme.colors.text }]}>Choose from Gallery</Text>
-                </Pressable>
-              </View>
+              <Pressable
+                style={[
+                  styles.liveCaptureCard,
+                  {
+                    backgroundColor: theme.colors.surface,
+                    borderColor: theme.colors.primary,
+                  },
+                ]}
+                onPress={() => setShowCaptureModal(true)}
+              >
+                <View style={[styles.captureIconBadge, { backgroundColor: `${theme.colors.primary}15` }]}>
+                  <Ionicons name="camera" size={28} color={theme.colors.primary} />
+                </View>
+                <View style={styles.captureTextWrap}>
+                  <Text style={[styles.captureTitle, { color: theme.colors.text }]}>
+                    Scan Government ID
+                  </Text>
+                  <Text style={[styles.captureSubtitle, { color: theme.colors.textMuted }]}>
+                    Live camera capture only • Guide & clarity check
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={theme.colors.primary} />
+              </Pressable>
             )}
 
             <Pressable
@@ -184,12 +196,21 @@ export default function VerificationScreen() {
           onPress={handleDemoOverride}
           disabled={submitting}
         >
-          <Ionicons name="flash" size={18} color={theme.colors.accent} />
+          <Ionicons name={isVerified ? "refresh" : "flash"} size={18} color={theme.colors.accent} />
           <Text style={[styles.overrideText, { color: theme.colors.accent, fontFamily: 'Inter-SemiBold' }]}>
-            {isVerified ? 'Demo: Reset Verification (Override) 🔄' : 'Demo: Instantly Verify Me (Override) ⚡'}
+            {isVerified ? 'Demo: Reset Verification (Override)' : 'Demo: Instantly Verify Me (Override)'}
           </Text>
         </Pressable>
       </View>
+
+      {/* Live Document Capture Modal */}
+      <DocumentCaptureModal
+        visible={showCaptureModal}
+        onClose={() => setShowCaptureModal(false)}
+        onCaptureSuccess={handleCaptureSuccess}
+        documentTitle="Government ID"
+        documentType="id"
+      />
     </View>
   );
 }
@@ -204,12 +225,55 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, textAlign: 'center', marginBottom: 12 },
   subtitle: { fontSize: 15, textAlign: 'center', lineHeight: 22, marginBottom: 40, paddingHorizontal: 16 },
   uploadSection: { width: '100%', alignItems: 'center' },
-  actionButtons: { flexDirection: 'row', gap: 16, width: '100%', marginBottom: 32 },
-  uploadBtn: { flex: 1, height: 100, borderWidth: 1, borderRadius: 16, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  uploadText: { fontSize: 13, fontFamily: 'Inter-Medium' },
-  imagePreviewContainer: { width: '100%', height: 200, borderRadius: 16, overflow: 'hidden', marginBottom: 32 },
+  liveCaptureCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    width: '100%',
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    marginBottom: 32,
+  },
+  captureIconBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  captureTextWrap: {
+    flex: 1,
+  },
+  captureTitle: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    marginBottom: 2,
+  },
+  captureSubtitle: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    lineHeight: 16,
+  },
+  imagePreviewContainer: { width: '100%', height: 200, borderRadius: 16, overflow: 'hidden', marginBottom: 32, position: 'relative' },
   imagePreview: { width: '100%', height: '100%', resizeMode: 'cover' },
   changeBtn: { position: 'absolute', top: 12, right: 12, backgroundColor: '#fff', borderRadius: 12 },
+  retakeBtn: {
+    position: 'absolute',
+    bottom: 12,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  retakeBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+  },
   submitBtn: { width: '100%', height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   submitBtnText: { color: '#fff', fontSize: 16, fontFamily: 'Inter-SemiBold' },
   overrideBtn: {

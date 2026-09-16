@@ -6,6 +6,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Map, Camera, RasterSource, Layer, GeoJSONSource, Marker, type CameraRef } from '@maplibre/maplibre-react-native';
+import { safeCamera } from '@/utils/safeCamera';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { useLocation } from '@/hooks/useLocation';
@@ -164,6 +165,7 @@ export default function CreateRideScreen() {
   const cameraRef = useRef<CameraRef>(null);
   const buttonScale = useRef(new Animated.Value(1)).current;
   const hasAutoCenteredRef = useRef(false);
+  const autoCenterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Auto-focus camera to user's real GPS location once resolved
   useEffect(() => {
@@ -171,8 +173,9 @@ export default function CreateRideScreen() {
     if (location?.latitude && location?.longitude && !locationLoading && !hasPrefilledRoute && !routeInfo) {
       if (!hasAutoCenteredRef.current) {
         hasAutoCenteredRef.current = true;
-        setTimeout(() => {
-          cameraRef.current?.easeTo({
+        if (autoCenterTimerRef.current) clearTimeout(autoCenterTimerRef.current);
+        autoCenterTimerRef.current = setTimeout(() => {
+          safeCamera(cameraRef.current)?.easeTo({
             center: [location.longitude, location.latitude],
             zoom: 14,
             duration: 800,
@@ -180,11 +183,17 @@ export default function CreateRideScreen() {
         }, 300);
       }
     }
+
+    return () => {
+      if (autoCenterTimerRef.current) {
+        clearTimeout(autoCenterTimerRef.current);
+      }
+    };
   }, [location?.latitude, location?.longitude, locationLoading, params, routeInfo]);
 
   const handleCenterOnUser = () => {
     if (location?.latitude && location?.longitude) {
-      cameraRef.current?.easeTo({
+      safeCamera(cameraRef.current)?.easeTo({
         center: [location.longitude, location.latitude],
         zoom: 14,
         duration: 600,
@@ -273,7 +282,7 @@ export default function CreateRideScreen() {
       setRouteInfo({ distanceKm: route.distanceKm, durationMin: route.durationMin, polyline: route.encodedPolyline });
       const lats = route.coordinates.map(c => c.latitude);
       const lngs = route.coordinates.map(c => c.longitude);
-      cameraRef.current?.fitBounds(
+      safeCamera(cameraRef.current)?.fitBounds(
         [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)],
         { padding: { top: 100, right: 50, bottom: 100, left: 50 }, duration: 1000 }
       );
@@ -349,6 +358,18 @@ export default function CreateRideScreen() {
   // ── Create trip handler ──
   const handleCreateTrip = async () => {
     if (!origin || !destination || !routeInfo || !fareBreakdown || !profile) return;
+
+    if (!profile.gcash_number) {
+      Alert.alert(
+        'GCash Details Required',
+        'To accept reservations and allow commuters to pay or reserve seats, please configure your GCash details.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Set Up GCash', onPress: () => router.push('/(main)/settings/edit-profile' as any) },
+        ]
+      );
+      return;
+    }
 
     if (!driverLivePhoto) {
       Alert.alert(
@@ -591,8 +612,9 @@ export default function CreateRideScreen() {
 
           {/* Reverse geocoding indicator */}
           {reverseGeocoding && (
-            <View style={[styles.geocodingBanner, { backgroundColor: `${theme.colors.primary}DD` }]}>
-              <Text style={[styles.geocodingText, { fontFamily: 'Inter-Medium' }]}>📍 Getting address…</Text>
+            <View style={[styles.geocodingBanner, { backgroundColor: `${theme.colors.primary}DD`, flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
+              <Ionicons name="location" size={14} color="#FFFFFF" />
+              <Text style={[styles.geocodingText, { fontFamily: 'Inter-Medium' }]}>Getting address…</Text>
             </View>
           )}
 
@@ -718,7 +740,7 @@ export default function CreateRideScreen() {
               />
               <View style={{ marginLeft: 12 }}>
                 <Text style={{ color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 14 }}>
-                  Make this ride FREE 🎁
+                  Make this ride FREE
                 </Text>
                 <Text style={{ color: theme.colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 12, marginTop: 2 }}>
                   Share your commute without charging passengers

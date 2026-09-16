@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Avatar from '@/components/common/Avatar';
 import Badge from '@/components/common/Badge';
 import { formatCurrency } from '@/utils/fareCalculator';
 import { BookingWithCommuter, TripWithDriver } from '@/types/database';
+import { isTripArchived } from '@/services/liveFaceVerification';
+import GCashReceiptModal from './GCashReceiptModal';
 
 interface DriverBookingsListProps {
   bookings: BookingWithCommuter[];
@@ -37,9 +39,17 @@ export default function DriverBookingsList({
   commuterLiveRecords,
   onViewPassengerPhoto,
 }: DriverBookingsListProps) {
+  const [selectedReceiptBooking, setSelectedReceiptBooking] = useState<BookingWithCommuter | null>(null);
+
   if (bookings.length === 0) return null;
 
+  const isArchived = isTripArchived(trip);
   const totalCollectedFare = acceptedBookings.reduce((sum, b) => sum + (b.fare_paid || 0), 0);
+  const totalReservationDeposits = acceptedBookings.reduce(
+    (sum, b) => sum + (b.is_reservation ? (b.reservation_fee || 0) : 0),
+    0
+  );
+  const cashToCollect = Math.max(0, totalCollectedFare - totalReservationDeposits);
 
   return (
     <View style={[styles.driverCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
@@ -92,6 +102,15 @@ export default function DriverBookingsList({
                     {booking.seats_booked || 1} {(booking.seats_booked || 1) === 1 ? 'seat' : 'seats'}
                     {booking.fare_paid != null && ` • ${formatCurrency(booking.fare_paid)}`}
                   </Text>
+
+                  {booking.is_reservation && (
+                    <View style={[styles.reservationBadge, { backgroundColor: '#007DFE18', borderColor: '#007DFE40' }]}>
+                      <Ionicons name="wallet" size={11} color="#007DFE" />
+                      <Text style={[styles.reservationBadgeText, { color: '#007DFE' }]}>
+                        Reserved ({formatCurrency(booking.reservation_fee || 0)})
+                      </Text>
+                    </View>
+                  )}
                 </View>
               </View>
 
@@ -171,9 +190,9 @@ export default function DriverBookingsList({
               </View>
             </View>
 
-            {/* Sub Row: Live Photo Button (if captured) */}
-            {commuterCapture && (
-              <View style={styles.itemMetaRow}>
+            {/* Sub Rows: Live Photo & GCash Receipt Buttons */}
+            <View style={styles.itemMetaWrap}>
+              {commuterCapture && !isArchived && (
                 <Pressable
                   style={[
                     styles.livePhotoBtn,
@@ -182,11 +201,14 @@ export default function DriverBookingsList({
                       borderColor: `${theme.colors.success}40`,
                     },
                   ]}
-                  onPress={() => onViewPassengerPhoto?.({
-                    name: booking.commuter?.full_name || 'Passenger',
-                    photoUri: commuterCapture.photoUri,
-                    pickup: trip.origin_label,
-                  })}
+                  onPress={() => {
+                    if (isArchived) return;
+                    onViewPassengerPhoto?.({
+                      name: booking.commuter?.full_name || 'Passenger',
+                      photoUri: commuterCapture.photoUri,
+                      pickup: trip.origin_label,
+                    });
+                  }}
                 >
                   {commuterCapture.photoUri ? (
                     <Image source={{ uri: commuterCapture.photoUri }} style={styles.livePhotoThumb} />
@@ -194,12 +216,31 @@ export default function DriverBookingsList({
                     <Ionicons name="camera" size={13} color={theme.colors.success} />
                   )}
                   <Text style={[styles.livePhotoBtnText, { color: theme.colors.success }]}>
-                    View Passenger Live Photo
+                    Passenger Live Photo
                   </Text>
                   <Ionicons name="chevron-forward" size={12} color={theme.colors.success} />
                 </Pressable>
-              </View>
-            )}
+              )}
+
+              {booking.is_reservation && booking.payment_proof_url && (
+                <Pressable
+                  style={[
+                    styles.livePhotoBtn,
+                    {
+                      backgroundColor: '#007DFE14',
+                      borderColor: '#007DFE40',
+                    },
+                  ]}
+                  onPress={() => setSelectedReceiptBooking(booking)}
+                >
+                  <Ionicons name="receipt-outline" size={13} color="#007DFE" />
+                  <Text style={[styles.livePhotoBtnText, { color: '#007DFE' }]}>
+                    View GCash Receipt
+                  </Text>
+                  <Ionicons name="chevron-forward" size={12} color="#007DFE" />
+                </Pressable>
+              )}
+            </View>
           </View>
         );
       })}
@@ -217,12 +258,40 @@ export default function DriverBookingsList({
         >
           <View style={styles.financialRow}>
             <Text style={[styles.financialLabel, { color: theme.colors.textMuted }]}>
-              To Collect
+              Total Trip Fare
             </Text>
             <Text style={[styles.financialVal, { color: theme.colors.text }]}>
               {formatCurrency(totalCollectedFare)}
             </Text>
           </View>
+
+          {totalReservationDeposits > 0 && (
+            <>
+              <View style={styles.financialRow}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Ionicons name="wallet-outline" size={13} color="#007DFE" />
+                  <Text style={[styles.financialLabel, { color: '#007DFE' }]}>
+                    Advance GCash Deposits
+                  </Text>
+                </View>
+                <Text style={[styles.financialVal, { color: '#007DFE', fontFamily: 'Inter-SemiBold' }]}>
+                  {formatCurrency(totalReservationDeposits)}
+                </Text>
+              </View>
+
+              <View style={styles.financialRow}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Ionicons name="cash-outline" size={13} color={theme.colors.text} />
+                  <Text style={[styles.financialLabel, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]}>
+                    Cash to Collect on Pickup
+                  </Text>
+                </View>
+                <Text style={[styles.financialVal, { color: theme.colors.text, fontFamily: 'Inter-Bold' }]}>
+                  {formatCurrency(cashToCollect)}
+                </Text>
+              </View>
+            </>
+          )}
 
           <View style={styles.financialRow}>
             <Text style={[styles.financialLabel, { color: theme.colors.textMuted }]}>
@@ -244,6 +313,28 @@ export default function DriverBookingsList({
             </Text>
           </View>
         </View>
+      )}
+
+      {/* ═══ GCash Receipt Viewer Modal ═══ */}
+      {selectedReceiptBooking && (
+        <GCashReceiptModal
+          visible={!!selectedReceiptBooking}
+          onClose={() => setSelectedReceiptBooking(null)}
+          receiptUrl={selectedReceiptBooking.payment_proof_url || null}
+          commuterName={selectedReceiptBooking.commuter?.full_name || 'Commuter'}
+          reservationFee={selectedReceiptBooking.reservation_fee || 0}
+          paymentStatus={selectedReceiptBooking.payment_status}
+          onAccept={
+            selectedReceiptBooking.status === 'pending'
+              ? () => {
+                  const b = selectedReceiptBooking;
+                  setSelectedReceiptBooking(null);
+                  handleAcceptBooking(b);
+                }
+              : undefined
+          }
+          accepting={processingBookingId === selectedReceiptBooking.id}
+        />
       )}
     </View>
   );
@@ -416,5 +507,25 @@ const styles = StyleSheet.create({
   financialTotalVal: {
     fontFamily: 'Inter-Bold',
     fontSize: 15,
+  },
+  reservationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    marginLeft: 6,
+  },
+  reservationBadgeText: {
+    fontSize: 10,
+    fontFamily: 'Inter-SemiBold',
+  },
+  itemMetaWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 6,
   },
 });

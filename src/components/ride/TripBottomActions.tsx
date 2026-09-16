@@ -67,8 +67,24 @@ export default function TripBottomActions({
 
       {/* Already Booked / Pending State */}
       {!isDriver && userBooking && userBooking.status === 'pending' && (
-        <View style={[styles.bottomCTA, { backgroundColor: theme.colors.surface, paddingBottom: insets.bottom + 16, borderTopColor: theme.colors.border, justifyContent: 'center' }]}>
-          <Text style={[{ color: theme.colors.textMuted, fontFamily: 'Inter-Medium', fontSize: 16 }]}>Booking Request Pending...</Text>
+        <View style={[styles.bottomCTA, { backgroundColor: theme.colors.surface, paddingBottom: insets.bottom + 16, borderTopColor: theme.colors.border, justifyContent: 'center', alignItems: 'center' }]}>
+          {userBooking.is_reservation ? (
+            <View style={{ alignItems: 'center', gap: 4 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Ionicons name="time-outline" size={16} color="#007DFE" />
+                <Text style={{ color: '#007DFE', fontFamily: 'Inter-SemiBold', fontSize: 15 }}>
+                  Seat Reservation Pending
+                </Text>
+              </View>
+              <Text style={{ color: theme.colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 12 }}>
+                GCash deposit of {formatCurrency(userBooking.reservation_fee || 0)} awaiting driver verification
+              </Text>
+            </View>
+          ) : (
+            <Text style={[{ color: theme.colors.textMuted, fontFamily: 'Inter-Medium', fontSize: 16 }]}>
+              Booking Request Pending...
+            </Text>
+          )}
         </View>
       )}
 

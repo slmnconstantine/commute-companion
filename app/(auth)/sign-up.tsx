@@ -81,7 +81,7 @@ export default function SignUpScreen() {
         Alert.alert('Registration Failed', error.message || 'Could not create account.');
       } else if (session) {
         Alert.alert(
-          'Welcome to Commute Companion! 🎉',
+          'Welcome to Commute Companion!',
           'Your account has been created successfully.',
           [{ text: 'Get Started', onPress: () => router.replace('/(main)/(tabs)') }]
         );

@@ -30,6 +30,16 @@ export async function createTrip(tripData: Omit<Trip, 'id' | 'created_at'>): Pro
  */
 export async function cancelExpiredTrips(): Promise<number> {
   try {
+    // Attempt via RPC first (runs with SECURITY DEFINER so any user can cancel expired rides atomically)
+    const { data: rpcTripIds, error: rpcError } = await supabase.rpc('cancel_expired_trips');
+    if (!rpcError && Array.isArray(rpcTripIds)) {
+      for (const tripId of rpcTripIds) {
+        cancelRideReminder(tripId).catch(() => {});
+      }
+      return rpcTripIds.length;
+    }
+
+    // Fallback to client-side queries if RPC is not available
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
     // 1. Find all trips that are 'open' or 'full' with departure_time < oneDayAgo
@@ -175,7 +185,7 @@ export async function updateTripStatus(id: string, status: string): Promise<{ er
             await sendMessage(
               room.id,
               trip.driver_id,
-              '🏁 Ride Completed! This group chat will remain open for 24 hours in case any passenger has concerns or left an item behind.',
+              'Ride Completed! This group chat will remain open for 24 hours in case any passenger has concerns or left an item behind.',
               true
             );
           }
@@ -240,13 +250,13 @@ export async function updateTripStatus(id: string, status: string): Promise<{ er
       let title = '';
       let body = '';
       if (status === 'ongoing') {
-        title = 'Ride Started! 🚗';
+        title = 'Ride Started!';
         body = `${driverName} has started the trip. Tap to view live tracking.`;
       } else if (status === 'completed') {
-        title = 'Trip Completed! 🏁';
+        title = 'Trip Completed!';
         body = 'You have arrived at your destination. Thank you for riding!';
       } else if (status === 'cancelled') {
-        title = 'Trip Cancelled ❌';
+        title = 'Trip Cancelled';
         body = `We're sorry, your scheduled ride with ${driverName} was cancelled.`;
       }
 
@@ -334,7 +344,7 @@ export async function notifyMatchingCommuters(trip: Trip): Promise<void> {
         console.log(`Sending Ride Matched push to ${match.user.full_name} (${token})`);
         await sendPushNotification(
           token,
-          'Ride Matched! 🚗',
+          'Ride Matched!',
           `A driver has offered a ride matching your requested route from ${trip.origin_label.split(',')[0]} to ${trip.destination_label.split(',')[0]}.`,
           {
             type: 'ride_matched',
@@ -378,7 +388,7 @@ export async function deleteTrip(id: string): Promise<{ error: Error | null }> {
       if (token) {
         sendPushNotification(
           token,
-          'Trip Cancelled ❌',
+          'Trip Cancelled',
           `We're sorry, your scheduled ride with ${driverName} was cancelled and deleted.`,
           { type: 'trip_update', tripId: id, status: 'deleted' },
           b.commuter_id

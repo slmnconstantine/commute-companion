@@ -14,8 +14,8 @@ export async function scheduleRideReminder(
   const now = Date.now();
 
   const reminders = [
-    { minutes: 30, title: 'Ride in 30 Minutes ⏰', body: `Your ride with ${driverName} from ${originLabel.split(',')[0]} departs in 30 minutes!` },
-    { minutes: 5, title: 'Almost Time! 🚗', body: `Your ride with ${driverName} departs in 5 minutes. Get ready!` },
+    { minutes: 30, title: 'Ride in 30 Minutes', body: `Your ride with ${driverName} from ${originLabel.split(',')[0]} departs in 30 minutes!` },
+    { minutes: 5, title: 'Almost Time!', body: `Your ride with ${driverName} departs in 5 minutes. Get ready!` },
   ];
 
   for (const reminder of reminders) {

@@ -17,6 +17,8 @@ export default function EditProfileScreen() {
 
   const [fullName, setFullName] = useState(profile?.full_name || '');
   const [username, setUsername] = useState(profile?.username || '');
+  const [gcashNumber, setGcashNumber] = useState(profile?.gcash_number || '');
+  const [gcashName, setGcashName] = useState(profile?.gcash_name || '');
   const [saving, setSaving] = useState(false);
 
   const userEmail = user?.email || '—';
@@ -27,11 +29,24 @@ export default function EditProfileScreen() {
       Alert.alert('Validation', 'Full name cannot be empty.');
       return;
     }
+
+    if (profile.role === 'driver') {
+      const cleanGcash = gcashNumber.trim().replace(/\s|-/g, '');
+      if (cleanGcash && !/^09\d{9}$/.test(cleanGcash)) {
+        Alert.alert('Validation', 'Please enter a valid 11-digit GCash number (09XXXXXXXXX).');
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const updates: Record<string, any> = { full_name: fullName.trim() };
       if (username.trim() && username.trim() !== profile.username) {
         updates.username = username.trim().toLowerCase();
+      }
+      if (profile.role === 'driver') {
+        updates.gcash_number = gcashNumber.trim().replace(/\s|-/g, '') || null;
+        updates.gcash_name = gcashName.trim() || null;
       }
       const { error } = await updateProfile(profile.id, updates);
       if (error) throw error;
@@ -154,6 +169,47 @@ export default function EditProfileScreen() {
           </View>
         </View>
 
+        {/* Driver GCash Details Section */}
+        {profile?.role === 'driver' && (
+          <>
+            <Text style={[styles.sectionLabel, { color: theme.colors.textMuted, fontFamily: 'Inter-SemiBold', marginTop: 24 }]}>
+              GCASH PAYMENT DETAILS
+            </Text>
+            <View style={[styles.sectionCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+              <View style={styles.field}>
+                <Text style={[styles.label, { color: theme.colors.textMuted, fontFamily: 'Inter-Medium' }]}>GCash Number</Text>
+                <View style={[styles.inputWrapper, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.border }]}>
+                  <Ionicons name="wallet-outline" size={16} color={theme.colors.primary} style={{ marginRight: 8 }} />
+                  <TextInput
+                    value={gcashNumber}
+                    onChangeText={setGcashNumber}
+                    placeholder="09XXXXXXXXX"
+                    placeholderTextColor={theme.colors.textMuted}
+                    keyboardType="phone-pad"
+                    maxLength={13}
+                    style={[styles.inputField, { color: theme.colors.text, fontFamily: 'Inter-Regular' }]}
+                  />
+                </View>
+              </View>
+              <View style={[styles.fieldDivider, { backgroundColor: theme.colors.border }]} />
+              <View style={styles.field}>
+                <Text style={[styles.label, { color: theme.colors.textMuted, fontFamily: 'Inter-Medium' }]}>GCash Registered Name</Text>
+                <View style={[styles.inputWrapper, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.border }]}>
+                  <Ionicons name="person-outline" size={16} color={theme.colors.primary} style={{ marginRight: 8 }} />
+                  <TextInput
+                    value={gcashName}
+                    onChangeText={setGcashName}
+                    placeholder="e.g. JUAN D."
+                    placeholderTextColor={theme.colors.textMuted}
+                    autoCapitalize="characters"
+                    style={[styles.inputField, { color: theme.colors.text, fontFamily: 'Inter-Regular' }]}
+                  />
+                </View>
+              </View>
+            </View>
+          </>
+        )}
+
         <Pressable
           style={({ pressed }) => [
             styles.saveBtn,
@@ -201,6 +257,19 @@ const styles = StyleSheet.create({
   fieldDivider: { height: StyleSheet.hairlineWidth, marginLeft: 16 },
   label: { fontSize: 12, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
   input: { height: 48, borderRadius: 12, borderWidth: 1, paddingHorizontal: 16, fontSize: 15 },
+  inputWrapper: {
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  inputField: {
+    flex: 1,
+    height: '100%',
+    fontSize: 15,
+  },
   readonlyField: {
     height: 48,
     borderRadius: 12,

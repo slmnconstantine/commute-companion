@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, TextInput, StyleSheet, Pressable, Alert, Animated, KeyboardAvoidingView, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
@@ -20,23 +20,29 @@ export default function ReviewScreen() {
   const buttonScale = useRef(new Animated.Value(1)).current;
 
   const handleSubmit = async () => {
-    if (rating === 0) { Alert.alert('Rating Required', 'Please select a star rating.'); return; }
-    if (!profile || !id) return;
+    if (!rating) {
+      Alert.alert('Rating Required', 'Please select a star rating.');
+      return;
+    }
+
+    if (!profile?.id || !driverId) return;
+
     setLoading(true);
     try {
       const { error } = await submitReview({
-        booking_id: id,
+        booking_id: id as string,
         reviewer_id: profile.id,
-        reviewee_id: driverId || '', // Passed from Activity tab
+        reviewee_id: driverId as string,
         rating,
         comment: comment.trim() || null,
       });
       if (error) throw error;
+
       Alert.alert('Thank You!', 'Your review has been submitted.', [
         { text: 'OK', onPress: () => router.back() },
       ]);
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to submit review.');
+      Alert.alert('Error', e.message || 'Failed to submit review');
     } finally {
       setLoading(false);
     }
@@ -57,7 +63,11 @@ export default function ReviewScreen() {
 
       <View style={styles.content}>
         <View style={[styles.emojiCircle, { backgroundColor: `${theme.colors.accent}15` }]}>
-          <Text style={styles.emoji}>{rating >= 4 ? '😊' : rating >= 2 ? '😐' : rating > 0 ? '😟' : '⭐'}</Text>
+          <MaterialCommunityIcons
+            name={rating >= 4 ? 'emoticon-happy-outline' : rating >= 2 ? 'emoticon-neutral-outline' : rating > 0 ? 'emoticon-sad-outline' : 'star'}
+            size={44}
+            color={theme.colors.accent}
+          />
         </View>
         <Text style={[styles.prompt, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>
           How was your ride?

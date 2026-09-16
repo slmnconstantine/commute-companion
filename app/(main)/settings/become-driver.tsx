@@ -24,7 +24,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
-import { pickImage, uploadDriverDocument } from '@/services/storage';
+import { uploadDriverDocument } from '@/services/storage';
+import DocumentCaptureModal from '@/components/verification/DocumentCaptureModal';
 
 import { addVehicle } from '@/services/vehicles';
 
@@ -36,6 +37,8 @@ export default function BecomeDriverScreen() {
 
   const [vehicleModel, setVehicleModel] = useState('');
   const [plateNumber, setPlateNumber] = useState('');
+  const [gcashNumber, setGcashNumber] = useState(profile?.gcash_number || '');
+  const [gcashName, setGcashName] = useState(profile?.gcash_name || '');
   const [vehicleType, setVehicleType] = useState<'sedan' | 'suv' | 'van' | 'motorcycle'>('sedan');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -54,6 +57,18 @@ export default function BecomeDriverScreen() {
     const newErrors: Record<string, string> = {};
     if (!vehicleModel.trim()) newErrors.vehicleModel = 'Vehicle model is required';
     if (!plateNumber.trim()) newErrors.plateNumber = 'Plate number is required';
+    
+    const cleanGcash = gcashNumber.trim().replace(/\s|-/g, '');
+    if (!cleanGcash) {
+      newErrors.gcashNumber = 'GCash number is required for reservations';
+    } else if (!/^09\d{9}$/.test(cleanGcash)) {
+      newErrors.gcashNumber = 'Enter a valid 11-digit GCash number (09XXXXXXXXX)';
+    }
+
+    if (!gcashName.trim()) {
+      newErrors.gcashName = 'GCash registered account name is required';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -65,6 +80,8 @@ export default function BecomeDriverScreen() {
       const updates: Record<string, any> = {
         role: 'driver',
         is_verified: false, // Requires manual verification
+        gcash_number: gcashNumber.trim().replace(/\s|-/g, ''),
+        gcash_name: gcashName.trim(),
       };
       if (docUrls.license) {
         updates.government_id_url = docUrls.license;
@@ -89,7 +106,7 @@ export default function BecomeDriverScreen() {
         }
 
         Alert.alert(
-          'Application Submitted! 🎉',
+          'Application Submitted!',
           'Your driver application and documents have been submitted for review. Once verified by our team, you will be able to start posting rides.',
           [{ text: 'OK', onPress: () => router.back() }]
         );
@@ -148,7 +165,7 @@ export default function BecomeDriverScreen() {
         console.warn('Note: Mock vehicle insertion skipped:', vErr);
       }
 
-      Alert.alert('Success! 🚗', 'You are now a verified driver with your registered vehicle.', [
+      Alert.alert('Success!', 'You are now a verified driver with your registered vehicle.', [
         { text: 'OK', onPress: () => router.back() },
       ]);
     } catch (e: any) {
@@ -260,8 +277,43 @@ export default function BecomeDriverScreen() {
         </View>
         {errors.plateNumber && <Text style={[styles.errorText, { color: theme.colors.error }]}>{errors.plateNumber}</Text>}
 
+        {/* GCash Payment & Reservation Details */}
+        <Text style={[styles.sectionTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', marginTop: 24 }]}>
+          GCash Payment Details
+        </Text>
+        <Text style={{ color: theme.colors.textMuted, fontSize: 13, fontFamily: 'Inter-Regular', marginBottom: 12 }}>
+          Your GCash details will be visible to commuters for advance seat reservation fees and fare payments.
+        </Text>
+
+        <View style={[styles.inputContainer, { backgroundColor: theme.colors.surface, borderColor: errors.gcashNumber ? theme.colors.error : theme.colors.border }]}>
+          <Ionicons name="wallet-outline" size={20} color={theme.colors.primary} />
+          <TextInput
+            value={gcashNumber}
+            onChangeText={(t) => { setGcashNumber(t); setErrors(e => ({ ...e, gcashNumber: '' })); }}
+            placeholder="GCash Number (e.g. 09171234567)"
+            placeholderTextColor={theme.colors.textMuted}
+            keyboardType="phone-pad"
+            maxLength={13}
+            style={[styles.textInput, { color: theme.colors.text, fontFamily: 'Inter-Regular' }]}
+          />
+        </View>
+        {errors.gcashNumber && <Text style={[styles.errorText, { color: theme.colors.error }]}>{errors.gcashNumber}</Text>}
+
+        <View style={[styles.inputContainer, { backgroundColor: theme.colors.surface, borderColor: errors.gcashName ? theme.colors.error : theme.colors.border, marginTop: 10 }]}>
+          <Ionicons name="person-outline" size={20} color={theme.colors.primary} />
+          <TextInput
+            value={gcashName}
+            onChangeText={(t) => { setGcashName(t); setErrors(e => ({ ...e, gcashName: '' })); }}
+            placeholder="GCash Registered Name (e.g. JUAN D.)"
+            placeholderTextColor={theme.colors.textMuted}
+            autoCapitalize="characters"
+            style={[styles.textInput, { color: theme.colors.text, fontFamily: 'Inter-Regular' }]}
+          />
+        </View>
+        {errors.gcashName && <Text style={[styles.errorText, { color: theme.colors.error }]}>{errors.gcashName}</Text>}
+
         {/* Upload Documents */}
-        <Text style={[styles.sectionTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', marginTop: 20 }]}>
+        <Text style={[styles.sectionTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', marginTop: 24 }]}>
           Required Documents
         </Text>
 
@@ -343,15 +395,25 @@ function UploadCard({
 }) {
   const [uploading, setUploading] = useState(false);
   const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
+  const [showCaptureModal, setShowCaptureModal] = useState(false);
 
-  const handlePick = async () => {
+  const getDocTypeCategory = (): 'license' | 'vehicle' | 'or_cr' | 'id' => {
+    if (docType.includes('license')) return 'license';
+    if (docType.includes('vehicle')) return 'vehicle';
+    if (docType.includes('or_cr')) return 'or_cr';
+    return 'id';
+  };
+
+  const handleOpenCapture = () => {
     if (!userId) {
       Alert.alert('Error', 'Please log in to upload documents.');
       return;
     }
-    const base64 = await pickImage();
-    if (!base64) return;
+    setShowCaptureModal(true);
+  };
 
+  const handleCaptureSuccess = async (base64: string) => {
+    if (!userId) return;
     setUploading(true);
     try {
       const url = await uploadDriverDocument(userId, base64, docType);
@@ -361,48 +423,59 @@ function UploadCard({
       }
     } catch (e) {
       console.error('Document upload error:', e);
+      Alert.alert('Upload Error', 'Failed to upload document. Please try again.');
     } finally {
       setUploading(false);
     }
   };
 
   return (
-    <Pressable
-      style={[
-        styles.uploadCard,
-        {
-          backgroundColor: uploadedUrl ? `${theme.colors.success}08` : theme.colors.surface,
-          borderColor: uploadedUrl ? theme.colors.success : theme.colors.border,
-        },
-      ]}
-      onPress={handlePick}
-      disabled={uploading}
-    >
-      <View style={[styles.uploadIcon, { backgroundColor: uploadedUrl ? `${theme.colors.success}15` : `${theme.colors.primary}10` }]}>
-        {uploading ? (
-          <ActivityIndicator size="small" color={theme.colors.primary} />
-        ) : (
-          <Ionicons
-            name={uploadedUrl ? 'checkmark-circle' : (icon as any)}
-            size={24}
-            color={uploadedUrl ? theme.colors.success : theme.colors.primary}
-          />
-        )}
-      </View>
-      <View style={styles.uploadInfo}>
-        <Text style={[styles.uploadTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>
-          {title}
-        </Text>
-        <Text style={[styles.uploadDesc, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
-          {uploading ? 'Uploading to documents bucket...' : uploadedUrl ? 'Document uploaded & saved ✓' : description}
-        </Text>
-      </View>
-      <Ionicons
-        name={uploadedUrl ? 'checkmark-circle' : 'cloud-upload-outline'}
-        size={22}
-        color={uploadedUrl ? theme.colors.success : theme.colors.textMuted}
+    <>
+      <Pressable
+        style={[
+          styles.uploadCard,
+          {
+            backgroundColor: uploadedUrl ? `${theme.colors.success}08` : theme.colors.surface,
+            borderColor: uploadedUrl ? theme.colors.success : theme.colors.border,
+          },
+        ]}
+        onPress={handleOpenCapture}
+        disabled={uploading}
+      >
+        <View style={[styles.uploadIcon, { backgroundColor: uploadedUrl ? `${theme.colors.success}15` : `${theme.colors.primary}10` }]}>
+          {uploading ? (
+            <ActivityIndicator size="small" color={theme.colors.primary} />
+          ) : (
+            <Ionicons
+              name={uploadedUrl ? 'checkmark-circle' : (icon as any)}
+              size={24}
+              color={uploadedUrl ? theme.colors.success : theme.colors.primary}
+            />
+          )}
+        </View>
+        <View style={styles.uploadInfo}>
+          <Text style={[styles.uploadTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>
+            {title}
+          </Text>
+          <Text style={[styles.uploadDesc, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
+            {uploading ? 'Uploading live capture to documents...' : uploadedUrl ? 'Live document verified & attached' : description}
+          </Text>
+        </View>
+        <Ionicons
+          name={uploadedUrl ? 'checkmark-circle' : 'camera-outline'}
+          size={22}
+          color={uploadedUrl ? theme.colors.success : theme.colors.textMuted}
+        />
+      </Pressable>
+
+      <DocumentCaptureModal
+        visible={showCaptureModal}
+        onClose={() => setShowCaptureModal(false)}
+        onCaptureSuccess={handleCaptureSuccess}
+        documentTitle={title}
+        documentType={getDocTypeCategory()}
       />
-    </Pressable>
+    </>
   );
 }
 
