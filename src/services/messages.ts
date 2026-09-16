@@ -35,7 +35,7 @@ export async function sendMessage(
               
             if (profilesData) {
               const senderName = (data.sender as any)?.full_name || 'Someone';
-              const notificationTitle = isAlert ? `🚨 Alert from ${senderName}` : `New message from ${senderName}`;
+              const notificationTitle = isAlert ? `Alert from ${senderName}` : `New message from ${senderName}`;
               
               profilesData.forEach((user: any) => {
                 if (user.push_token) {

@@ -6,6 +6,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Map, Camera, RasterSource, Layer, GeoJSONSource, Marker, type CameraRef } from '@maplibre/maplibre-react-native';
+import { safeCamera } from '@/utils/safeCamera';
 import { useTheme } from '@/context/ThemeContext';
 import { useRoute } from '@/context/RouteContext';
 import { useLocation } from '@/hooks/useLocation';
@@ -94,14 +95,16 @@ export default function SetRouteScreen() {
 
   const cameraRef = useRef<CameraRef>(null);
   const hasAutoCenteredRef = useRef(false);
+  const autoCenterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Auto-refocus camera to user's real GPS location once resolved
   useEffect(() => {
     if (location?.latitude && location?.longitude && !locationLoading) {
       if (!routeInfo && !hasAutoCenteredRef.current) {
         hasAutoCenteredRef.current = true;
-        setTimeout(() => {
-          cameraRef.current?.easeTo({
+        if (autoCenterTimerRef.current) clearTimeout(autoCenterTimerRef.current);
+        autoCenterTimerRef.current = setTimeout(() => {
+          safeCamera(cameraRef.current)?.easeTo({
             center: [location.longitude, location.latitude],
             zoom: 14,
             duration: 800,
@@ -109,11 +112,17 @@ export default function SetRouteScreen() {
         }, 300);
       }
     }
+
+    return () => {
+      if (autoCenterTimerRef.current) {
+        clearTimeout(autoCenterTimerRef.current);
+      }
+    };
   }, [location?.latitude, location?.longitude, locationLoading, routeInfo]);
 
   const handleCenterOnUser = () => {
     if (location?.latitude && location?.longitude) {
-      cameraRef.current?.easeTo({
+      safeCamera(cameraRef.current)?.easeTo({
         center: [location.longitude, location.latitude],
         zoom: 14,
         duration: 600,
@@ -157,7 +166,7 @@ export default function SetRouteScreen() {
       setRouteInfo({ distanceKm: route.distanceKm, durationMin: route.durationMin, polyline: route.encodedPolyline });
       const lats = route.coordinates.map(c => c.latitude);
       const lngs = route.coordinates.map(c => c.longitude);
-      cameraRef.current?.fitBounds(
+      safeCamera(cameraRef.current)?.fitBounds(
         [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)],
         { padding: { top: 100, right: 50, bottom: 250, left: 50 }, duration: 1000 }
       );
@@ -303,7 +312,7 @@ export default function SetRouteScreen() {
       label: `${origin.label.split(',')[0]} → ${destination.label.split(',')[0]}`,
     });
 
-    Alert.alert('Route Saved! 🎉', 'Your commute route has been set. You can now see updates from your route community.', [
+    Alert.alert('Route Saved!', 'Your commute route has been set. You can now see updates from your route community.', [
       { text: 'OK', onPress: () => router.back() },
     ]);
   };
@@ -475,8 +484,9 @@ export default function SetRouteScreen() {
 
           {/* Reverse geocoding indicator */}
           {reverseGeocoding && (
-            <View style={[styles.geocodingBanner, { backgroundColor: `${theme.colors.primary}DD` }]}>
-              <Text style={[styles.geocodingText, { fontFamily: 'Inter-Medium' }]}>📍 Getting address…</Text>
+            <View style={[styles.geocodingBanner, { backgroundColor: `${theme.colors.primary}DD`, flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
+              <Ionicons name="location" size={14} color="#FFFFFF" />
+              <Text style={[styles.geocodingText, { fontFamily: 'Inter-Medium' }]}>Getting address…</Text>
             </View>
           )}
 

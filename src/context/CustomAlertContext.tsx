@@ -38,8 +38,11 @@ export function showCustomAlert(title: string, message?: string, buttons?: Alert
     lowerTitle.includes('saved') ||
     lowerTitle.includes('arrived') ||
     lowerTitle.includes('done') ||
-    lowerTitle.includes('🎉') ||
-    lowerTitle.includes('✅')
+    lowerTitle.includes('confirmed') ||
+    lowerTitle.includes('approved') ||
+    lowerTitle.includes('cleaned') ||
+    lowerTitle.includes('welcome') ||
+    lowerTitle.includes('thank')
   ) {
     type = 'success';
   } else if (

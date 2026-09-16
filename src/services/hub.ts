@@ -76,7 +76,7 @@ export const toggleLike = async (postId: string, userId: string, currentlyLiked:
       const { data: authorData } = await supabase.from('profiles').select('id, push_token').eq('id', postData.author_id).single();
       const { data: likerData } = await supabase.from('profiles').select('full_name').eq('id', userId).single();
       if (authorData?.push_token && likerData?.full_name) {
-        sendPushNotification(authorData.push_token, 'New Like ❤️', `${likerData.full_name} liked your post!`, { type: 'hub_post', postId }, authorData.id);
+        sendPushNotification(authorData.push_token, 'New Like', `${likerData.full_name} liked your post!`, { type: 'hub_post', postId }, authorData.id);
       }
     }
   }
@@ -126,7 +126,7 @@ export const createComment = async (postId: string, userId: string, content: str
     const { data: authorData } = await supabase.from('profiles').select('id, push_token').eq('id', postData.author_id).single();
     const commenterName = Array.isArray(data.author) ? data.author[0].full_name : data.author.full_name;
     if (authorData?.push_token && commenterName) {
-      sendPushNotification(authorData.push_token, 'New Comment 💬', `${commenterName} commented: "${content}"`, { type: 'hub_post', postId }, authorData.id);
+      sendPushNotification(authorData.push_token, 'New Comment', `${commenterName} commented: "${content}"`, { type: 'hub_post', postId }, authorData.id);
     }
   }
   
@@ -186,7 +186,7 @@ export const createPost = async (
 
         for (const target of matched) {
           notifiedUserIds.add(target.id);
-          const title = 'You were mentioned in Hub 💬';
+          const title = 'You were mentioned in Hub';
           const body = `${authorProfile.full_name} mentioned you: "${message.length > 60 ? message.substring(0, 57) + '...' : message}"`;
 
           await createNotification(target.id, title, body, 'hub_mention', {

@@ -24,6 +24,8 @@ export interface Profile {
   total_ratings: number;
   push_token?: string | null;
   platform_fee_balance?: number;
+  gcash_number?: string | null;
+  gcash_name?: string | null;
   created_at: string;
 }
 
@@ -70,6 +72,10 @@ export interface Booking {
   seats_booked: number;
   driver_confirmed: boolean;
   commuter_confirmed: boolean;
+  is_reservation?: boolean;
+  reservation_fee?: number;
+  payment_proof_url?: string | null;
+  payment_status?: 'unpaid' | 'submitted' | 'verified';
   created_at: string;
 }
 

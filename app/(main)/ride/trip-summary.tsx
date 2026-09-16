@@ -51,13 +51,13 @@ export default function TripSummaryScreen() {
     const totalFare = acceptedBookings.reduce((sum, b) => sum + (b.fare_paid || 0), 0);
 
     const text = [
-      `🧾 Trip Receipt — Commute Companion`,
+      `Trip Receipt — Commute Companion`,
       ``,
-      `📍 ${trip.origin_label?.split(',')[0]} → ${trip.destination_label?.split(',')[0]}`,
-      `📅 ${formatDepartureTime(trip.departure_time)}`,
-      `🚗 Driver: ${trip.driver?.full_name}`,
-      `👥 Passengers: ${totalPassengers}`,
-      `💰 Total Fare: ${formatCurrency(totalFare)}`,
+      `Route: ${trip.origin_label?.split(',')[0]} → ${trip.destination_label?.split(',')[0]}`,
+      `Departure: ${formatDepartureTime(trip.departure_time)}`,
+      `Driver: ${trip.driver?.full_name}`,
+      `Passengers: ${totalPassengers}`,
+      `Total Fare: ${formatCurrency(totalFare)}`,
       ``,
       `Status: ${trip.status?.toUpperCase()}`,
     ].join('\n');

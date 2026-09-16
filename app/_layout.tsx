@@ -39,15 +39,19 @@ const queryClient = new QueryClient({
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LogManager } from '@maplibre/maplibre-react-native';
 
-// Suppress transient tile network errors (e.g., 502 Bad Gateway / tile load dropouts)
+// Suppress transient tile network errors and native ReactTagResolver view lookup errors during transitions
 LogManager.onLog((event) => {
   const msg = event?.message || '';
+  const tag = event?.tag || '';
   if (
     msg.includes('Failed to load tile') ||
     msg.includes('502') ||
-    msg.includes('404')
+    msg.includes('404') ||
+    tag === 'ReactTagResolver' ||
+    msg.includes('ReactTagResolver') ||
+    msg.includes('reactTag')
   ) {
-    return true; // Handled: prevent surfacing transient network tile dropouts
+    return true; // Handled: prevent surfacing transient network / unmount tag resolution errors
   }
   return false;
 });
@@ -66,20 +70,30 @@ function RootLayoutNav() {
       if (val === 'true') setHasSkippedVerification(true);
     });
     AsyncStorage.getItem('@onboarding_complete').then(val => {
-      setHasCompletedOnboarding(val === 'true');
+      if (val === 'true') {
+        setHasCompletedOnboarding(true);
+      } else {
+        AsyncStorage.getItem('hasCompletedOnboarding').then(val2 => {
+          setHasCompletedOnboarding(val2 === 'true');
+        });
+      }
     });
   }, []);
 
   useEffect(() => {
-    if (isLoading || !navigationState?.key) return;
+    if (isLoading || !navigationState?.key || hasCompletedOnboarding === null) return;
 
     const inAuthGroup = segments[0] === '(auth)';
     const isVerifyEmail = inAuthGroup && (segments as string[]).length > 1 && (segments as string[])[1] === 'verify-email';
 
-    if (!session && !inAuthGroup) {
-      if (hasCompletedOnboarding === false) {
-        router.replace('/(auth)/onboarding');
-      } else {
+    if (!session) {
+      if (!inAuthGroup) {
+        if (hasCompletedOnboarding === false) {
+          router.replace('/(auth)/onboarding');
+        } else {
+          router.replace('/(auth)/sign-in');
+        }
+      } else if (isVerifyEmail) {
         router.replace('/(auth)/sign-in');
       }
     } else if (session && inAuthGroup) {
@@ -87,12 +101,7 @@ function RootLayoutNav() {
       if (!session.user.email_confirmed_at && !hasSkippedVerification && !isVerifyEmail) {
         router.replace('/(auth)/verify-email');
       } else if (session.user.email_confirmed_at || hasSkippedVerification) {
-        if (isVerifyEmail) {
-          // If they verified or skipped while on verify-email screen, push to main
-          router.replace('/(main)/(tabs)');
-        } else {
-          router.replace('/(main)/(tabs)');
-        }
+        router.replace('/(main)/(tabs)');
       }
     }
   }, [session, isLoading, segments, navigationState?.key, hasSkippedVerification, hasCompletedOnboarding]);

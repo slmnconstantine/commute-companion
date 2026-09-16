@@ -60,6 +60,79 @@ export async function saveDriverLiveCapture(
 }
 
 /**
+ * Helper to determine if a trip is completed and archived (older than 24 hours).
+ * Also treats cancelled trips as not showing live face photos.
+ */
+export function isTripArchived(trip?: { status?: string; departure_time?: string | null; created_at?: string | null } | null): boolean {
+  if (!trip) return false;
+  if (trip.status === 'cancelled') return true;
+  if (trip.status !== 'completed') return false;
+  const timeStr = trip.departure_time || trip.created_at;
+  if (!timeStr) return false;
+  const time = new Date(timeStr).getTime();
+  if (isNaN(time)) return false;
+  return Date.now() - time > 24 * 60 * 60 * 1000;
+}
+
+/**
+ * Purges live face captures for a trip from local cache and remote messages.
+ * Used when a trip is completed and archived to respect user privacy.
+ */
+export async function purgeTripLiveCaptures(tripId: string): Promise<void> {
+  if (!tripId) return;
+
+  // 1. Purge local cache
+  try {
+    await AsyncStorage.removeItem(`${DRIVER_KEY_PREFIX}${tripId}`);
+    await AsyncStorage.removeItem(`${COMMUTERS_KEY_PREFIX}${tripId}`);
+  } catch (err) {
+    console.warn('Failed to purge local live face cache for trip', tripId, err);
+  }
+
+  // 2. Purge remote chat room messages
+  try {
+    const { data: room } = await supabase
+      .from('chat_rooms')
+      .select('id')
+      .eq('trip_id', tripId)
+      .eq('type', 'group')
+      .maybeSingle();
+
+    if (room?.id) {
+      await supabase
+        .from('messages')
+        .delete()
+        .eq('chat_room_id', room.id)
+        .like('content', `${LIVE_FACE_PREFIX}%`);
+    }
+  } catch (netErr) {
+    console.warn('Failed to purge remote live face records for trip', tripId, netErr);
+  }
+}
+
+/**
+ * Scans trips that are completed and archived (>24 hours) and purges their live face capture messages
+ */
+export async function purgeArchivedLiveCaptures(): Promise<void> {
+  try {
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: archivedTrips } = await supabase
+      .from('trips')
+      .select('id')
+      .eq('status', 'completed')
+      .lt('departure_time', oneDayAgo);
+
+    if (archivedTrips && archivedTrips.length > 0) {
+      for (const t of archivedTrips) {
+        purgeTripLiveCaptures(t.id).catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to scan and purge archived live captures:', err);
+  }
+}
+
+/**
  * Retrieves the driver's live face capture for a specific trip
  */
 export async function getDriverLiveCapture(
@@ -67,6 +140,22 @@ export async function getDriverLiveCapture(
   driverId?: string
 ): Promise<LiveFaceRecord | null> {
   if (!tripId) return null;
+
+  // Check if trip is completed and archived
+  try {
+    const { data: trip } = await supabase
+      .from('trips')
+      .select('status, departure_time, created_at')
+      .eq('id', tripId)
+      .maybeSingle();
+
+    if (trip && isTripArchived(trip)) {
+      purgeTripLiveCaptures(tripId).catch(() => {});
+      return null;
+    }
+  } catch (e) {
+    // If network check fails, proceed with caution
+  }
 
   // 1. Check local cache
   try {
@@ -172,6 +261,23 @@ export async function getTripCommuterCaptures(
   tripId: string
 ): Promise<Record<string, LiveFaceRecord>> {
   if (!tripId) return {};
+
+  // Check if trip is completed and archived
+  try {
+    const { data: trip } = await supabase
+      .from('trips')
+      .select('status, departure_time, created_at')
+      .eq('id', tripId)
+      .maybeSingle();
+
+    if (trip && isTripArchived(trip)) {
+      purgeTripLiveCaptures(tripId).catch(() => {});
+      return {};
+    }
+  } catch (e) {
+    // If network check fails, proceed
+  }
+
   const map: Record<string, LiveFaceRecord> = {};
 
   // 1. Read from local cache

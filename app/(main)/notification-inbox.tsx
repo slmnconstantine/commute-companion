@@ -80,8 +80,8 @@ export default function NotificationInboxScreen() {
       refreshUnreadCount();
     }
 
-    // Direct routing to the specific feature/screen
-    handleNotificationNavigation(router, notification);
+    // Direct routing to the specific feature/screen with validation and alerts
+    await handleNotificationNavigation(router, notification);
   };
 
   const handleMarkAllRead = async () => {
@@ -150,6 +150,40 @@ export default function NotificationInboxScreen() {
     }
   };
 
+  const getNotificationStatusMeta = (notification: AppNotification) => {
+    const title = (notification.title || '').toLowerCase();
+    const body = (notification.body || '').toLowerCase();
+    const status = notification.data?.status;
+
+    if (
+      status === 'cancelled' ||
+      title.includes('cancelled') ||
+      body.includes('was cancelled') ||
+      body.includes('has been cancelled')
+    ) {
+      return { label: 'Cancelled', color: theme.colors.error, icon: 'close-circle-outline' as const };
+    }
+
+    if (
+      status === 'rejected' ||
+      title.includes('declined') ||
+      body.includes('declined your booking') ||
+      body.includes('rejected')
+    ) {
+      return { label: 'Declined', color: '#F59E0B', icon: 'alert-circle-outline' as const };
+    }
+
+    if (
+      status === 'expired' ||
+      title.includes('expired') ||
+      body.includes('has expired')
+    ) {
+      return { label: 'Expired', color: theme.colors.textMuted, icon: 'time-outline' as const };
+    }
+
+    return null;
+  };
+
   const hasUnread = notifications.some(n => !n.read);
 
   return (
@@ -160,8 +194,8 @@ export default function NotificationInboxScreen() {
         </Pressable>
         <Text style={[styles.headerTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>Notifications</Text>
         <View style={styles.headerRight}>
-          <Pressable onPress={handleMarkAllRead} style={styles.actionBtn} disabled={!hasUnread || loading}>
-            <Ionicons name="checkmark-done" size={24} color={hasUnread ? theme.colors.primary : theme.colors.textMuted} />
+          <Pressable onPress={handleMarkAllRead} style={styles.actionBtn} disabled={notifications.length === 0 || !hasUnread}>
+            <Ionicons name="checkmark-done-outline" size={22} color={hasUnread ? theme.colors.primary : theme.colors.textMuted} />
           </Pressable>
           <Pressable onPress={handleClearAll} style={styles.actionBtn} disabled={notifications.length === 0 || loading}>
             <Ionicons name="trash-outline" size={22} color={notifications.length > 0 ? theme.colors.error : theme.colors.textMuted} />
@@ -170,12 +204,12 @@ export default function NotificationInboxScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}
       >
         {loading ? (
           <>
-            {[1, 2, 3, 4, 5].map((i) => (
+            {[...Array(5)].map((_, i) => (
               <NotificationSkeleton key={i} />
             ))}
           </>
@@ -186,53 +220,68 @@ export default function NotificationInboxScreen() {
             message="You're all caught up! Updates regarding your rides and requests will appear here."
           />
         ) : (
-          notifications.map(notification => (
-            <Swipeable
-              key={notification.id}
-              renderRightActions={() => (
-                <Pressable
-                  style={[styles.swipeDeleteBtn, { backgroundColor: theme.colors.error }]}
-                  onPress={() => handleDeleteNotification(notification.id)}
-                >
-                  <Ionicons name="trash-outline" size={20} color="#fff" />
-                </Pressable>
-              )}
-            >
-              <BouncyPressable
-                style={[
-                  styles.notificationCard,
-                  { backgroundColor: notification.read ? theme.colors.surface : theme.colors.primary + '10', borderColor: theme.colors.border }
-                ]}
-                hapticType="light"
-                onPress={() => handleNotificationPress(notification)}
+          notifications.map(notification => {
+            const statusMeta = getNotificationStatusMeta(notification);
+            return (
+              <Swipeable
+                key={notification.id}
+                renderRightActions={() => (
+                  <Pressable
+                    style={[styles.swipeDeleteBtn, { backgroundColor: theme.colors.error }]}
+                    onPress={() => handleDeleteNotification(notification.id)}
+                  >
+                    <Ionicons name="trash-outline" size={20} color="#fff" />
+                  </Pressable>
+                )}
               >
-                <View style={[styles.iconContainer, { backgroundColor: theme.colors.primary + '20' }]}>
-                  <Ionicons name={getIconForType(notification.type)} size={20} color={theme.colors.primary} />
-                </View>
-                <View style={styles.contentContainer}>
-                  <View style={styles.titleRow}>
-                    <Text style={[styles.title, { color: theme.colors.text, fontFamily: notification.read ? 'Inter-Medium' : 'Inter-Bold' }]} numberOfLines={1}>
-                      {notification.title}
-                    </Text>
-                    <Text style={[styles.time, { color: theme.colors.textMuted }]}>
-                      {getRelativeTime(notification.created_at)}
+                <BouncyPressable
+                  style={[
+                    styles.notificationCard,
+                    { backgroundColor: notification.read ? theme.colors.surface : theme.colors.primary + '10', borderColor: theme.colors.border }
+                  ]}
+                  hapticType="light"
+                  onPress={() => handleNotificationPress(notification)}
+                >
+                  <View style={[styles.iconContainer, { backgroundColor: statusMeta ? `${statusMeta.color}20` : theme.colors.primary + '20' }]}>
+                    <Ionicons
+                      name={statusMeta ? statusMeta.icon : (getIconForType(notification.type) as any)}
+                      size={20}
+                      color={statusMeta ? statusMeta.color : theme.colors.primary}
+                    />
+                  </View>
+                  <View style={styles.contentContainer}>
+                    <View style={styles.titleRow}>
+                      <Text style={[styles.title, { color: theme.colors.text, fontFamily: notification.read ? 'Inter-Medium' : 'Inter-Bold' }]} numberOfLines={1}>
+                        {notification.title}
+                      </Text>
+                      <Text style={[styles.time, { color: theme.colors.textMuted }]}>
+                        {getRelativeTime(notification.created_at)}
+                      </Text>
+                    </View>
+                    {statusMeta && (
+                      <View style={[styles.statusBadge, { backgroundColor: `${statusMeta.color}15`, borderColor: `${statusMeta.color}35` }]}>
+                        <Ionicons name={statusMeta.icon} size={11} color={statusMeta.color} />
+                        <Text style={[styles.statusBadgeText, { color: statusMeta.color, fontFamily: 'Inter-SemiBold' }]}>
+                          {statusMeta.label}
+                        </Text>
+                      </View>
+                    )}
+                    <Text style={[styles.body, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]} numberOfLines={2}>
+                      {notification.body}
                     </Text>
                   </View>
-                  <Text style={[styles.body, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]} numberOfLines={2}>
-                    {notification.body}
-                  </Text>
-                </View>
-                <Pressable
-                  style={styles.deleteBtn}
-                  onPress={() => handleDeleteNotification(notification.id)}
-                  hitSlop={10}
-                >
-                  <Ionicons name="close" size={20} color={theme.colors.textMuted} />
-                </Pressable>
-                {!notification.read && <View style={[styles.unreadDot, { backgroundColor: theme.colors.primary }]} />}
-              </BouncyPressable>
-            </Swipeable>
-          ))
+                  <Pressable
+                    style={styles.deleteBtn}
+                    onPress={() => handleDeleteNotification(notification.id)}
+                    hitSlop={10}
+                  >
+                    <Ionicons name="close" size={20} color={theme.colors.textMuted} />
+                  </Pressable>
+                  {!notification.read && <View style={[styles.unreadDot, { backgroundColor: statusMeta ? statusMeta.color : theme.colors.primary }]} />}
+                </BouncyPressable>
+              </Swipeable>
+            );
+          })
         )}
       </ScrollView>
     </View>
@@ -286,4 +335,19 @@ const styles = StyleSheet.create({
   unreadDot: { width: 8, height: 8, borderRadius: 4, marginLeft: 4 },
   emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: 100 },
   emptyText: { fontSize: 15, textAlign: 'center' },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 2,
+    marginBottom: 2,
+  },
+  statusBadgeText: {
+    fontSize: 11,
+  },
 });

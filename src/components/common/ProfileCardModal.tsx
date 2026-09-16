@@ -131,7 +131,11 @@ export default function ProfileCardModal({ userId, visible, onClose, onMention }
                 </View>
                 
                 <View style={styles.badgesRow}>
-                  <Badge label={profile.role === 'driver' ? 'Verified Driver 🚗' : 'Commuter 🚶'} variant={profile.role === 'driver' ? 'active' : 'pending'} />
+                  <Badge
+                    label={profile.role === 'driver' ? 'Verified Driver' : 'Commuter'}
+                    variant={profile.role === 'driver' ? 'active' : 'pending'}
+                    icon={profile.role === 'driver' ? 'car' : 'walk'}
+                  />
                 </View>
 
                 {/* Stats Row: For Drivers, combine Trips Completed & Ratings. For Commuters, show Trips joined */}

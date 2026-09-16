@@ -8,6 +8,7 @@
 
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 
 type BadgeVariant =
@@ -28,6 +29,8 @@ interface BadgeProps {
   label: string;
   /** Semantic colour variant */
   variant: BadgeVariant;
+  /** Optional icon name */
+  icon?: React.ComponentProps<typeof Ionicons>['name'];
 }
 
 /**
@@ -74,7 +77,7 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-export default function Badge({ label, variant }: BadgeProps) {
+export default function Badge({ label, variant, icon }: BadgeProps) {
   const { theme } = useTheme();
   const { bg, text } = useVariantColors(variant);
 
@@ -91,6 +94,9 @@ export default function Badge({ label, variant }: BadgeProps) {
         },
       ]}
     >
+      {icon ? (
+        <Ionicons name={icon} size={11} color={text} style={styles.icon} />
+      ) : null}
       <Text style={[styles.label, theme.typography.small, { color: text }]}>
         {formattedLabel}
       </Text>
@@ -100,9 +106,14 @@ export default function Badge({ label, variant }: BadgeProps) {
 
 const styles = StyleSheet.create({
   pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
     alignSelf: 'flex-start',
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 4,
+  },
+  icon: {
+    marginRight: 4,
   },
   label: {
     textAlign: 'center',

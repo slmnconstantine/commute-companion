@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { Profile } from '@/types/database';
 import { updateProfile as updateProfileService } from '@/services/profiles';
 import { registerForPushNotificationsAsync } from '@/services/pushNotifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface AuthContextType {
   session: Session | null;
@@ -153,8 +154,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.error('Error signing out:', e);
+    }
     setProfile(null);
+    setSession(null);
+    await AsyncStorage.setItem('@onboarding_complete', 'true');
+    await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
   };
 
   const refreshProfile = async () => {

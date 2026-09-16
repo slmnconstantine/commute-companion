@@ -157,7 +157,7 @@ export async function validateDriverApplication(
     if (error) throw error;
 
     if (updatedProfile?.push_token) {
-      const title = approve ? 'Application Approved! 🎉' : 'Application Status Update';
+      const title = approve ? 'Application Approved!' : 'Application Status Update';
       const body = approve
         ? 'Congratulations! Your driver application has been verified. You can now post rides.'
         : 'Your driver application requires further details. Please review your profile info.';

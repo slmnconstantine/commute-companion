@@ -27,15 +27,32 @@ export async function createBooking(bookingData: Omit<Booking, 'id' | 'created_a
   const booking = data as any;
 
   if (booking && !error) {
+    // If reservation details were provided, persist them
+    if (bookingData.is_reservation) {
+      await supabase
+        .from('bookings')
+        .update({
+          is_reservation: true,
+          reservation_fee: bookingData.reservation_fee || 0,
+          payment_proof_url: bookingData.payment_proof_url || null,
+          payment_status: bookingData.payment_status || 'submitted',
+        })
+        .eq('id', booking.id);
+    }
+
     // Notify the driver
     const { data: tripData } = await supabase.from('trips').select('driver:profiles!driver_id(id, push_token)').eq('id', bookingData.trip_id).single();
     const pushToken = (tripData?.driver as any)?.push_token;
     if (pushToken) {
+      const notifTitle = bookingData.is_reservation ? 'Seat Reservation Request' : 'New Ride Request';
+      const notifBody = bookingData.is_reservation
+        ? 'A commuter submitted a seat reservation with a GCash receipt!'
+        : 'A commuter has requested to join your ride!';
       await sendPushNotification(
         pushToken,
-        'New Ride Request',
-        'A commuter has requested to join your ride!',
-        { type: 'booking', bookingId: booking.id, tripId: bookingData.trip_id },
+        notifTitle,
+        notifBody,
+        { type: 'booking', bookingId: booking.id, tripId: bookingData.trip_id, is_reservation: bookingData.is_reservation },
         (tripData?.driver as any)?.id
       );
     }
@@ -97,10 +114,16 @@ export async function getTripBookings(tripId: string): Promise<BookingWithCommut
 }
 
 /** Update booking status */
-export async function updateBookingStatus(id: string, status: string): Promise<void> {
+export async function updateBookingStatus(
+  id: string,
+  status: string,
+  additionalUpdates?: Record<string, any>
+): Promise<void> {
+  const updatePayload: Record<string, any> = { status, ...(additionalUpdates || {}) };
+
   const { error, data } = await supabase
     .from('bookings')
-    .update({ status })
+    .update(updatePayload)
     .eq('id', id)
     .neq('status', status)
     .select('*, trip:trips(driver_id), commuter:profiles!commuter_id(push_token)')
@@ -114,8 +137,13 @@ export async function updateBookingStatus(id: string, status: string): Promise<v
     let title = 'Booking Update';
     let body = `Your booking was updated to ${status}.`;
     if (status === 'accepted') {
-      title = 'Ride Confirmed! 🎉';
-      body = 'The driver has accepted your booking request.';
+      if (data.is_reservation) {
+        title = 'Seat Reservation Confirmed!';
+        body = 'The driver verified your GCash deposit and confirmed your seat reservation.';
+      } else {
+        title = 'Ride Confirmed!';
+        body = 'The driver has accepted your booking request.';
+      }
     } else if (status === 'rejected') {
       title = 'Ride Declined';
       body = 'The driver declined your booking request.';
@@ -179,7 +207,7 @@ export async function confirmCommuterArrival(bookingId: string): Promise<void> {
   if (driverPushToken) {
     await sendPushNotification(
       driverPushToken,
-      'Passenger Arrived! 🏁',
+      'Passenger Arrived!',
       `${passengerName} has confirmed their arrival at the destination.`,
       { type: 'passenger_arrival', bookingId },
       (updatedBooking.trip as any)?.driver_id
@@ -217,7 +245,7 @@ export async function confirmDriverArrival(bookingId: string): Promise<void> {
   if (commuterPushToken) {
     await sendPushNotification(
       commuterPushToken,
-      'Driver Confirmed Arrival 🚗',
+      'Driver Confirmed Arrival',
       'Your driver has confirmed arrival at your destination. Tap to confirm.',
       { type: 'driver_arrival', bookingId },
       updatedBooking.commuter_id

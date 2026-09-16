@@ -115,9 +115,15 @@ export default function AboutScreen() {
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text style={[styles.footerText, { color: theme.colors.textMuted }]}>
-            Made with ❤️ for Filipino commuters
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+            <Text style={[styles.footerText, { color: theme.colors.textMuted }]}>
+              Made with
+            </Text>
+            <Ionicons name="heart" size={14} color="#EF4444" />
+            <Text style={[styles.footerText, { color: theme.colors.textMuted }]}>
+              for Filipino commuters
+            </Text>
+          </View>
           <Text style={[styles.copyrightText, { color: theme.colors.textMuted }]}>
             © 2026 Commute Companion. All rights reserved.
           </Text>

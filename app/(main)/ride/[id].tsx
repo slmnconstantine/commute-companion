@@ -7,6 +7,8 @@ import { Ionicons } from '@expo/vector-icons';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Map, Camera, RasterSource, Layer, GeoJSONSource, Marker, type CameraRef } from '@maplibre/maplibre-react-native';
+import * as Clipboard from 'expo-clipboard';
+import { safeCamera } from '@/utils/safeCamera';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { getTripById, updateTripStatus, hasActiveTrip } from '@/services/trips';
@@ -22,13 +24,14 @@ import * as Location from 'expo-location';
 import Avatar from '@/components/common/Avatar';
 import Badge from '@/components/common/Badge';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
+import EmptyState from '@/components/common/EmptyState';
 import { TripWithDriver, BookingWithCommuter, Trip } from '@/types/database';
 import DriverBookingsList from '@/components/ride/DriverBookingsList';
 import TripBottomActions from '@/components/ride/TripBottomActions';
 import RouteLayer from '@/components/common/RouteLayer';
 import AnimatedMarker from '@/components/common/AnimatedMarker';
 import ProfileCardModal from '@/components/common/ProfileCardModal';
-import { getDriverLiveCapture, getTripCommuterCaptures, LiveFaceRecord } from '@/services/liveFaceVerification';
+import { getDriverLiveCapture, getTripCommuterCaptures, LiveFaceRecord, isTripArchived, purgeTripLiveCaptures } from '@/services/liveFaceVerification';
 import LiveFacePreviewModal from '@/components/verification/LiveFacePreviewModal';
 import ETAOverlay from '@/components/ride/ETAOverlay';
 import SOSButton from '@/components/ride/SOSButton';
@@ -81,19 +84,19 @@ export default function TripDetailScreen() {
 
   const handleCenterMap = () => {
     if (driverLiveLocation) {
-      cameraRef.current?.easeTo({
+      safeCamera(cameraRef.current)?.easeTo({
         center: [driverLiveLocation.longitude, driverLiveLocation.latitude],
         zoom: 15,
         duration: 600,
       });
     } else if (location?.latitude && location?.longitude) {
-      cameraRef.current?.easeTo({
+      safeCamera(cameraRef.current)?.easeTo({
         center: [location.longitude, location.latitude],
         zoom: 15,
         duration: 600,
       });
     } else if (trip) {
-      cameraRef.current?.fitBounds(
+      safeCamera(cameraRef.current)?.fitBounds(
         [
           Math.min(trip.origin_lng, trip.destination_lng),
           Math.min(trip.origin_lat, trip.destination_lat),
@@ -126,6 +129,7 @@ export default function TripDetailScreen() {
   const [commuterLiveRecords, setCommuterLiveRecords] = useState<Record<string, LiveFaceRecord>>({});
   const [showDriverLivePreview, setShowDriverLivePreview] = useState(false);
   const [previewPassenger, setPreviewPassenger] = useState<{ name: string; photoUri: string; pickup?: string } | null>(null);
+  const isArchived = isTripArchived(trip);
 
   // Compute ETA & remaining distance during ongoing trips
   const etaInfo = React.useMemo(() => {
@@ -198,8 +202,15 @@ export default function TripDetailScreen() {
 
       setBookings(bookingsData);
       if (chatRoom) setChatRoomId(chatRoom.id);
-      if (driverCap) setDriverLiveRecord(driverCap);
-      if (commuterCaps) setCommuterLiveRecords(commuterCaps);
+      const tripIsArchived = isTripArchived(data);
+      if (tripIsArchived) {
+        setDriverLiveRecord(null);
+        setCommuterLiveRecords({});
+        purgeTripLiveCaptures(id).catch(() => {});
+      } else {
+        if (driverCap) setDriverLiveRecord(driverCap);
+        if (commuterCaps) setCommuterLiveRecords(commuterCaps);
+      }
     } catch (e) {
       if (showLoadingSpinner) Alert.alert('Error', 'Failed to load trip details.');
     } finally {
@@ -309,7 +320,7 @@ export default function TripDetailScreen() {
   // Follow driver's live location on map when trip is ongoing
   useEffect(() => {
     if (isOngoingActiveUser && driverLiveLocation && cameraRef.current) {
-      cameraRef.current.flyTo({
+      safeCamera(cameraRef.current)?.flyTo({
         center: [driverLiveLocation.longitude, driverLiveLocation.latitude],
         zoom: 15,
         duration: 1000,
@@ -329,7 +340,7 @@ export default function TripDetailScreen() {
       if (distance < 0.1) {
         setHasPromptedArrival(true);
         Alert.alert(
-          'Destination Reached 🎉',
+          'Destination Reached',
           'You have arrived at your destination. Would you like to complete this trip now?',
           [
             { text: 'Not Yet', style: 'cancel' },
@@ -359,7 +370,8 @@ export default function TripDetailScreen() {
                   return;
                 }
 
-                await updateBookingStatus(booking.id, 'accepted');
+                const extraUpdates = booking.is_reservation ? { payment_status: 'verified' } : undefined;
+                await updateBookingStatus(booking.id, 'accepted', extraUpdates);
 
                 const newAvailableSeats = Math.max(0, latestTrip.available_seats - seatsBooked);
                 const updates: any = { available_seats: newAvailableSeats };
@@ -374,7 +386,8 @@ export default function TripDetailScreen() {
 
                 setTrip(prev => prev ? { ...prev, ...updates } : null);
               } else {
-                await updateBookingStatus(booking.id, 'accepted');
+                const extraUpdates = booking.is_reservation ? { payment_status: 'verified' } : undefined;
+                await updateBookingStatus(booking.id, 'accepted', extraUpdates);
               }
 
               let room = await getChatRoom(id);
@@ -394,7 +407,11 @@ export default function TripDetailScreen() {
                 await sendMessage(room.id, profile.id, `${booking.commuter.full_name} has joined the trip!`, true);
               }
 
-              setBookings(prev => prev.map(b => b.id === booking.id ? { ...b, status: 'accepted' } : b));
+              setBookings(prev => prev.map(b => b.id === booking.id ? {
+                ...b,
+                status: 'accepted',
+                payment_status: b.is_reservation ? 'verified' : b.payment_status,
+              } : b));
               Alert.alert('Success', 'Booking accepted and added to group chat!');
             } catch (e: any) {
               Alert.alert('Error', e.message || 'Failed to accept booking');
@@ -543,7 +560,7 @@ export default function TripDetailScreen() {
     setIsUpdatingTrip(true);
     try {
       await confirmCommuterArrival(bookingId);
-      Alert.alert('Arrived! 🎉', 'You have confirmed your arrival. Waiting for the driver to confirm.');
+      Alert.alert('Arrived!', 'You have confirmed your arrival. Waiting for the driver to confirm.');
       await loadTrip(false);
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Failed to confirm arrival');
@@ -557,7 +574,7 @@ export default function TripDetailScreen() {
     setIsUpdatingTrip(true);
     try {
       await confirmDriverArrival(bookingId);
-      Alert.alert('Arrival Confirmed! 🏁', 'You have confirmed drop-off for this passenger.');
+      Alert.alert('Arrival Confirmed!', 'You have confirmed drop-off for this passenger.');
       await loadTrip(false);
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Failed to confirm arrival');
@@ -609,7 +626,7 @@ export default function TripDetailScreen() {
       }
 
       Alert.alert(
-        'Start Trip 🚗',
+        'Start Trip',
         'Are you sure you want to start this trip and set off now?',
         [
           { text: 'Cancel', style: 'cancel' },
@@ -636,7 +653,7 @@ export default function TripDetailScreen() {
 
     if (newStatus === 'completed') {
       Alert.alert(
-        'Complete Trip 🏁',
+        'Complete Trip',
         'Are you sure you want to complete this trip? This will confirm drop-offs for all passengers.',
         [
           { text: 'Cancel', style: 'cancel' },
@@ -671,7 +688,7 @@ export default function TripDetailScreen() {
   const handleDeleteTrip = () => {
     if (!trip) return;
     Alert.alert(
-      'Delete Ride 🗑️',
+      'Delete Ride',
       'Are you sure you want to delete this open ride? This will remove the ride and cancel any bookings.',
       [
         { text: 'Cancel', style: 'cancel' },
@@ -696,7 +713,19 @@ export default function TripDetailScreen() {
   };
 
   if (loading) return <LoadingSpinner size="lg" message="Loading trip..." />;
-  if (!trip) return <LoadingSpinner size="lg" message="Trip not found" />;
+  if (!trip) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
+        <EmptyState
+          icon="alert-circle-outline"
+          title="Ride Unavailable"
+          message="This ride has expired, was cancelled, or is no longer available."
+          actionLabel="Go Back"
+          onAction={() => router.back()}
+        />
+      </View>
+    );
+  }
 
   const showChatButton = (isDriver && chatRoomId) || (isConfirmedPassenger && chatRoomId);
 
@@ -853,11 +882,36 @@ export default function TripDetailScreen() {
         <BottomSheetScrollView contentContainerStyle={styles.contentInner}>
           {/* Status + Time */}
           <View style={styles.statusRow}>
-            <Badge label={trip.status} variant={trip.status === 'open' || trip.status === 'full' ? 'pending' : trip.status === 'ongoing' ? 'active' : 'completed'} />
+            <Badge
+              label={trip.status}
+              variant={
+                trip.status === 'open' || trip.status === 'full'
+                  ? 'pending'
+                  : trip.status === 'ongoing'
+                  ? 'active'
+                  : trip.status === 'cancelled'
+                  ? 'cancelled'
+                  : 'completed'
+              }
+            />
             <Text style={[styles.timeText, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
               {formatDepartureTime(trip.departure_time)}
             </Text>
           </View>
+
+          {trip.status === 'cancelled' && (
+            <View style={[styles.cancelledBanner, { backgroundColor: `${theme.colors.error}15`, borderColor: `${theme.colors.error}35` }]}>
+              <Ionicons name="alert-circle" size={20} color={theme.colors.error} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: theme.colors.error, fontFamily: 'Inter-SemiBold', fontSize: 14 }}>
+                  Ride Cancelled
+                </Text>
+                <Text style={{ color: theme.colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 12 }}>
+                  This ride was cancelled and is no longer active.
+                </Text>
+              </View>
+            </View>
+          )}
 
 
           {/* Route */}
@@ -900,7 +954,7 @@ export default function TripDetailScreen() {
                   {trip.vehicle.model} • {trip.vehicle.plate_number}
                 </Text>
               )}
-              {driverLiveRecord ? (
+              {driverLiveRecord && !isArchived ? (
                 <Pressable
                   style={{
                     flexDirection: 'row',
@@ -926,6 +980,61 @@ export default function TripDetailScreen() {
                     View Driver Live Photo
                   </Text>
                 </Pressable>
+              ) : null}
+
+              {/* Driver GCash Info & Copy */}
+              {trip.driver?.gcash_number ? (
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginTop: 8,
+                    paddingVertical: 6,
+                    paddingHorizontal: 10,
+                    borderRadius: 8,
+                    backgroundColor: `${theme.colors.primary}12`,
+                    borderWidth: 1,
+                    borderColor: `${theme.colors.primary}25`,
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                    <Ionicons name="wallet-outline" size={15} color={theme.colors.primary} />
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Text style={{ color: theme.colors.primary, fontSize: 11, fontFamily: 'Inter-SemiBold' }}>GCash:</Text>
+                        <Text style={{ color: theme.colors.text, fontSize: 12, fontFamily: 'Inter-Medium' }}>
+                          {trip.driver.gcash_number}
+                        </Text>
+                      </View>
+                      {trip.driver.gcash_name ? (
+                        <Text style={{ color: theme.colors.textMuted, fontSize: 10, fontFamily: 'Inter-Regular' }} numberOfLines={1}>
+                          {trip.driver.gcash_name}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+                  <Pressable
+                    style={({ pressed }) => ({
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 4,
+                      paddingVertical: 3,
+                      paddingHorizontal: 8,
+                      borderRadius: 6,
+                      backgroundColor: `${theme.colors.primary}20`,
+                      opacity: pressed ? 0.7 : 1,
+                    })}
+                    hitSlop={6}
+                    onPress={async () => {
+                      await Clipboard.setStringAsync(trip.driver!.gcash_number!);
+                      Alert.alert('Copied!', `Driver GCash number (${trip.driver!.gcash_number}) copied to clipboard.`);
+                    }}
+                  >
+                    <Ionicons name="copy-outline" size={12} color={theme.colors.primary} />
+                    <Text style={{ color: theme.colors.primary, fontSize: 11, fontFamily: 'Inter-SemiBold' }}>Copy</Text>
+                  </Pressable>
+                </View>
               ) : null}
             </View>
           </View>
@@ -961,7 +1070,9 @@ export default function TripDetailScreen() {
               handleDriverArrival={handleDriverArrival}
               onAvatarPress={(userId) => { setSelectedProfileId(userId); setProfileModalVisible(true); }}
               commuterLiveRecords={commuterLiveRecords}
-              onViewPassengerPhoto={(passenger) => setPreviewPassenger(passenger)}
+              onViewPassengerPhoto={(passenger) => {
+                if (!isArchived) setPreviewPassenger(passenger);
+              }}
             />
           )}
         </BottomSheetScrollView>
@@ -996,9 +1107,9 @@ export default function TripDetailScreen() {
 
       {/* Driver Live Photo Preview Modal (for Commuters) */}
       <LiveFacePreviewModal
-        visible={showDriverLivePreview}
+        visible={showDriverLivePreview && !isArchived}
         onClose={() => setShowDriverLivePreview(false)}
-        photoUri={driverLiveRecord?.photoUri || trip?.driver?.avatar_url}
+        photoUri={driverLiveRecord?.photoUri}
         userName={trip?.driver?.full_name || 'Driver'}
         role="driver"
         timestamp={driverLiveRecord?.timestamp}
@@ -1006,7 +1117,7 @@ export default function TripDetailScreen() {
 
       {/* Passenger Live Photo Preview Modal (for Drivers at pickup) */}
       <LiveFacePreviewModal
-        visible={!!previewPassenger}
+        visible={!!previewPassenger && !isArchived}
         onClose={() => setPreviewPassenger(null)}
         photoUri={previewPassenger?.photoUri}
         userName={previewPassenger?.name || 'Passenger'}
@@ -1065,4 +1176,13 @@ const styles = StyleSheet.create({
   ctaButtonText: { color: '#fff', fontSize: 16, fontFamily: 'Inter-SemiBold' },
   bookingItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1 },
   actionBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  cancelledBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 4,
+  },
 });

@@ -21,6 +21,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Map, Camera, Layer, Marker, GeoJSONSource, type CameraRef } from '@maplibre/maplibre-react-native';
+import { safeCamera } from '@/utils/safeCamera';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -353,7 +354,7 @@ export default function HomeScreen() {
     const next = !routeVisible;
     setRouteVisible(next);
     Alert.alert(
-      next ? 'Visibility Enabled 👁️' : 'Visibility Disabled 🙈',
+      next ? 'Visibility Enabled' : 'Visibility Disabled',
       next
         ? 'Your location is now visible to other members commuting on this route.'
         : 'Your location is no longer shared with this route community.'
@@ -447,7 +448,7 @@ export default function HomeScreen() {
           const lngs = coords.map(c => c[0]);
           const sw = [Math.min(...lngs), Math.min(...lats)];
           const ne = [Math.max(...lngs), Math.max(...lats)];
-          cameraRef.current.fitBounds(
+          safeCamera(cameraRef.current)?.fitBounds(
             [sw[0], sw[1], ne[0], ne[1]],
             {
               padding: {
@@ -470,14 +471,16 @@ export default function HomeScreen() {
   const isDriver = profile?.role === 'driver';
   const displayedRoute = activeOngoingTrip || activeRoute;
   const hasAutoCenteredRef = useRef(false);
+  const autoCenterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Auto-focus camera to user's location as soon as GPS coordinates resolve
   useEffect(() => {
     if (location.latitude && location.longitude && !locationLoading && !displayedRoute) {
       if (!hasAutoCenteredRef.current) {
         hasAutoCenteredRef.current = true;
-        setTimeout(() => {
-          cameraRef.current?.easeTo({
+        if (autoCenterTimerRef.current) clearTimeout(autoCenterTimerRef.current);
+        autoCenterTimerRef.current = setTimeout(() => {
+          safeCamera(cameraRef.current)?.easeTo({
             center: [location.longitude, location.latitude],
             zoom: 14,
             duration: 800,
@@ -485,6 +488,12 @@ export default function HomeScreen() {
         }, 300);
       }
     }
+
+    return () => {
+      if (autoCenterTimerRef.current) {
+        clearTimeout(autoCenterTimerRef.current);
+      }
+    };
   }, [location.latitude, location.longitude, locationLoading, displayedRoute]);
 
   const region = useMemo(
@@ -499,7 +508,7 @@ export default function HomeScreen() {
 
   /** Re-centre map on the user's current location */
   const handleCenterOnUser = () => {
-    cameraRef.current?.easeTo({
+    safeCamera(cameraRef.current)?.easeTo({
       center: [location.longitude, location.latitude],
       zoom: 14,
       duration: 600,

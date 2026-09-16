@@ -22,7 +22,7 @@ export default function SOSButton({
 }: SOSButtonProps) {
   const handleSOS = () => {
     Alert.alert(
-      '🆘 Emergency SOS',
+      'Emergency SOS',
       'What would you like to do?',
       [
         {
@@ -41,14 +41,14 @@ export default function SOSButton({
               : 'Location unavailable';
             
             const message = [
-              `🆘 SOS — I need help!`,
+              `[SOS] I need help!`,
               ``,
               `I'm on a ride with Commute Companion.`,
               `Driver: ${driverName}`,
               `Route: ${originLabel.split(',')[0]} → ${destinationLabel.split(',')[0]}`,
               `Trip ID: ${tripId}`,
               ``,
-              `📍 My current location:`,
+              `My current location:`,
               locationStr,
             ].join('\n');
 

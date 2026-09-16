@@ -79,6 +79,7 @@ export default function VerifyEmailScreen() {
   
   const handleSignOut = async () => {
     await signOut();
+    router.replace('/(auth)/sign-in');
   };
 
   const textColor = isLight ? '#0F172A' : '#FFFFFF';

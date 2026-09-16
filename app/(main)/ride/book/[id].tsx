@@ -15,6 +15,8 @@ import { formatDepartureTime } from '@/utils/dateFormatter';
 import { TripWithDriver } from '@/types/database';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
 import Avatar from '@/components/common/Avatar';
+import * as Clipboard from 'expo-clipboard';
+import { pickImage, takePhoto, uploadPaymentReceipt } from '@/services/storage';
 import { getDriverLiveCapture, saveCommuterLiveCapture, LiveFaceRecord } from '@/services/liveFaceVerification';
 import LiveFaceCaptureModal from '@/components/verification/LiveFaceCaptureModal';
 import LiveFacePreviewModal from '@/components/verification/LiveFacePreviewModal';
@@ -48,6 +50,39 @@ export default function BookRideScreen() {
   const [showCommuterCaptureModal, setShowCommuterCaptureModal] = useState(false);
   const [commuterConfidence, setCommuterConfidence] = useState<number>(97);
 
+  // Reservation states
+  const [isReservation, setIsReservation] = useState(false);
+  const [receiptBase64, setReceiptBase64] = useState<string | null>(null);
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
+
+  const handlePickReceipt = async () => {
+    try {
+      setUploadingReceipt(true);
+      const base64 = await pickImage();
+      if (base64) {
+        setReceiptBase64(base64);
+      }
+    } catch (err) {
+      Alert.alert('Error', 'Failed to select receipt image.');
+    } finally {
+      setUploadingReceipt(false);
+    }
+  };
+
+  const handleCaptureReceipt = async () => {
+    try {
+      setUploadingReceipt(true);
+      const base64 = await takePhoto();
+      if (base64) {
+        setReceiptBase64(base64);
+      }
+    } catch (err) {
+      Alert.alert('Error', 'Failed to capture receipt photo.');
+    } finally {
+      setUploadingReceipt(false);
+    }
+  };
+
   useEffect(() => {
     if (id) {
       getTripById(id).then((data) => {
@@ -76,6 +111,15 @@ export default function BookRideScreen() {
       return;
     }
 
+    if (isReservation && !receiptBase64) {
+      Alert.alert(
+        'Receipt Required',
+        'Please attach a screenshot of your GCash receipt before submitting your seat reservation.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     setBooking(true);
     try {
       // 1. Verify trip is still open with available seats
@@ -100,8 +144,19 @@ export default function BookRideScreen() {
 
       const fareEst = trip.fare_per_seat * seats;
       const totalBookingPrice = fareEst;
+      const reservationDeposit = isReservation ? Math.round(fareEst * 0.5) : 0;
       const driverPlatformFee = Math.round(fareEst * PLATFORM_FEE_RATE * 100) / 100;
       let createdBookingId = existingBooking?.id || '';
+
+      // Upload receipt proof if reservation
+      let paymentProofUrl: string | null = null;
+      if (isReservation && receiptBase64) {
+        try {
+          paymentProofUrl = await uploadPaymentReceipt(profile.id, receiptBase64, existingBooking?.id);
+        } catch (uErr) {
+          console.warn('Receipt upload note:', uErr);
+        }
+      }
 
       // If user previously had a rejected or cancelled booking, update it back to pending
       if (existingBooking && (existingBooking.status === 'rejected' || existingBooking.status === 'cancelled')) {
@@ -118,6 +173,10 @@ export default function BookRideScreen() {
             dropoff_lng: trip.destination_lng,
             driver_confirmed: false,
             commuter_confirmed: false,
+            is_reservation: isReservation,
+            reservation_fee: reservationDeposit,
+            payment_proof_url: paymentProofUrl,
+            payment_status: isReservation ? 'submitted' : 'unpaid',
           })
           .eq('id', existingBooking.id);
 
@@ -132,11 +191,15 @@ export default function BookRideScreen() {
           .single();
         const pushToken = (tripData?.driver as any)?.push_token;
         if (pushToken) {
+          const notifTitle = isReservation ? 'Seat Reservation Request' : 'Ride Request Updated';
+          const notifBody = isReservation
+            ? `${profile.full_name || 'A commuter'} submitted a seat reservation with a GCash receipt!`
+            : `${profile.full_name || 'A commuter'} has requested to join your ride!`;
           await sendPushNotification(
             pushToken,
-            'Ride Request Updated',
-            `${profile.full_name || 'A commuter'} has requested to join your ride!`,
-            { type: 'booking', bookingId: existingBooking.id, tripId: trip.id },
+            notifTitle,
+            notifBody,
+            { type: 'booking', bookingId: existingBooking.id, tripId: trip.id, is_reservation: isReservation },
             (tripData?.driver as any)?.id
           );
         }
@@ -154,6 +217,10 @@ export default function BookRideScreen() {
           seats_booked: seats,
           driver_confirmed: false,
           commuter_confirmed: false,
+          is_reservation: isReservation,
+          reservation_fee: reservationDeposit,
+          payment_proof_url: paymentProofUrl,
+          payment_status: isReservation ? 'submitted' : 'unpaid',
         });
         if (error) throw error;
         createdBookingId = newBooking?.id || '';
@@ -226,9 +293,17 @@ export default function BookRideScreen() {
               <Text style={{ color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 16 }}>
                 {trip.driver?.full_name}
               </Text>
-              <Text style={{ color: theme.colors.textMuted, fontSize: 12, fontFamily: 'Inter-Regular' }}>
-                {trip.vehicle?.model ? `${trip.vehicle.model} • ` : ''}⭐ {trip.driver?.rating_avg?.toFixed(1) || 'New'}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                {trip.vehicle?.model ? (
+                  <Text style={{ color: theme.colors.textMuted, fontSize: 12, fontFamily: 'Inter-Regular' }}>
+                    {trip.vehicle.model} •{' '}
+                  </Text>
+                ) : null}
+                <Ionicons name="star" size={12} color={theme.colors.accent || '#F59E0B'} style={{ marginRight: 3 }} />
+                <Text style={{ color: theme.colors.textMuted, fontSize: 12, fontFamily: 'Inter-Medium' }}>
+                  {trip.driver?.rating_avg?.toFixed(1) || 'New'}
+                </Text>
+              </View>
             </View>
 
             {driverCapture ? (
@@ -373,6 +448,228 @@ export default function BookRideScreen() {
           </Text>
         </View>
 
+        {/* ═══ Booking Option: Standard Cash vs Reserve Seat (50% GCash) ═══ */}
+        {trip.fare_per_seat > 0 && (
+          <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+            <Text style={[styles.cardTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>Booking Method</Text>
+
+            <Pressable
+              style={[
+                styles.optionRow,
+                {
+                  borderColor: !isReservation ? theme.colors.primary : theme.colors.border,
+                  backgroundColor: !isReservation ? `${theme.colors.primary}10` : 'transparent',
+                },
+              ]}
+              onPress={() => setIsReservation(false)}
+            >
+              <View style={[styles.radioCircle, { borderColor: !isReservation ? theme.colors.primary : theme.colors.border }]}>
+                {!isReservation && <View style={[styles.radioDot, { backgroundColor: theme.colors.primary }]} />}
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Ionicons name="cash-outline" size={16} color={theme.colors.text} />
+                  <Text style={{ color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 14 }}>
+                    Standard Cash
+                  </Text>
+                </View>
+                <Text style={{ color: theme.colors.textMuted, fontSize: 12, fontFamily: 'Inter-Regular', marginTop: 2 }}>
+                  Pay full fare ({formatCurrency(totalFare)}) in cash upon pickup.
+                </Text>
+              </View>
+            </Pressable>
+
+            <Pressable
+              style={[
+                styles.optionRow,
+                {
+                  borderColor: isReservation ? theme.colors.primary : theme.colors.border,
+                  backgroundColor: isReservation ? `${theme.colors.primary}10` : 'transparent',
+                  opacity: trip.driver?.gcash_number ? 1 : 0.6,
+                },
+              ]}
+              onPress={() => {
+                if (!trip.driver?.gcash_number) {
+                  Alert.alert('Unavailable', 'This driver has not set up their GCash account for seat reservations yet.');
+                  return;
+                }
+                setIsReservation(true);
+              }}
+            >
+              <View style={[styles.radioCircle, { borderColor: isReservation ? theme.colors.primary : theme.colors.border }]}>
+                {isReservation && <View style={[styles.radioDot, { backgroundColor: theme.colors.primary }]} />}
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Ionicons name="shield-checkmark" size={16} color={theme.colors.primary} />
+                  <Text style={{ color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 14 }}>
+                    Reserve Seat (50% Deposit via GCash)
+                  </Text>
+                </View>
+                <Text style={{ color: theme.colors.textMuted, fontSize: 12, fontFamily: 'Inter-Regular', marginTop: 2 }}>
+                  Secure your seat with ₱{Math.round(totalFare * 0.5)}. Deductible from cash fare on pickup.
+                </Text>
+                {!trip.driver?.gcash_number && (
+                  <Text style={{ color: theme.colors.error, fontSize: 11, fontFamily: 'Inter-Medium', marginTop: 4 }}>
+                    Driver has not added GCash details yet
+                  </Text>
+                )}
+              </View>
+            </Pressable>
+          </View>
+        )}
+
+        {/* ═══ GCash Payment & Receipt Attachment Card (Only if Reservation) ═══ */}
+        {isReservation && trip.driver?.gcash_number && (
+          <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.primary, borderWidth: 1.5 }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#007DFE18', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="wallet" size={18} color="#007DFE" />
+                </View>
+                <View>
+                  <Text style={{ color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 15 }}>
+                    Driver's GCash Details
+                  </Text>
+                  <Text style={{ color: theme.colors.textMuted, fontSize: 11, fontFamily: 'Inter-Regular' }}>
+                    Send 50% reservation deposit
+                  </Text>
+                </View>
+              </View>
+              <View style={{ backgroundColor: '#007DFE15', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
+                <Text style={{ color: '#007DFE', fontSize: 12, fontFamily: 'Inter-Bold' }}>
+                  {formatCurrency(Math.round(totalFare * 0.5))}
+                </Text>
+              </View>
+            </View>
+
+            {/* Account Info Box */}
+            <View style={{ backgroundColor: theme.colors.background, borderRadius: 12, padding: 12, gap: 8 }}>
+              {trip.driver.gcash_name ? (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={{ color: theme.colors.textMuted, fontSize: 12, fontFamily: 'Inter-Regular' }}>Account Name</Text>
+                  <Text style={{ color: theme.colors.text, fontSize: 13, fontFamily: 'Inter-SemiBold' }}>
+                    {trip.driver.gcash_name}
+                  </Text>
+                </View>
+              ) : null}
+
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={{ color: theme.colors.textMuted, fontSize: 12, fontFamily: 'Inter-Regular' }}>GCash Number</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={{ color: theme.colors.text, fontSize: 14, fontFamily: 'Inter-Bold', letterSpacing: 0.5 }}>
+                    {trip.driver.gcash_number}
+                  </Text>
+                  <Pressable
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 4,
+                      backgroundColor: `${theme.colors.primary}18`,
+                      paddingHorizontal: 8,
+                      paddingVertical: 4,
+                      borderRadius: 6,
+                    }}
+                    onPress={async () => {
+                      if (trip.driver?.gcash_number) {
+                        await Clipboard.setStringAsync(trip.driver.gcash_number);
+                        Alert.alert('Copied!', 'GCash number copied to clipboard.');
+                      }
+                    }}
+                  >
+                    <Ionicons name="copy-outline" size={13} color={theme.colors.primary} />
+                    <Text style={{ color: theme.colors.primary, fontSize: 11, fontFamily: 'Inter-SemiBold' }}>Copy</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+
+            {/* Receipt Proof Section */}
+            <View style={{ marginTop: 4 }}>
+              <Text style={{ color: theme.colors.text, fontSize: 13, fontFamily: 'Inter-SemiBold', marginBottom: 6 }}>
+                Attach GCash Receipt Screenshot <Text style={{ color: theme.colors.error }}>*</Text>
+              </Text>
+
+              {receiptBase64 ? (
+                <View style={{ borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: theme.colors.border }}>
+                  <Image
+                    source={{ uri: receiptBase64.startsWith('data:') ? receiptBase64 : `data:image/jpeg;base64,${receiptBase64}` }}
+                    style={{ width: '100%', height: 160, backgroundColor: theme.colors.background }}
+                    resizeMode="contain"
+                  />
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 10, backgroundColor: theme.colors.surface }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Ionicons name="checkmark-circle" size={16} color={theme.colors.success} />
+                      <Text style={{ color: theme.colors.success, fontSize: 12, fontFamily: 'Inter-SemiBold' }}>Receipt Attached</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 10 }}>
+                      <Pressable onPress={handlePickReceipt} style={{ paddingVertical: 4, paddingHorizontal: 8, borderRadius: 6, backgroundColor: `${theme.colors.primary}15` }}>
+                        <Text style={{ color: theme.colors.primary, fontSize: 11, fontFamily: 'Inter-SemiBold' }}>Change</Text>
+                      </Pressable>
+                      <Pressable onPress={() => setReceiptBase64(null)} style={{ paddingVertical: 4, paddingHorizontal: 8, borderRadius: 6, backgroundColor: `${theme.colors.error}15` }}>
+                        <Text style={{ color: theme.colors.error, fontSize: 11, fontFamily: 'Inter-SemiBold' }}>Remove</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                </View>
+              ) : (
+                <View style={{ gap: 8 }}>
+                  <Text style={{ color: theme.colors.textMuted, fontSize: 12, fontFamily: 'Inter-Regular' }}>
+                    Open your GCash app, send the ₱{Math.round(totalFare * 0.5)} deposit, take a screenshot of the completed transaction, and upload it here.
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                    <Pressable
+                      style={{
+                        flex: 1,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6,
+                        paddingVertical: 10,
+                        borderRadius: 10,
+                        backgroundColor: `${theme.colors.primary}15`,
+                        borderWidth: 1,
+                        borderColor: theme.colors.primary,
+                      }}
+                      onPress={handlePickReceipt}
+                      disabled={uploadingReceipt}
+                    >
+                      {uploadingReceipt ? (
+                        <ActivityIndicator size="small" color={theme.colors.primary} />
+                      ) : (
+                        <>
+                          <Ionicons name="images-outline" size={18} color={theme.colors.primary} />
+                          <Text style={{ color: theme.colors.primary, fontFamily: 'Inter-SemiBold', fontSize: 13 }}>Choose Screenshot</Text>
+                        </>
+                      )}
+                    </Pressable>
+
+                    <Pressable
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6,
+                        paddingHorizontal: 14,
+                        paddingVertical: 10,
+                        borderRadius: 10,
+                        backgroundColor: theme.colors.background,
+                        borderWidth: 1,
+                        borderColor: theme.colors.border,
+                      }}
+                      onPress={handleCaptureReceipt}
+                      disabled={uploadingReceipt}
+                    >
+                      <Ionicons name="camera-outline" size={18} color={theme.colors.text} />
+                      <Text style={{ color: theme.colors.text, fontFamily: 'Inter-Medium', fontSize: 13 }}>Camera</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
+
         {/* Fare Summary */}
         <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
           <Text style={[styles.cardTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>Price Breakdown</Text>
@@ -394,13 +691,43 @@ export default function BookRideScreen() {
               FREE
             </Text>
           </View>
+
           <View style={[styles.fareDivider, { backgroundColor: theme.colors.border }]} />
+
           <View style={styles.fareRow}>
-            <Text style={[styles.fareTotalLabel, { color: theme.colors.text, fontFamily: 'Inter-Bold' }]}>Total</Text>
-            <Text style={[styles.fareTotalValue, { color: trip.fare_per_seat === 0 ? theme.colors.success : theme.colors.primary, fontFamily: 'Inter-Bold' }]}>
+            <Text style={[styles.fareTotalLabel, { color: theme.colors.text, fontFamily: 'Inter-Bold' }]}>Total Fare</Text>
+            <Text style={[styles.fareTotalValue, { color: trip.fare_per_seat === 0 ? theme.colors.success : theme.colors.text, fontFamily: 'Inter-Bold' }]}>
               {trip.fare_per_seat === 0 ? 'FREE' : formatCurrency(totalFare)}
             </Text>
           </View>
+
+          {isReservation && trip.fare_per_seat > 0 && (
+            <>
+              <View style={[styles.fareRow, { marginTop: 4 }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Ionicons name="wallet-outline" size={14} color={theme.colors.primary} />
+                  <Text style={[styles.fareLabel, { color: theme.colors.primary, fontFamily: 'Inter-Medium' }]}>
+                    50% Reservation Deposit (GCash)
+                  </Text>
+                </View>
+                <Text style={[styles.fareValue, { color: theme.colors.primary, fontFamily: 'Inter-SemiBold' }]}>
+                  -{formatCurrency(Math.round(totalFare * 0.5))}
+                </Text>
+              </View>
+
+              <View style={[styles.fareDivider, { backgroundColor: theme.colors.border, marginVertical: 4 }]} />
+
+              <View style={styles.fareRow}>
+                <Text style={[styles.fareTotalLabel, { color: theme.colors.text, fontFamily: 'Inter-Bold', fontSize: 15 }]}>
+                  Remaining Cash on Pickup
+                </Text>
+                <Text style={[styles.fareTotalValue, { color: theme.colors.success, fontFamily: 'Inter-Bold', fontSize: 18 }]}>
+                  {formatCurrency(totalFare - Math.round(totalFare * 0.5))}
+                </Text>
+              </View>
+            </>
+          )}
+
           {seats > 1 && trip.fare_per_seat > 0 && (
             <Text style={[styles.breakdownText, { color: theme.colors.textMuted }]}>
               ({formatCurrency(trip.fare_per_seat)} × {seats} passengers)
@@ -422,7 +749,9 @@ export default function BookRideScreen() {
               <Text style={styles.bookBtnText}>Sending Request...</Text>
             </View>
           ) : (
-            <Text style={styles.bookBtnText}>Confirm Booking</Text>
+            <Text style={styles.bookBtnText}>
+              {isReservation ? 'Submit Reservation & Receipt' : 'Confirm Booking'}
+            </Text>
           )}
         </Pressable>
       </View>
@@ -480,4 +809,7 @@ const styles = StyleSheet.create({
   bookBtn: { height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center', shadowColor: '#0D9488', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
   loadingBtnContent: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   bookBtnText: { color: '#fff', fontSize: 16, fontFamily: 'Inter-SemiBold' },
+  optionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 14, borderWidth: 1.5 },
+  radioCircle: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  radioDot: { width: 10, height: 10, borderRadius: 5 },
 });

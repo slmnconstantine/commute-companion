@@ -79,9 +79,10 @@ export default function LiveFacePreviewModal({
               {userName}
             </Text>
 
-            <View style={[styles.rolePill, { backgroundColor: `${theme.colors.primary}15` }]}>
+            <View style={[styles.rolePill, { backgroundColor: `${theme.colors.primary}15`, flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
+              <Ionicons name={isDriver ? 'car' : 'people'} size={14} color={theme.colors.primary} />
               <Text style={[styles.roleText, { color: theme.colors.primary, fontFamily: 'Inter-SemiBold' }]}>
-                {isDriver ? '🚗 Verified Driver' : '🎒 Commuter Passenger'}
+                {isDriver ? 'Verified Driver' : 'Commuter Passenger'}
               </Text>
             </View>
 

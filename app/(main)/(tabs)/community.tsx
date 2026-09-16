@@ -154,7 +154,7 @@ export default function CommunityScreen() {
     const success = await deleteMultiplePosts(staleIds, profile.id);
     if (success) {
       Alert.alert(
-        'Cleaned Up! ✨',
+        'Cleaned Up!',
         staleList.length === 1
           ? 'Your older post was deleted. Thank you for keeping the Community Hub fresh!'
           : `${staleList.length} older posts were deleted. Thank you for keeping the Community Hub fresh!`
@@ -169,7 +169,7 @@ export default function CommunityScreen() {
     if (staleList.length === 0) return;
 
     const count = staleList.length;
-    const title = 'Clean Up Older Posts? 🧹';
+    const title = 'Clean Up Older Posts?';
     const message = count === 1
       ? `You have a community post from ${formatCommentTime(staleList[0].created_at)}:\n\n"${staleList[0].message.slice(0, 75)}${staleList[0].message.length > 75 ? '...' : ''}"\n\nWould it be alright to delete it to keep information in the Community Hub fresh and relevant?`
       : `You have ${count} community posts approaching or past 1 week old.\n\nWould it be alright to delete them to keep information in the Community Hub fresh and relevant for other commuters?`;
@@ -596,7 +596,7 @@ export default function CommunityScreen() {
                   <View style={styles.routeBadge}>
                     <Ionicons name="git-branch-outline" size={11} color={theme.colors.primary} />
                     <Text style={{ color: theme.colors.primary, fontSize: 10, fontFamily: 'Inter-Medium', marginLeft: 3 }} numberOfLines={1}>
-                      {activeRoute.origin_label.split(',')[0]} ➔ {activeRoute.destination_label.split(',')[0]}
+                      {activeRoute.origin_label.split(',')[0]} → {activeRoute.destination_label.split(',')[0]}
                     </Text>
                   </View>
                 )}

@@ -28,7 +28,7 @@ export default function NotificationsSettingsScreen() {
   const handleTestNotification = () => {
     // Fire a local test notification to showcase the slide-down banner
     showInAppNotification(
-      'Ride Offer Found! 🚗',
+      'Ride Offer Found!',
       'Driver "Jane Doe" is heading to Quezon City and matches your route.',
       { type: 'ride_matched', tripId: 'test-trip-id' }
     );
