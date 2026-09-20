@@ -81,7 +81,7 @@ export interface Booking {
 }
 
 export interface Review {
-  id: number;
+  id: string;
   booking_id: string;
   reviewer_id: string;
   reviewee_id: string;
@@ -177,9 +177,6 @@ export interface Community {
   member_count: number;
   created_at: string;
 }
-
-
-
 
 // ---------------------------------------------------------------------------
 // Joined / extended types (for common Supabase queries with selects)

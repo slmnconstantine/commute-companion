@@ -7,7 +7,9 @@ import { useAuth } from '@/context/AuthContext';
 import Avatar from './Avatar';
 import Badge from './Badge';
 import { supabase } from '@/lib/supabase';
-import { Profile, Vehicle } from '@/types/database';
+import { Profile, Vehicle, ReviewWithProfiles } from '@/types/database';
+import { getUserReviews } from '@/services/reviews';
+import { formatRelativeTime } from '@/utils/dateFormatter';
 
 interface ProfileCardModalProps {
   userId: string | null;
@@ -25,21 +27,31 @@ export default function ProfileCardModal({ userId, visible, onClose, onMention }
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [tripsCompleted, setTripsCompleted] = useState<number>(0);
   const [tripsJoined, setTripsJoined] = useState<number>(0);
+  const [reviews, setReviews] = useState<ReviewWithProfiles[]>([]);
+  const [showAllReviews, setShowAllReviews] = useState(false);
 
   useEffect(() => {
-    if (!visible || !userId) return;
+    if (!visible || !userId) {
+      setShowAllReviews(false);
+      return;
+    }
 
     const fetchProfile = async () => {
       setLoading(true);
       try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', userId)
-          .single();
-        
-        if (!error && data) {
-          setProfile(data as Profile);
+        const [profileRes, reviewsData] = await Promise.all([
+          supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .single(),
+          getUserReviews(userId).catch(() => [] as ReviewWithProfiles[]),
+        ]);
+
+        if (!profileRes.error && profileRes.data) {
+          const data = profileRes.data as Profile;
+          setProfile(data);
+          setReviews(reviewsData || []);
 
           if (data.role === 'driver') {
             const [vRes, tripsRes] = await Promise.all([
@@ -104,6 +116,41 @@ export default function ProfileCardModal({ userId, visible, onClose, onMention }
   const handleDisplayTag = profile?.username
     ? `@${profile.username}`
     : `@${(profile?.full_name || '').replace(/\s+/g, '')}`;
+
+  // Dynamically compute compliments based on profile role, ratings, and feedback
+  const compliments = React.useMemo(() => {
+    if (!profile) return [];
+    const list: { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; color: string }[] = [];
+
+    const effectiveAvg = profile.rating_avg ?? (reviews.length > 0 ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length : 5.0);
+
+    if (profile.role === 'driver') {
+      if (effectiveAvg >= 4.0) {
+        list.push({ icon: 'star', label: 'Top-Rated Driver', color: '#F59E0B' });
+      }
+      list.push({ icon: 'car-sport-outline', label: 'Smooth Driving', color: '#3B82F6' });
+      list.push({ icon: 'time-outline', label: 'Punctual & On-Time', color: '#10B981' });
+      if (vehicle) {
+        list.push({ icon: 'sparkles-outline', label: 'Clean Vehicle', color: '#8B5CF6' });
+      }
+      if (tripsCompleted >= 2) {
+        list.push({ icon: 'shield-checkmark-outline', label: 'Verified Routes', color: '#06B6D4' });
+      }
+    } else {
+      if (effectiveAvg >= 4.0) {
+        list.push({ icon: 'star', label: '5-Star Passenger', color: '#F59E0B' });
+      }
+      list.push({ icon: 'time-outline', label: 'Prompt Pickup', color: '#10B981' });
+      list.push({ icon: 'chatbubble-ellipses-outline', label: 'Friendly & Courteous', color: '#3B82F6' });
+      if (tripsJoined >= 2) {
+        list.push({ icon: 'ribbon-outline', label: 'Regular Commuter', color: '#EC4899' });
+      }
+    }
+
+    return list;
+  }, [profile, vehicle, tripsCompleted, tripsJoined, reviews]);
+
+  const displayedReviews = showAllReviews ? reviews : reviews.slice(0, 2);
 
   return (
     <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
@@ -197,6 +244,150 @@ export default function ProfileCardModal({ userId, visible, onClose, onMention }
                   </View>
                 )}
 
+                {/* Passenger Feedback & Review Snippets Section */}
+                <View style={styles.feedbackSection}>
+                  <View style={styles.feedbackHeader}>
+                    <View style={styles.feedbackTitleRow}>
+                      <Ionicons name="chatbubbles-outline" size={17} color={theme.colors.primary} />
+                      <Text style={[styles.feedbackTitle, { color: theme.colors.text, fontFamily: 'Inter-Bold' }]}>
+                        {profile.role === 'driver' ? 'Passenger Feedback' : 'Commuter Feedback'}
+                      </Text>
+                    </View>
+                    {reviews.length > 0 && (
+                      <View style={[styles.ratingPill, { backgroundColor: theme.colors.background }]}>
+                        <Ionicons name="star" size={12} color="#F59E0B" />
+                        <Text style={[styles.ratingPillText, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>
+                          {(profile.rating_avg ?? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length)).toFixed(1)} ({reviews.length})
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Top Compliments Row */}
+                  {compliments.length > 0 && (
+                    <View style={styles.complimentsWrapper}>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.complimentsScroll}
+                      >
+                        {compliments.map((comp, idx) => (
+                          <View
+                            key={idx}
+                            style={[
+                              styles.complimentChip,
+                              {
+                                backgroundColor: theme.colors.background,
+                                borderColor: theme.colors.border,
+                              },
+                            ]}
+                          >
+                            <Ionicons name={comp.icon} size={13} color={comp.color} />
+                            <Text style={[styles.complimentText, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]}>
+                              {comp.label}
+                            </Text>
+                          </View>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
+
+                  {/* Reviews List or Clean Empty State */}
+                  {reviews.length > 0 ? (
+                    <View style={styles.reviewsList}>
+                      {displayedReviews.map((review) => (
+                        <View
+                          key={review.id}
+                          style={[
+                            styles.reviewCard,
+                            {
+                              backgroundColor: theme.colors.background,
+                              borderColor: theme.colors.border,
+                            },
+                          ]}
+                        >
+                          <View style={styles.reviewCardTop}>
+                            <View style={styles.reviewerInfo}>
+                              <Avatar
+                                uri={review.reviewer?.avatar_url}
+                                name={review.reviewer?.full_name || 'Passenger'}
+                                size="sm"
+                              />
+                              <View style={styles.reviewerMeta}>
+                                <Text
+                                  style={[styles.reviewerName, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}
+                                  numberOfLines={1}
+                                >
+                                  {review.reviewer?.full_name || 'Verified Commuter'}
+                                </Text>
+                                <Text style={[styles.reviewTime, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
+                                  {review.created_at ? formatRelativeTime(review.created_at) : 'Recently'}
+                                </Text>
+                              </View>
+                            </View>
+
+                            <View style={styles.starsRow}>
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <Ionicons
+                                  key={star}
+                                  name={star <= review.rating ? 'star' : 'star-outline'}
+                                  size={12}
+                                  color={star <= review.rating ? '#F59E0B' : theme.colors.border}
+                                />
+                              ))}
+                            </View>
+                          </View>
+
+                          {review.comment && review.comment.trim().length > 0 ? (
+                            <Text style={[styles.reviewComment, { color: theme.colors.text, fontFamily: 'Inter-Regular' }]}>
+                              "{review.comment.trim()}"
+                            </Text>
+                          ) : (
+                            <Text style={[styles.reviewFallbackText, { color: theme.colors.textMuted, fontFamily: 'Inter-Italic' }]}>
+                              {review.rating >= 4
+                                ? 'Rated 5 out of 5 stars • Recommended trip'
+                                : `Rated ${review.rating} out of 5 stars`}
+                            </Text>
+                          )}
+                        </View>
+                      ))}
+
+                      {reviews.length > 2 && (
+                        <Pressable
+                          style={[styles.toggleReviewsBtn, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+                          onPress={() => setShowAllReviews(!showAllReviews)}
+                        >
+                          <Text style={[styles.toggleReviewsText, { color: theme.colors.primary, fontFamily: 'Inter-SemiBold' }]}>
+                            {showAllReviews ? 'Show Less' : `View All ${reviews.length} Reviews`}
+                          </Text>
+                          <Ionicons
+                            name={showAllReviews ? 'chevron-up' : 'chevron-down'}
+                            size={15}
+                            color={theme.colors.primary}
+                          />
+                        </Pressable>
+                      )}
+                    </View>
+                  ) : (
+                    <View
+                      style={[
+                        styles.emptyFeedbackBox,
+                        { backgroundColor: theme.colors.background, borderColor: theme.colors.border },
+                      ]}
+                    >
+                      <Ionicons name="sparkles-outline" size={20} color={theme.colors.textMuted} />
+                      <Text style={[styles.emptyFeedbackTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>
+                        No written reviews yet
+                      </Text>
+                      <Text style={[styles.emptyFeedbackSub, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
+                        {profile.role === 'driver'
+                          ? 'Passenger reviews and ratings will be showcased here after completed rides.'
+                          : 'Trip reviews from drivers and passengers will appear here.'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
                 {/* Action Buttons: @ Mention in Community Hub */}
                 <View style={styles.actionButtonsContainer}>
                   <Pressable
@@ -270,7 +461,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     padding: 24,
     minHeight: 260,
-    maxHeight: '80%',
+    maxHeight: '88%',
   },
   header: {
     flexDirection: 'row',
@@ -318,6 +509,123 @@ const styles = StyleSheet.create({
   },
   statSubText: {
     fontSize: 10,
+  },
+  feedbackSection: {
+    marginTop: 4,
+    gap: 10,
+  },
+  feedbackHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  feedbackTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  feedbackTitle: {
+    fontSize: 15,
+  },
+  ratingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  ratingPillText: {
+    fontSize: 12,
+  },
+  complimentsWrapper: {
+    marginHorizontal: -4,
+  },
+  complimentsScroll: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  complimentChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  complimentText: {
+    fontSize: 12,
+  },
+  reviewsList: {
+    gap: 8,
+  },
+  reviewCard: {
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+    gap: 8,
+  },
+  reviewCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  reviewerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  reviewerMeta: {
+    flex: 1,
+  },
+  reviewerName: {
+    fontSize: 13,
+  },
+  reviewTime: {
+    fontSize: 10,
+  },
+  starsRow: {
+    flexDirection: 'row',
+    gap: 2,
+  },
+  reviewComment: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  reviewFallbackText: {
+    fontSize: 12,
+  },
+  toggleReviewsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 2,
+  },
+  toggleReviewsText: {
+    fontSize: 12,
+  },
+  emptyFeedbackBox: {
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  emptyFeedbackTitle: {
+    fontSize: 13,
+  },
+  emptyFeedbackSub: {
+    fontSize: 11,
+    textAlign: 'center',
   },
   actionButtonsContainer: {
     marginTop: 8,

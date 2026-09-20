@@ -1,8 +1,9 @@
-export type StatusTag = 'traffic' | 'tip' | 'alert' | 'question' | 'delay' | 'full' | 'clear' | 'other';
+export type StatusTag = 'traffic' | 'tip' | 'alert' | 'question' | 'delay' | 'full' | 'clear' | 'other' | 'ride';
 
-export const VALID_STATUS_TAGS: StatusTag[] = ['traffic', 'tip', 'alert', 'question', 'delay', 'full', 'clear', 'other'];
+export const VALID_STATUS_TAGS: StatusTag[] = ['traffic', 'tip', 'alert', 'question', 'delay', 'full', 'clear', 'other', 'ride'];
 
 export const STATUS_TAG_LABELS: Record<StatusTag, string> = {
+  ride: 'Ride Share',
   traffic: 'Traffic',
   tip: 'Tip',
   alert: 'Alert',

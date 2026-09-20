@@ -128,18 +128,18 @@ export default function VoiceAssistantSheet() {
 
   const isVisible = (state !== 'idle' && state !== 'error') || conversation.length > 0;
   const [isRendered, setIsRendered] = useState(false);
-  const isClosingRef = useRef(false);
+  const isClosing = useSharedValue(false);
 
   const finalizeClose = useCallback(() => {
-    isClosingRef.current = false;
+    isClosing.value = false;
     setIsRendered(false);
     cancel();
-  }, [cancel]);
+  }, [cancel, isClosing]);
 
   // Spring down closing animation
   const handleSpringClose = useCallback((velocity?: number) => {
-    if (isClosingRef.current) return;
-    isClosingRef.current = true;
+    if (isClosing.value) return;
+    isClosing.value = true;
     slideAnim.value = withSpring(
       650,
       {
@@ -154,7 +154,7 @@ export default function VoiceAssistantSheet() {
         }
       }
     );
-  }, [finalizeClose, slideAnim]);
+  }, [finalizeClose, slideAnim, isClosing]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -169,16 +169,16 @@ export default function VoiceAssistantSheet() {
   useEffect(() => {
     if (isVisible) {
       setIsRendered(true);
-      isClosingRef.current = false;
+      isClosing.value = false;
       slideAnim.value = withSpring(0, {
         damping: 16,
         stiffness: 260,
         mass: 0.6,
       });
-    } else if (isRendered && !isClosingRef.current) {
+    } else if (isRendered && !isClosing.value) {
       handleSpringClose();
     }
-  }, [isVisible, isRendered, handleSpringClose, slideAnim]);
+  }, [isVisible, isRendered, handleSpringClose, slideAnim, isClosing]);
 
   // State pulse animation
   useEffect(() => {
@@ -194,7 +194,7 @@ export default function VoiceAssistantSheet() {
 
   const pan = Gesture.Pan()
     .onChange((event) => {
-      if (isClosingRef.current) return;
+      if (isClosing.value) return;
       if (event.translationY > 0) {
         slideAnim.value = event.translationY;
       } else {
@@ -202,10 +202,10 @@ export default function VoiceAssistantSheet() {
       }
     })
     .onEnd((event) => {
-      if (isClosingRef.current) return;
+      if (isClosing.value) return;
       if (event.translationY > 80 || event.velocityY > 400) {
         // Spring down with user drag velocity
-        handleSpringClose(event.velocityY);
+        runOnJS(handleSpringClose)(event.velocityY);
       } else {
         slideAnim.value = withSpring(0, { damping: 16, stiffness: 260, mass: 0.6 });
       }

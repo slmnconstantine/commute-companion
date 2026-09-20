@@ -727,46 +727,50 @@ export default function HomeScreen() {
 
             {/* Notification Bell moved down below the full-width banner */}
             <View style={styles.bellUnderBannerRow} pointerEvents="box-none">
+              <View style={styles.bellWrapper}>
+                <GlassCard
+                  backgroundColor={theme.colors.glassBackground}
+                  borderColor={theme.colors.glassBorder}
+                  borderRadius={12}
+                  style={styles.bellGlass}
+                >
+                  <Pressable
+                    style={styles.bellBtn}
+                    onPress={() => router.push('/(main)/notification-inbox')}
+                  >
+                    <Ionicons name="notifications-outline" size={20} color={theme.colors.text} />
+                  </Pressable>
+                </GlassCard>
+                {unreadCount > 0 && (
+                  <View style={[styles.unreadBadge, { borderColor: theme.colors.surface }]} pointerEvents="none">
+                    <Text style={styles.unreadBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          </View>
+        ) : (
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', width: '100%' }} pointerEvents="box-none">
+            <View style={styles.bellWrapper}>
               <GlassCard
                 backgroundColor={theme.colors.glassBackground}
                 borderColor={theme.colors.glassBorder}
-                borderRadius={16}
+                borderRadius={12}
                 style={styles.bellGlass}
               >
                 <Pressable
                   style={styles.bellBtn}
                   onPress={() => router.push('/(main)/notification-inbox')}
                 >
-                  <Ionicons name="notifications-outline" size={24} color={theme.colors.text} />
-                  {unreadCount > 0 && (
-                    <View style={styles.unreadBadge}>
-                      <Text style={styles.unreadBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
-                    </View>
-                  )}
+                  <Ionicons name="notifications-outline" size={20} color={theme.colors.text} />
                 </Pressable>
               </GlassCard>
+              {unreadCount > 0 && (
+                <View style={[styles.unreadBadge, { borderColor: theme.colors.surface }]} pointerEvents="none">
+                  <Text style={styles.unreadBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                </View>
+              )}
             </View>
-          </View>
-        ) : (
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', width: '100%' }} pointerEvents="box-none">
-            <GlassCard
-              backgroundColor={theme.colors.glassBackground}
-              borderColor={theme.colors.glassBorder}
-              borderRadius={16}
-              style={styles.bellGlass}
-            >
-              <Pressable
-                style={styles.bellBtn}
-                onPress={() => router.push('/(main)/notification-inbox')}
-              >
-                <Ionicons name="notifications-outline" size={24} color={theme.colors.text} />
-                {unreadCount > 0 && (
-                  <View style={styles.unreadBadge}>
-                    <Text style={styles.unreadBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
-                  </View>
-                )}
-              </Pressable>
-            </GlassCard>
           </View>
         )}
       </SafeAreaView>
@@ -963,9 +967,14 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 10,
   },
+  bellWrapper: {
+    position: 'relative',
+    height: 40,
+    width: 40,
+  },
   bellGlass: {
-    height: 52,
-    width: 52,
+    height: 40,
+    width: 40,
   },
   bellBtn: {
     flex: 1,
@@ -989,8 +998,8 @@ const styles = StyleSheet.create({
   },
   unreadBadge: {
     position: 'absolute',
-    top: 6,
-    right: 6,
+    top: -5,
+    right: -5,
     minWidth: 18,
     height: 18,
     borderRadius: 9,
@@ -998,8 +1007,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,
-    borderWidth: 1.5,
-    borderColor: '#fff',
+    borderWidth: 2,
+    zIndex: 10,
+    elevation: 10,
   },
   unreadBadgeText: {
     color: '#fff',

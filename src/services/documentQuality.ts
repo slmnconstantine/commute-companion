@@ -23,11 +23,13 @@ interface ImageMetadata {
 }
 
 /**
- * Analyzes a captured document image for blur, lighting, and detail sharpness.
+ * Analyzes a captured document or vehicle image for blur, lighting, and detail sharpness.
  */
 export async function analyzeDocumentQuality(
-  image: ImageMetadata
+  image: ImageMetadata,
+  documentType: 'id' | 'license' | 'vehicle' | 'or_cr' = 'id'
 ): Promise<DocumentQualityResult> {
+  const isVehicle = documentType === 'vehicle';
   const issues: string[] = [];
   const suggestions: string[] = [];
   let score = 100;
@@ -42,18 +44,18 @@ export async function analyzeDocumentQuality(
     const minDimension = Math.min(width, height);
     if (minDimension < 480) {
       score -= 30;
-      issues.push('Resolution is too low to clearly read fine text.');
-      suggestions.push('Move your camera closer to the document without cutting off edges.');
+      issues.push(isVehicle ? 'Resolution is too low to clearly see vehicle details.' : 'Resolution is too low to clearly read fine text.');
+      suggestions.push(isVehicle ? 'Step closer to the vehicle without cutting off edges.' : 'Move your camera closer to the document without cutting off edges.');
     } else if (minDimension < 720) {
       score -= 10;
     }
   }
 
   // 2. Data Density / Compression Check
-  // Detailed text-heavy IDs produce higher base64 payload size when unblurred
+  // Detailed text-heavy IDs and crisp images produce higher base64 payload size when unblurred
   if (dataLength < 40000) {
     score -= 35;
-    issues.push('Photo lacks fine details and appears blurred.');
+    issues.push(isVehicle ? 'Photo lacks fine details and appears blurred.' : 'Photo lacks fine details and appears blurred.');
     suggestions.push('Hold your phone steady until the camera lens focuses completely.');
   } else if (dataLength < 80000) {
     score -= 15;
@@ -80,7 +82,7 @@ export async function analyzeDocumentQuality(
     if (varianceIndex < 16) {
       score -= 30;
       issues.push('Photo has low contrast or camera lens motion blur.');
-      suggestions.push('Place the document on a contrasting background and tap screen to focus.');
+      suggestions.push(isVehicle ? 'Ensure good lighting and tap screen to focus on the vehicle.' : 'Place the document on a contrasting background and tap screen to focus.');
     } else if (varianceIndex < 20) {
       score -= 10;
     }
@@ -95,8 +97,8 @@ export async function analyzeDocumentQuality(
       isClear: true,
       score,
       status: 'sharp',
-      title: 'Sharp & Legible',
-      message: 'Document photo is clear with all text readable.',
+      title: isVehicle ? 'Sharp & Clear' : 'Sharp & Legible',
+      message: isVehicle ? 'Vehicle photo is clear with license plate and details easily visible.' : 'Document photo is clear with all text readable.',
       issues,
       suggestions,
     };
@@ -106,7 +108,7 @@ export async function analyzeDocumentQuality(
       score,
       status: 'acceptable',
       title: 'Acceptable Quality',
-      message: 'Document is readable. Ensure name, ID numbers, and photo are distinct.',
+      message: isVehicle ? 'Vehicle photo is recognizable. Ensure license plate and vehicle features are visible.' : 'Document is readable. Ensure name, ID numbers, and photo are distinct.',
       issues,
       suggestions,
     };
@@ -115,7 +117,7 @@ export async function analyzeDocumentQuality(
       issues.push('The photo appears out of focus or too dim.');
     }
     if (suggestions.length === 0) {
-      suggestions.push('Hold phone steady and align the document flat under good lighting.');
+      suggestions.push(isVehicle ? 'Hold phone steady and capture the full vehicle under good lighting.' : 'Hold phone steady and align the document flat under good lighting.');
     }
 
     return {
@@ -123,7 +125,7 @@ export async function analyzeDocumentQuality(
       score,
       status: 'blurry',
       title: 'Blurry or Unclear',
-      message: 'The captured document is blurry or text is difficult to read.',
+      message: isVehicle ? 'The captured vehicle photo is blurry or unclear.' : 'The captured document is blurry or text is difficult to read.',
       issues,
       suggestions,
     };

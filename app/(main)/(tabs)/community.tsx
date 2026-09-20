@@ -24,7 +24,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/context/ThemeContext';
 import { useRoute } from '@/context/RouteContext';
@@ -254,10 +254,17 @@ export default function CommunityScreen() {
     }
   }, [activeRoute?.route_hash, profile?.id, selectedFilterTag, posts.length, postId]);
 
-  // Handle Tag changes
+  // Handle Tag or ActiveRoute changes
   useEffect(() => {
     loadPosts(true);
-  }, [selectedFilterTag]);
+  }, [selectedFilterTag, activeRoute?.route_hash]);
+
+  // Refetch when tab is brought to foreground / focused
+  useFocusEffect(
+    useCallback(() => {
+      loadPosts(true);
+    }, [loadPosts])
+  );
 
   const handleEndReached = () => {
     if (!loading && !loadingMore && hasMore) {
