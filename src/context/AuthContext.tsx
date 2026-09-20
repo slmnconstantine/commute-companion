@@ -60,6 +60,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const token = await registerForPushNotificationsAsync();
         // Only update if the token is new or changed
         if (token && profile.push_token !== token && isMounted) {
+          // Disassociate this token from any other profiles so shared-device accounts do not receive cross-account pushes
+          try {
+            await supabase.from('profiles').update({ push_token: null }).eq('push_token', token).neq('id', profile.id);
+          } catch (e) {
+            console.warn('[PUSH] Failed to clear token from previous profiles:', e);
+          }
+
           const { error: updateError } = await updateProfileService(profile.id, { push_token: token });
           if (updateError) {
             console.error('[PUSH] Failed to save push token to Supabase:', updateError);
@@ -155,6 +162,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
+      if (profile?.id) {
+        // Clear push token from Supabase so push notifications stop arriving for this account while logged out
+        await supabase.from('profiles').update({ push_token: null }).eq('id', profile.id);
+      }
       await supabase.auth.signOut();
     } catch (e) {
       console.error('Error signing out:', e);

@@ -66,33 +66,48 @@ export async function registerForPushNotificationsAsync() {
   return token;
 }
 
-export async function sendPushNotification(expoPushToken: string, title: string, body: string, data: any = {}, userId?: string) {
+export async function sendPushNotification(
+  expoPushToken: string | null | undefined,
+  title: string,
+  body: string,
+  data: any = {},
+  userId?: string
+) {
+  const payloadData = {
+    ...data,
+    ...(userId ? { recipientId: userId } : {}),
+  };
+
   const message = {
     to: expoPushToken,
     sound: 'default',
     title,
     body,
-    data,
+    data: payloadData,
   };
 
   try {
-    const response = await fetch('https://exp.host/--/api/v2/push/send', {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Accept-encoding': 'gzip, deflate',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(message),
-    });
-    const result = await response.json();
-    console.log('Expo Push Response:', result);
-
-    // If userId is provided, log to in-app notifications
+    // 1. If userId is provided, log to in-app notifications in Supabase directly for the intended recipient
     if (userId) {
-      await createNotification(userId, title, body, data?.type || 'general', data);
+      await createNotification(userId, title, body, data?.type || 'general', payloadData);
+    }
+
+    // 2. Dispatch push notification over Expo if valid token exists
+    if (expoPushToken && typeof expoPushToken === 'string' && expoPushToken.startsWith('ExponentPushToken')) {
+      const response = await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Accept-encoding': 'gzip, deflate',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(message),
+      });
+      const result = await response.json();
+      console.log('Expo Push Response:', result);
     }
   } catch (e) {
     handleServiceError('Error sending push notification', e);
   }
 }
+

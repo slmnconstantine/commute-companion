@@ -1,4 +1,4 @@
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import React, { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
@@ -8,13 +8,6 @@ import { NotificationProvider } from '@/context/NotificationContext';
 export default function MainLayout() {
   const { session, isLoading } = useAuth();
   const { theme } = useTheme();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!isLoading && !session) {
-      router.replace('/(auth)/welcome');
-    }
-  }, [session, isLoading, router]);
 
   if (isLoading || !session) {
     return (

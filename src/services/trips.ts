@@ -7,6 +7,7 @@ import { getChatRoom } from './chatRooms';
 import { sendMessage } from './messages';
 import { cancelRideReminder } from './rideReminders';
 import { isOlderThan24Hours } from '@/utils/dateFormatter';
+import { purgeTripLiveCaptures } from './liveFaceVerification';
 
 /** Create a new trip */
 export async function createTrip(tripData: Omit<Trip, 'id' | 'created_at'>): Promise<{ data: Trip | null; error: Error | null }> {
@@ -93,13 +94,17 @@ export async function cancelExpiredTrips(): Promise<number> {
   }
 }
 
-/** Get trips with driver info, filtered */
-export async function getTrips(filters?: {
+export interface GetTripsFilters {
   status?: string;
+  statuses?: string[];
   driverId?: string;
   limit?: number;
   offset?: number;
-}): Promise<TripWithDriver[]> {
+  upcomingOnly?: boolean;
+}
+
+/** Get trips with driver info, filtered */
+export async function getTrips(filters?: GetTripsFilters): Promise<TripWithDriver[]> {
   // Trigger background auto-cancellation of expired open rides
   cancelExpiredTrips().catch((err) => {
     console.error('Background cancelExpiredTrips failed in getTrips:', err);
@@ -109,7 +114,17 @@ export async function getTrips(filters?: {
     .from('trips')
     .select(`*, driver:profiles!driver_id(*), vehicle:vehicles!vehicle_id(*), bookings(*, reviews(*))`);
 
-  if (filters?.status) query = query.eq('status', filters.status);
+  if (filters?.statuses && filters.statuses.length > 0) {
+    query = query.in('status', filters.statuses);
+  } else if (filters?.status) {
+    query = query.eq('status', filters.status);
+  }
+
+  if (filters?.upcomingOnly) {
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    query = query.gte('departure_time', oneDayAgo);
+  }
+
   if (filters?.driverId) query = query.eq('driver_id', filters.driverId);
   query = query.order('departure_time', { ascending: true });
   if (filters?.limit) query = query.limit(filters.limit);
@@ -263,9 +278,7 @@ export async function updateTripStatus(id: string, status: string): Promise<{ er
       if (title && body) {
         bookingsData.forEach((b: any) => {
           const token = b.commuter?.push_token;
-          if (token) {
-            sendPushNotification(token, title, body, { type: 'trip_update', tripId: id, status }, b.commuter_id);
-          }
+          sendPushNotification(token, title, body, { type: 'trip_update', tripId: id, status }, b.commuter_id);
         });
       }
     }
@@ -340,21 +353,19 @@ export async function notifyMatchingCommuters(trip: Trip): Promise<void> {
     // Send push notification to each matching commuter
     for (const match of matches) {
       const token = match.user?.push_token;
-      if (token) {
-        console.log(`Sending Ride Matched push to ${match.user.full_name} (${token})`);
-        await sendPushNotification(
-          token,
-          'Ride Matched!',
-          `A driver has offered a ride matching your requested route from ${trip.origin_label.split(',')[0]} to ${trip.destination_label.split(',')[0]}.`,
-          {
-            type: 'ride_matched',
-            tripId: trip.id,
-            origin: trip.origin_label,
-            destination: trip.destination_label,
-          },
-          match.user_id
-        );
-      }
+      console.log(`Sending Ride Matched notification to ${match.user?.full_name || 'commuter'} (${token || 'no push token'})`);
+      await sendPushNotification(
+        token,
+        'Ride Matched!',
+        `A driver has offered a ride matching your requested route from ${trip.origin_label.split(',')[0]} to ${trip.destination_label.split(',')[0]}.`,
+        {
+          type: 'ride_matched',
+          tripId: trip.id,
+          origin: trip.origin_label,
+          destination: trip.destination_label,
+        },
+        match.user_id
+      );
     }
   } catch (err) {
     handleServiceError('Error in notifyMatchingCommuters:', err);
@@ -367,6 +378,9 @@ export async function deleteTrip(id: string): Promise<{ error: Error | null }> {
   await cancelRideReminder(id).catch(err => {
     console.error('Error cancelling ride reminders on deleteTrip:', err);
   });
+
+  // Purge any live face verification captures
+  purgeTripLiveCaptures(id).catch(() => {});
 
   // Fetch accepted/pending bookings before deletion to notify commuters
   const { data: bookingsData } = await supabase
@@ -385,15 +399,13 @@ export async function deleteTrip(id: string): Promise<{ error: Error | null }> {
     
     bookingsData.forEach((b: any) => {
       const token = b.commuter?.push_token;
-      if (token) {
-        sendPushNotification(
-          token,
-          'Trip Cancelled',
-          `We're sorry, your scheduled ride with ${driverName} was cancelled and deleted.`,
-          { type: 'trip_update', tripId: id, status: 'deleted' },
-          b.commuter_id
-        );
-      }
+      sendPushNotification(
+        token,
+        'Trip Cancelled',
+        `We're sorry, your scheduled ride with ${driverName} was cancelled and deleted.`,
+        { type: 'trip_update', tripId: id, status: 'deleted' },
+        b.commuter_id
+      );
     });
   }
 
@@ -416,8 +428,7 @@ export async function deleteTrip(id: string): Promise<{ error: Error | null }> {
     .eq('trip_id', id);
 
   if (bookingsError) {
-    handleServiceError('Failed to delete bookings for trip:', bookingsError);
-    return { error: bookingsError as unknown as Error };
+    console.warn('Note deleting bookings for trip:', bookingsError);
   }
 
   // Delete the trip itself

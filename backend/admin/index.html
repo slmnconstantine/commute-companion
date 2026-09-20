@@ -1,45 +1,51 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Administrative Control Portal for Commute Companion - manage user accounts, verify government IDs, and monitor platform registration statistics.">
-  <title>Commute Companion - Admin Portal</title>
-  
+  <meta name="description"
+    content="Administrative Control Portal v2.0 for Commute Companion - manage user accounts, verify government IDs, monitor trips, validate GCash reservations, and moderate community posts.">
+  <title>Commute Companion - Admin Control Portal</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+
   <!-- Premium Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&display=swap"
+    rel="stylesheet">
+
   <!-- CSS Stylesheet -->
-  <link rel="stylesheet" href="style.css">
-  
+  <link rel="stylesheet" href="style.css?v=2.3">
+
   <!-- Supabase JS Client CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  
+
   <!-- Lucide Icons CDN -->
   <script src="https://unpkg.com/lucide@latest"></script>
 </head>
+
 <body>
-  
+
   <!-- Toast Notification System -->
   <div id="toast-container" class="toast-container"></div>
 
   <!-- Main Grid Layout -->
   <div class="app-layout">
-    
+
     <!-- Sidebar Navigation -->
     <aside class="sidebar">
       <div class="sidebar-brand">
         <div class="brand-logo">
-          <i data-lucide="shield-check" class="brand-icon"></i>
+          <img src="logo.png" alt="Commute Companion Logo" class="brand-logo-img">
         </div>
         <div class="brand-details">
-          <h2>Commute</h2>
-          <span>Companion Admin</span>
+          <h2>CoCo</h2>
+          <span>Admin Portal</span>
         </div>
       </div>
-      
+
       <nav class="sidebar-nav">
         <button id="btn-tab-dashboard" class="nav-item active" onclick="switchTab('dashboard')">
           <i data-lucide="layout-dashboard"></i>
@@ -55,8 +61,25 @@
           <span>Verification Inbox</span>
           <span id="badge-pending-verifications" class="nav-badge badge-pending">0</span>
         </button>
+        <button id="btn-tab-trips" class="nav-item" onclick="switchTab('trips')">
+          <i data-lucide="map-pin"></i>
+          <span>Trips & Rides</span>
+          <span id="badge-total-trips" class="nav-badge">0</span>
+        </button>
+        <button id="btn-tab-bookings" class="nav-item" onclick="switchTab('bookings')">
+          <i data-lucide="wallet"></i>
+          <span>Bookings & GCash</span>
+          <span id="badge-total-bookings" class="nav-badge">0</span>
+        </button>
+        <button id="btn-tab-hub" class="nav-item" onclick="switchTab('hub')">
+          <i data-lucide="message-square"></i>
+          <span>Community Hub</span>
+          <span id="badge-total-posts" class="nav-badge">0</span>
+          <span id="badge-reported-posts" class="nav-badge badge-danger"
+            style="display: none; margin-left: 4px;">0</span>
+        </button>
       </nav>
-      
+
       <div class="sidebar-footer">
         <button id="btn-open-settings" class="nav-item settings-trigger" onclick="openSettingsModal()">
           <i data-lucide="settings"></i>
@@ -64,45 +87,50 @@
         </button>
         <div class="connection-status-pill unconfigured" id="db-status-pill">
           <span class="status-dot"></span>
-          <span id="db-status-text">Disconnected</span>
+          <span id="db-status-text">Connecting...</span>
         </div>
       </div>
     </aside>
 
     <!-- Main Content Container -->
     <main class="main-content">
-      
+
       <!-- Top Navigation/Header -->
       <header class="header">
         <div class="header-search">
           <i data-lucide="search" class="search-icon"></i>
-          <input type="text" id="global-search" placeholder="Quick search users by name or username..." oninput="handleGlobalSearch(this.value)">
+          <input type="text" id="global-search" placeholder="Search users, trips, bookings, routes..."
+            oninput="handleGlobalSearch(this.value)">
         </div>
         <div class="header-actions">
-          <button id="btn-mock-mode-toggle" class="mock-mode-pill active" onclick="toggleMockMode()">
-            <span class="mock-dot"></span>
-            <span id="mock-mode-label">Mock Mode: Active</span>
+          <button id="btn-refresh-data" class="btn-refresh" onclick="manualRefresh()" title="Refresh database records">
+            <i data-lucide="refresh-cw" id="refresh-icon"></i>
+            <span>Sync</span>
           </button>
+          <div class="live-status-badge">
+            <span class="live-dot"></span>
+            <span>Live Database</span>
+          </div>
           <div class="admin-profile">
             <div class="avatar-circle">AD</div>
             <div class="profile-meta">
               <h4>System Admin</h4>
-              <span id="role-level-text">Standard Access</span>
+              <span id="role-level-text">Connected</span>
             </div>
           </div>
         </div>
       </header>
-      
+
       <!-- Content View Area -->
       <div class="content-view">
-        
-        <!-- DASHBOARD TAB -->
+
+        <!-- ═══ 1. DASHBOARD TAB ═══ -->
         <section id="view-dashboard" class="tab-view active">
           <div class="view-header animate-fade-in">
-            <h1>Platform Performance & Verification Dashboard</h1>
-            <p>Real-time analytics on user roles, ratings, and identity verification funnel status.</p>
+            <h1>Platform Overview & Real-Time Analytics</h1>
+            <p>Live metrics across registered users, vehicle fleets, active trips, and GCash seat reservations.</p>
           </div>
-          
+
           <!-- Key Metrics Grid -->
           <div class="metrics-grid">
             <div class="metric-card animate-slide-up" style="animation-delay: 0.05s;">
@@ -113,7 +141,7 @@
               <div class="metric-value" id="stat-total-users">0</div>
               <p class="metric-desc">Registered profiles in Supabase</p>
             </div>
-            
+
             <div class="metric-card animate-slide-up" style="animation-delay: 0.1s;">
               <div class="metric-header text-teal">
                 <i data-lucide="car"></i>
@@ -125,7 +153,7 @@
               </div>
               <p class="metric-desc"><span id="stat-drivers-pct-text">0%</span> of total platform users</p>
             </div>
-            
+
             <div class="metric-card animate-slide-up" style="animation-delay: 0.15s;">
               <div class="metric-header text-blue">
                 <i data-lucide="user"></i>
@@ -137,23 +165,41 @@
               </div>
               <p class="metric-desc"><span id="stat-commuters-pct-text">0%</span> of total platform users</p>
             </div>
-            
+
             <div class="metric-card animate-slide-up" style="animation-delay: 0.2s;">
-              <div class="metric-header text-yellow">
-                <i data-lucide="star"></i>
-                <span class="metric-label">Average Rating</span>
+              <div class="metric-header text-emerald">
+                <i data-lucide="map-pin"></i>
+                <span class="metric-label">Total Trips</span>
               </div>
-              <div class="metric-value" id="stat-avg-rating">0.0</div>
-              <p class="metric-desc">Across all rated driver/commuter profiles</p>
+              <div class="metric-value" id="stat-total-trips">0</div>
+              <p class="metric-desc"><span id="stat-active-trips">0</span> active / open currently</p>
+            </div>
+
+            <div class="metric-card animate-slide-up" style="animation-delay: 0.25s;">
+              <div class="metric-header text-cyan">
+                <i data-lucide="bookmark-check"></i>
+                <span class="metric-label">Total Bookings</span>
+              </div>
+              <div class="metric-value" id="stat-total-bookings">0</div>
+              <p class="metric-desc"><span id="stat-reservation-count">0</span> GCash reservations</p>
+            </div>
+
+            <div class="metric-card animate-slide-up" style="animation-delay: 0.3s;">
+              <div class="metric-header text-yellow">
+                <i data-lucide="coins"></i>
+                <span class="metric-label">Platform Fees</span>
+              </div>
+              <div class="metric-value" id="stat-platform-fees">₱0.00</div>
+              <p class="metric-desc">10% commission on accepted bookings</p>
             </div>
           </div>
 
           <!-- Funnel & Quick Links -->
           <div class="dashboard-details-grid">
-            <div class="detail-card animate-slide-up" style="animation-delay: 0.25s;">
+            <div class="detail-card animate-slide-up" style="animation-delay: 0.35s;">
               <h3>Identity Verification Funnel</h3>
               <p class="card-subtitle">Current status distribution of submitted government documents</p>
-              
+
               <div class="funnel-container">
                 <div class="funnel-item">
                   <div class="funnel-info">
@@ -164,7 +210,7 @@
                     <div id="funnel-verified-bar" class="progress bg-green" style="width: 0%"></div>
                   </div>
                 </div>
-                
+
                 <div class="funnel-item">
                   <div class="funnel-info">
                     <span>Pending Verification</span>
@@ -174,7 +220,7 @@
                     <div id="funnel-pending-bar" class="progress bg-amber" style="width: 0%"></div>
                   </div>
                 </div>
-                
+
                 <div class="funnel-item">
                   <div class="funnel-info">
                     <span>Unverified Accounts</span>
@@ -187,11 +233,15 @@
               </div>
             </div>
 
-            <div class="detail-card quick-actions-card animate-slide-up" style="animation-delay: 0.3s;">
-              <h3>Quick Verification Tasks</h3>
-              <p class="card-subtitle">Actions requiring immediate attention</p>
+            <div class="detail-card quick-actions-card animate-slide-up" style="animation-delay: 0.4s;">
+              <div class="card-header-flex">
+                <div>
+                  <h3>Pending Document Reviews</h3>
+                  <p class="card-subtitle">Driver applications & Government IDs requiring verification</p>
+                </div>
+                <button class="btn btn-secondary btn-small" onclick="switchTab('verification')">View All</button>
+              </div>
               <div class="quick-inbox-preview" id="quick-inbox-list">
-                <!-- Will be dynamically populated with pending IDs -->
                 <div class="empty-state">
                   <i data-lucide="check-circle" class="empty-icon text-green"></i>
                   <p>All verifications are up to date!</p>
@@ -199,15 +249,24 @@
               </div>
             </div>
           </div>
+
+          <!-- Recent Platform Activity Feed -->
+          <div class="detail-card animate-slide-up" style="animation-delay: 0.45s; margin-top: 24px;">
+            <h3>Recent Platform Activity</h3>
+            <p class="card-subtitle">Latest trips published, bookings reserved, and user registrations</p>
+            <div class="activity-timeline" id="recent-activity-feed">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
         </section>
 
-        <!-- USER DIRECTORY TAB -->
+        <!-- ═══ 2. USER DIRECTORY TAB ═══ -->
         <section id="view-users" class="tab-view">
           <div class="view-header">
             <h1>User Accounts Directory</h1>
-            <p>Search, filter, edit details, adjust ratings, or delete driver and commuter accounts.</p>
+            <p>Search, filter, edit details, review driver vehicle credentials, adjust ratings, or delete profiles.</p>
           </div>
-          
+
           <!-- Filters & Controls toolbar -->
           <div class="toolbar-card">
             <div class="toolbar-row">
@@ -216,17 +275,21 @@
                 <div class="segmented-control">
                   <button id="filter-role-all" class="segment active" onclick="setRoleFilter('all')">All</button>
                   <button id="filter-role-drivers" class="segment" onclick="setRoleFilter('driver')">Drivers</button>
-                  <button id="filter-role-commuters" class="segment" onclick="setRoleFilter('commuter')">Commuters</button>
+                  <button id="filter-role-commuters" class="segment"
+                    onclick="setRoleFilter('commuter')">Commuters</button>
                 </div>
               </div>
-              
+
               <div class="filter-group">
                 <label>Verification:</label>
                 <div class="segmented-control">
                   <button id="filter-verify-all" class="segment active" onclick="setVerifyFilter('all')">All</button>
-                  <button id="filter-verify-verified" class="segment" onclick="setVerifyFilter('verified')">Verified</button>
-                  <button id="filter-verify-pending" class="segment" onclick="setVerifyFilter('pending')">Pending</button>
-                  <button id="filter-verify-unverified" class="segment" onclick="setVerifyFilter('unverified')">Unverified</button>
+                  <button id="filter-verify-verified" class="segment"
+                    onclick="setVerifyFilter('verified')">Verified</button>
+                  <button id="filter-verify-pending" class="segment"
+                    onclick="setVerifyFilter('pending')">Pending</button>
+                  <button id="filter-verify-unverified" class="segment"
+                    onclick="setVerifyFilter('unverified')">Unverified</button>
                 </div>
               </div>
 
@@ -248,76 +311,147 @@
           </div>
         </section>
 
-        <!-- VERIFICATION INBOX TAB -->
+        <!-- ═══ 3. VERIFICATION INBOX TAB ═══ -->
         <section id="view-verification" class="tab-view">
           <div class="view-header">
-            <h1>Government ID Verification Inbox</h1>
-            <p>Review uploaded documents from platform commuters and drivers to approve or reject credentials.</p>
+            <h1>Driver & Government ID Verification Inbox</h1>
+            <p>Review real-time live document captures, driver vehicles, and GCash details to approve or reject
+              credentials.</p>
           </div>
 
           <div class="verification-layout">
             <div class="inbox-list-panel" id="inbox-submissions-list">
               <!-- Dynamically populated with pending submissions -->
             </div>
-            
+
             <div class="inbox-detail-panel" id="inbox-submission-viewer">
               <div class="empty-viewer-state">
                 <i data-lucide="eye" class="empty-viewer-icon"></i>
                 <h3>Select a submission to review</h3>
-                <p>Verify Government ID documents, cross-reference account credentials, and toggle user verification status.</p>
+                <p>Verify Government ID documents, cross-reference account credentials, inspect vehicle details, and
+                  approve accounts.</p>
               </div>
             </div>
           </div>
         </section>
-        
+
+        <!-- ═══ 4. TRIPS & RIDES TAB ═══ -->
+        <section id="view-trips" class="tab-view">
+          <div class="view-header">
+            <h1>Trips & Carpool Rides</h1>
+            <p>Monitor all rides published on the platform, review routes, available seats, fare pricing, and manage
+              cancellations.</p>
+          </div>
+
+          <!-- Trips Toolbar -->
+          <div class="toolbar-card">
+            <div class="toolbar-row">
+              <div class="filter-group">
+                <label>Status Filter:</label>
+                <div class="segmented-control">
+                  <button id="filter-trip-all" class="segment active" onclick="setTripFilter('all')">All</button>
+                  <button id="filter-trip-open" class="segment" onclick="setTripFilter('open')">Open</button>
+                  <button id="filter-trip-ongoing" class="segment" onclick="setTripFilter('ongoing')">Ongoing</button>
+                  <button id="filter-trip-completed" class="segment"
+                    onclick="setTripFilter('completed')">Completed</button>
+                  <button id="filter-trip-cancelled" class="segment"
+                    onclick="setTripFilter('cancelled')">Cancelled</button>
+                </div>
+              </div>
+              <div class="filter-group">
+                <label>Search Trip:</label>
+                <input type="text" id="trips-search" placeholder="Search origin, destination, or driver..."
+                  class="styled-input" style="max-width: 280px;" oninput="handleTripSearch(this.value)">
+              </div>
+            </div>
+          </div>
+
+          <!-- Trips Grid / Table -->
+          <div id="trips-grid" class="trips-grid">
+            <!-- Dynamically rendered trip cards -->
+          </div>
+        </section>
+
+        <!-- ═══ 5. BOOKINGS & GCASH TAB ═══ -->
+        <section id="view-bookings" class="tab-view">
+          <div class="view-header">
+            <h1>Bookings & GCash Seat Reservations</h1>
+            <p>Track passenger reservations, review digital GCash receipt screenshots, and verify advance seat deposit
+              payments.</p>
+          </div>
+
+          <!-- Bookings Toolbar -->
+          <div class="toolbar-card">
+            <div class="toolbar-row">
+              <div class="filter-group">
+                <label>Booking Type:</label>
+                <div class="segmented-control">
+                  <button id="filter-booking-all" class="segment active" onclick="setBookingFilter('all')">All
+                    Bookings</button>
+                  <button id="filter-booking-reservations" class="segment"
+                    onclick="setBookingFilter('reservation')">GCash Reservations</button>
+                  <button id="filter-booking-standard" class="segment" onclick="setBookingFilter('standard')">Standard
+                    Cash</button>
+                </div>
+              </div>
+
+              <div class="filter-group">
+                <label>Payment Status:</label>
+                <div class="segmented-control">
+                  <button id="filter-pay-all" class="segment active" onclick="setPaymentFilter('all')">All</button>
+                  <button id="filter-pay-submitted" class="segment" onclick="setPaymentFilter('submitted')">Proof
+                    Submitted</button>
+                  <button id="filter-pay-verified" class="segment"
+                    onclick="setPaymentFilter('verified')">Verified</button>
+                  <button id="filter-pay-unpaid" class="segment" onclick="setPaymentFilter('unpaid')">Unpaid</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bookings Grid -->
+          <div id="bookings-grid" class="bookings-grid">
+            <!-- Dynamically rendered booking cards -->
+          </div>
+        </section>
+
+        <!-- ═══ 6. COMMUNITY HUB TAB ═══ -->
+        <section id="view-hub" class="tab-view">
+          <div class="view-header">
+            <h1>Community Hub Content Moderation</h1>
+            <p>Monitor commuter and driver community discussion posts, review reports, and remove inappropriate or spam
+              posts.</p>
+          </div>
+
+          <!-- Hub Toolbar -->
+          <div class="toolbar-card">
+            <div class="toolbar-row">
+              <div class="filter-group" style="flex: 1;">
+                <label>Search Posts:</label>
+                <input type="text" id="hub-search" placeholder="Search discussion topics, post content, or author..."
+                  class="styled-input" oninput="handleHubSearch(this.value)">
+              </div>
+              <div class="filter-group">
+                <label>Moderation Filter:</label>
+                <select id="hub-filter-status" class="styled-select" onchange="handleHubFilterStatus(this.value)">
+                  <option value="all">All Posts</option>
+                  <option value="reported">🚨 Reported Only</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Hub Posts List -->
+          <div id="hub-posts-grid" class="hub-posts-grid">
+            <!-- Dynamically rendered hub posts -->
+          </div>
+        </section>
+
       </div>
     </main>
   </div>
 
-  <!-- SETTINGS MODAL -->
-  <div id="settings-modal" class="modal-backdrop">
-    <div class="modal-content animate-zoom-in">
-      <div class="modal-header">
-        <h3>Supabase Database Configuration</h3>
-        <button class="btn-close-modal" onclick="closeSettingsModal()">
-          <i data-lucide="x"></i>
-        </button>
-      </div>
-      <div class="modal-body">
-        <p class="modal-intro-text">This portal connects directly to the Supabase client. Provide a service role key to bypass Row-Level Security (RLS) policies for administrative writes.</p>
-        
-        <div class="input-field-group">
-          <label for="settings-supabase-url">Supabase Project URL</label>
-          <input type="text" id="settings-supabase-url" placeholder="https://xxxx.supabase.co" class="styled-input">
-        </div>
-        
-        <div class="input-field-group">
-          <label for="settings-supabase-anon-key">Anon Key</label>
-          <input type="password" id="settings-supabase-anon-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6..." class="styled-input">
-        </div>
-
-        <div class="input-field-group border-top">
-          <label for="settings-supabase-service-role">
-            Service Role Key (Admin Bypass Key)
-            <span class="badge-role badge-danger">High Privilege</span>
-          </label>
-          <input type="password" id="settings-supabase-service-role" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6..." class="styled-input">
-          <span class="field-help-text">Allows deleting profiles and updating verification records of other users. Stored locally in your browser.</span>
-        </div>
-
-        <div class="modal-status-box" id="settings-status-box">
-          <i data-lucide="alert-circle" class="status-icon"></i>
-          <span id="settings-status-message">Connection is unconfigured.</span>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeSettingsModal()">Cancel</button>
-        <button id="btn-save-settings" class="btn btn-primary" onclick="saveSettings()">Save Configuration</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- USER EDIT / PROFILE DETAIL MODAL -->
+  <!-- ═══ MODAL: USER EDIT / DETAIL ═══ -->
   <div id="user-edit-modal" class="modal-backdrop">
     <div class="modal-content animate-zoom-in width-wide">
       <div class="modal-header">
@@ -331,12 +465,12 @@
           <!-- Left side fields -->
           <div class="edit-fields-column">
             <input type="hidden" id="edit-user-id">
-            
+
             <div class="input-field-group">
               <label for="edit-full-name">Full Name</label>
               <input type="text" id="edit-full-name" placeholder="John Doe" class="styled-input">
             </div>
-            
+
             <div class="input-field-group">
               <label for="edit-username">Username</label>
               <input type="text" id="edit-username" placeholder="johndoe12" class="styled-input">
@@ -345,7 +479,7 @@
             <div class="input-field-row">
               <div class="input-field-group width-half">
                 <label for="edit-role">User Role</label>
-                <select id="edit-role" class="styled-select">
+                <select id="edit-role" class="styled-select" onchange="handleRoleChange(this.value)">
                   <option value="commuter">Commuter</option>
                   <option value="driver">Driver</option>
                 </select>
@@ -356,8 +490,20 @@
               </div>
             </div>
 
+            <!-- GCash fields -->
+            <div class="input-field-row">
+              <div class="input-field-group width-half">
+                <label for="edit-gcash-number">GCash Number</label>
+                <input type="text" id="edit-gcash-number" placeholder="09XXXXXXXXX" class="styled-input">
+              </div>
+              <div class="input-field-group width-half">
+                <label for="edit-gcash-name">GCash Account Name</label>
+                <input type="text" id="edit-gcash-name" placeholder="JUAN D." class="styled-input">
+              </div>
+            </div>
+
             <div class="input-field-group">
-              <label>Verification Status</label>
+              <label>Verification Badges</label>
               <div class="checkbox-row-container">
                 <label class="custom-checkbox-label">
                   <input type="checkbox" id="edit-is-verified">
@@ -371,23 +517,27 @@
                 </label>
               </div>
             </div>
+
+            <!-- Linked Vehicle Info (Driver Only) -->
+            <div id="modal-vehicle-section" class="vehicle-info-box" style="display: none;">
+              <h4>Linked Vehicle Details</h4>
+              <div id="modal-vehicle-details">
+                <!-- Injected dynamically -->
+              </div>
+            </div>
           </div>
 
           <!-- Right side image/identity details -->
           <div class="edit-id-column">
             <div class="id-document-preview-box">
-              <label>Government ID Document</label>
+              <label>Government ID / Document Scan</label>
               <div id="edit-id-preview-container" class="id-preview-frame">
                 <!-- Image or placeholder -->
               </div>
-              <div class="mock-upload-toolbar">
-                <button class="btn btn-secondary btn-small" onclick="generateMockId()">
-                  <i data-lucide="sparkles"></i>
-                  Mock ID Upload (Demo)
-                </button>
+              <div class="id-action-toolbar">
                 <button class="btn btn-danger btn-small" id="btn-clear-id" onclick="clearGovernmentId()">
                   <i data-lucide="trash-2"></i>
-                  Clear ID
+                  Clear Document URL
                 </button>
               </div>
             </div>
@@ -396,7 +546,7 @@
 
         <div class="danger-zone-card">
           <h4>Danger Zone</h4>
-          <p>Once you delete an account, it cannot be undone. All linked trips, bookings, and messages will remain orphaned or deleted according to DB cascading.</p>
+          <p>Permanently remove this account and associated data. This action cannot be reversed.</p>
           <button id="btn-delete-profile" class="btn btn-danger btn-large" onclick="deleteUserProfile()">
             <i data-lucide="user-minus"></i>
             Delete User Account Completely
@@ -410,15 +560,111 @@
     </div>
   </div>
 
-  <!-- LIGHTBOX IMAGE MODAL -->
-  <div id="lightbox-modal" class="modal-backdrop lightbox" onclick="closeLightbox()">
-    <div class="lightbox-content animate-zoom-in">
-      <img id="lightbox-image" src="" alt="Government ID Enlaged View">
-      <span class="lightbox-caption" id="lightbox-caption">Jane's ID Card</span>
+  <!-- ═══ MODAL: TRIP DETAILS & CANCEL ═══ -->
+  <div id="trip-detail-modal" class="modal-backdrop">
+    <div class="modal-content animate-zoom-in">
+      <div class="modal-header">
+        <h3 id="trip-modal-title">Trip Details</h3>
+        <button class="btn-close-modal" onclick="closeTripDetailModal()">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body" id="trip-modal-body">
+        <!-- Injected dynamically -->
+      </div>
+      <div class="modal-footer" id="trip-modal-footer">
+        <button class="btn btn-secondary" onclick="closeTripDetailModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MODAL: LIGHTBOX IMAGE VIEWER (Documents & GCash Receipts) ═══ -->
+  <div id="lightbox-modal" class="modal-backdrop lightbox" onclick="handleLightboxClick(event)">
+    <div class="lightbox-content animate-zoom-in" onclick="event.stopPropagation()">
+      <div class="lightbox-top-bar">
+        <span class="lightbox-caption" id="lightbox-caption">Document View</span>
+        <button class="btn-close-modal" onclick="closeLightbox()">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="lightbox-img-wrap">
+        <img id="lightbox-image" src="" alt="Enlarged Document">
+      </div>
+      <div class="lightbox-actions" id="lightbox-actions-container">
+        <!-- Optional contextual actions like Verify Payment -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MODAL: SETTINGS & SUPABASE CONFIG ═══ -->
+  <div id="settings-modal" class="modal-backdrop">
+    <div class="modal-content animate-zoom-in">
+      <div class="modal-header">
+        <h3>Supabase Database Configuration</h3>
+        <button class="btn-close-modal" onclick="closeSettingsModal()">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-intro-text">This portal communicates directly with your Supabase backend. Credentials configured
+          in your environment are automatically loaded.</p>
+
+        <div class="input-field-group">
+          <label for="settings-supabase-url">Supabase Project URL</label>
+          <input type="text" id="settings-supabase-url" placeholder="https://xxxx.supabase.co" class="styled-input">
+        </div>
+
+        <div class="input-field-group">
+          <label for="settings-supabase-anon-key">Anon Key</label>
+          <input type="password" id="settings-supabase-anon-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6..."
+            class="styled-input">
+        </div>
+
+        <div class="input-field-group border-top">
+          <label for="settings-supabase-service-role">
+            Service Role Key (Admin Bypass Key)
+            <span class="badge-role badge-danger">Optional</span>
+          </label>
+          <input type="password" id="settings-supabase-service-role" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6..."
+            class="styled-input">
+          <span class="field-help-text">Direct RPC functions bypass RLS automatically. Service role key can be provided
+            for additional administrative queries.</span>
+        </div>
+
+        <div class="modal-status-box" id="settings-status-box">
+          <i data-lucide="alert-circle" class="status-icon"></i>
+          <span id="settings-status-message">Connection is unconfigured.</span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeSettingsModal()">Cancel</button>
+        <button id="btn-save-settings" class="btn btn-primary" onclick="saveSettings()">Save & Reconnect</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MODAL: CONFIRMATION DIALOG MODAL ═══ -->
+  <div id="confirm-dialog-modal" class="modal-backdrop">
+    <div class="modal-content animate-zoom-in" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3 id="confirm-dialog-title">Confirm Action</h3>
+        <button class="btn-close-modal" onclick="closeConfirmModal()">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p id="confirm-dialog-message"
+          style="font-size: 14px; color: var(--text-dark); line-height: 1.5; margin: 10px 0;"></p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeConfirmModal()">Cancel</button>
+        <button id="btn-confirm-dialog-action" class="btn btn-danger">Confirm</button>
+      </div>
     </div>
   </div>
 
   <!-- App Script Logic -->
-  <script src="app.js"></script>
+  <script src="app.js?v=2.2"></script>
 </body>
+
 </html>

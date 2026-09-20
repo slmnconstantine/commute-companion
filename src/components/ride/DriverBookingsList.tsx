@@ -102,16 +102,16 @@ export default function DriverBookingsList({
                     {booking.seats_booked || 1} {(booking.seats_booked || 1) === 1 ? 'seat' : 'seats'}
                     {booking.fare_paid != null && ` • ${formatCurrency(booking.fare_paid)}`}
                   </Text>
-
-                  {booking.is_reservation && (
-                    <View style={[styles.reservationBadge, { backgroundColor: '#007DFE18', borderColor: '#007DFE40' }]}>
-                      <Ionicons name="wallet" size={11} color="#007DFE" />
-                      <Text style={[styles.reservationBadgeText, { color: '#007DFE' }]}>
-                        Reserved ({formatCurrency(booking.reservation_fee || 0)})
-                      </Text>
-                    </View>
-                  )}
                 </View>
+
+                {booking.is_reservation && (
+                  <View style={[styles.reservationBadge, { backgroundColor: '#007DFE18', borderColor: '#007DFE40' }]}>
+                    <Ionicons name="wallet" size={11} color="#007DFE" />
+                    <Text style={[styles.reservationBadgeText, { color: '#007DFE' }]}>
+                      Reserved ({formatCurrency(booking.reservation_fee || 0)})
+                    </Text>
+                  </View>
+                )}
               </View>
 
               {/* Right Side: Status or Action */}
@@ -516,7 +516,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 6,
     borderWidth: 1,
-    marginLeft: 6,
+    marginTop: 4,
+    alignSelf: 'flex-start',
   },
   reservationBadgeText: {
     fontSize: 10,

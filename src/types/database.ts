@@ -55,6 +55,7 @@ export interface Trip {
   available_seats: number;
   fare_per_seat: number;
   status: typeof TRIP_STATUSES[number];
+  description?: string | null;
   created_at: string;
 }
 
@@ -98,13 +99,30 @@ export interface HubPost {
   location_lat: number;
   location_lng: number;
   location_label?: string | null;
+  image_urls?: string[] | null;
+  is_pinned?: boolean;
+  trip_id?: string | null;
   created_at: string;
+  edited_at?: string | null;
 }
 
 export interface PostLike {
   id: string;
   post_id: string;
   user_id: string;
+  reaction_type?: string;
+  created_at: string;
+}
+
+export interface Report {
+  id: string;
+  reporter_id: string;
+  reported_user_id?: string | null;
+  trip_id?: string | null;
+  post_id?: string | null;
+  reason: string;
+  details?: string | null;
+  status?: string;
   created_at: string;
 }
 
@@ -189,9 +207,13 @@ export interface ReviewWithProfiles extends Review {
 
 export interface HubPostWithAuthor extends HubPost {
   author: Profile;
+  trip?: Trip | null;
   likes_count?: number;
   comments_count?: number;
   user_has_liked?: boolean;
+  user_reaction?: string | null;
+  reactions_count?: Record<string, number>;
+  recent_comments?: PostCommentWithAuthor[];
 }
 
 export interface PostCommentWithAuthor extends PostComment {
@@ -201,3 +223,15 @@ export interface PostCommentWithAuthor extends PostComment {
 export interface MessageWithSender extends Message {
   sender: Profile;
 }
+
+export interface UserLocation {
+  user_id: string;
+  route_hash: string;
+  latitude: number;
+  longitude: number;
+  heading?: number | null;
+  speed?: number | null;
+  is_visible: boolean;
+  updated_at: string;
+}
+

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import {
-  View, Text, TextInput, StyleSheet, ScrollView, Pressable, Alert, Animated, Platform, Modal, Image,
+  View, Text, TextInput, StyleSheet, ScrollView, Pressable, Alert, Animated, Platform, Modal, Image, KeyboardAvoidingView,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +17,7 @@ import { createTrip } from '@/services/trips';
 import { getVehicles } from '@/services/vehicles';
 import { Vehicle } from '@/types/database';
 import { calculateFare, formatCurrency } from '@/utils/fareCalculator';
+import { generateRouteHash } from '@/utils/routeHash';
 import { saveDriverLiveCapture } from '@/services/liveFaceVerification';
 import DatePickerModal from '@/components/ride/DatePickerModal';
 import TimePickerModal from '@/components/ride/TimePickerModal';
@@ -68,6 +69,7 @@ export default function CreateRideScreen() {
     destLabel?: string;
     seats?: string;
     fare?: string;
+    description?: string;
   }>();
 
   const [origin, setOrigin] = useState<LocationData | null>(() => {
@@ -111,11 +113,13 @@ export default function CreateRideScreen() {
 
   const [departureDate, setDepartureDate] = useState(params.date || '');
   const [departureTime, setDepartureTime] = useState(params.time || '');
+  const [description, setDescription] = useState(params.description || '');
   const [isFree, setIsFree] = useState(params.fare === '0' || params.fare === '0.00');
   const [loading, setLoading] = useState(false);
   const [driverLivePhoto, setDriverLivePhoto] = useState<string | null>(null);
   const [showLiveCaptureModal, setShowLiveCaptureModal] = useState(false);
   const [captureConfidence, setCaptureConfidence] = useState<number>(98);
+  const step2ScrollRef = useRef<ScrollView>(null);
 
   // Prevent unverified accounts from creating rides
   useEffect(() => {
@@ -359,6 +363,27 @@ export default function CreateRideScreen() {
   const handleCreateTrip = async () => {
     if (!origin || !destination || !routeInfo || !fareBreakdown || !profile) return;
 
+    if (!departureDate || !departureTime) {
+      Alert.alert('Departure Time Required', 'Please select both departure date and time before publishing.');
+      return;
+    }
+
+    const [year, month, day] = departureDate.split('-').map(Number);
+    const [hours, minutes] = departureTime.split(':').map(Number);
+    const depDateTime = new Date(year, month - 1, day, hours, minutes);
+    if (isNaN(depDateTime.getTime()) || depDateTime.getTime() < Date.now() - 60000) {
+      Alert.alert('Invalid Departure Time', 'The selected departure time has already passed. Please choose a future time.');
+      return;
+    }
+
+    if (!isFree && vehicle?.type === 'private') {
+      const parsed = parseFloat(manualFare);
+      if (!manualFare.trim() || isNaN(parsed) || parsed <= 0) {
+        Alert.alert('Fare Required', 'Please enter a valid fare per seat, or select "Make this ride FREE".');
+        return;
+      }
+    }
+
     if (!profile.gcash_number) {
       Alert.alert(
         'GCash Details Required',
@@ -383,9 +408,7 @@ export default function CreateRideScreen() {
       return;
     }
 
-    const depTime = departureDate && departureTime
-      ? new Date(`${departureDate}T${departureTime}`).toISOString()
-      : new Date(Date.now() + 3600000).toISOString(); // Default 1 hour from now
+    const depTime = depDateTime.toISOString();
 
     setLoading(true);
     try {
@@ -410,6 +433,7 @@ export default function CreateRideScreen() {
         available_seats: availableSeats,
         fare_per_seat: finalFarePerSeat,
         status: 'open',
+        description: description.trim() || null,
       });
 
       if (error) throw error;
@@ -419,9 +443,28 @@ export default function CreateRideScreen() {
         await saveDriverLiveCapture(data.id, profile.id, driverLivePhoto, captureConfidence);
       }
 
-      Alert.alert('Success!', 'Your ride has been published.', [
-        { text: 'OK', onPress: () => router.back() },
-      ]);
+      Alert.alert(
+        'Ride Published!',
+        'Your ride is now open for bookings. Would you like to share it to the Route Community Hub so nearby commuters can join?',
+        [
+          { text: 'Not Now', onPress: () => router.back(), style: 'cancel' },
+          {
+            text: 'Share to Hub',
+            onPress: () => {
+              const defaultMsg = `🚗 I'm driving from ${origin.label.split(',')[0]} to ${destination.label.split(',')[0]}! ${availableSeats} seat${availableSeats === 1 ? '' : 's'} available (${finalFarePerSeat === 0 ? 'Free' : formatCurrency(finalFarePerSeat)}/seat). Click below to join my ride!`;
+              const routeHash = generateRouteHash(origin.lat, origin.lng, destination.lat, destination.lng);
+              router.replace({
+                pathname: '/(main)/hub/create-post',
+                params: {
+                  tripId: data?.id,
+                  routeHash,
+                  initialMessage: defaultMsg,
+                },
+              });
+            },
+          },
+        ]
+      );
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Failed to create ride.');
     } finally {
@@ -441,6 +484,50 @@ export default function CreateRideScreen() {
         return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
       })()
     : '';
+
+  // Step 2 validation
+  const isDepartureInPast = useMemo(() => {
+    if (!departureDate || !departureTime) return false;
+    const [y, m, d] = departureDate.split('-').map(Number);
+    const [h, mn] = departureTime.split(':').map(Number);
+    const dt = new Date(y, m - 1, d, h, mn);
+    return dt.getTime() < Date.now() - 60000;
+  }, [departureDate, departureTime]);
+
+  const isFareValid = useMemo(() => {
+    if (isFree) return true;
+    if (vehicle?.type === 'private') {
+      const parsed = parseFloat(manualFare);
+      return Boolean(manualFare.trim() && !isNaN(parsed) && parsed > 0);
+    }
+    return (fareBreakdown?.totalPerSeat || 0) > 0;
+  }, [isFree, vehicle, manualFare, fareBreakdown]);
+
+  const isStep2Valid = Boolean(departureDate && departureTime && !isDepartureInPast && isFareValid);
+
+  const handleProceedToStep3 = () => {
+    if (!departureDate) {
+      Alert.alert('Departure Date Required', 'Please select a departure date for your ride.');
+      return;
+    }
+    if (!departureTime) {
+      Alert.alert('Departure Time Required', 'Please select a departure time for your ride.');
+      return;
+    }
+    if (isDepartureInPast) {
+      Alert.alert('Invalid Departure Time', 'The selected departure date and time has already passed. Please choose a future time.');
+      return;
+    }
+    if (!isFareValid) {
+      if (vehicle?.type === 'private') {
+        Alert.alert('Fare Required', 'Please enter a valid fare per seat, or select "Make this ride FREE".');
+      } else {
+        Alert.alert('Fare Required', 'Fare estimation could not be calculated. Please check your route or select "Make this ride FREE".');
+      }
+      return;
+    }
+    setStep(3);
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -665,132 +752,215 @@ export default function CreateRideScreen() {
         </View>
       ) : step === 2 ? (
         /* ═══ Step 2: Details ═══ */
-        <ScrollView style={styles.detailsContainer} contentContainerStyle={styles.detailsContent}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>Available Seats</Text>
-          <View style={styles.seatRow}>
-            {[1, 2, 3, 4, 5, 6].map((n) => (
-              <Pressable
-                key={n}
-                style={[styles.seatButton, {
-                  backgroundColor: n === availableSeats ? theme.colors.primary : theme.colors.surface,
-                  borderColor: n === availableSeats ? theme.colors.primary : theme.colors.border,
-                }]}
-                onPress={() => setAvailableSeats(n)}
-              >
-                <Ionicons name="person" size={18} color={n === availableSeats ? '#fff' : theme.colors.textMuted} />
-                <Text style={[styles.seatNum, { color: n === availableSeats ? '#fff' : theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>{n}</Text>
-              </Pressable>
-            ))}
-          </View>
-
-          <Text style={[styles.sectionTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', marginTop: 24 }]}>Departure</Text>
-          <View style={styles.dateTimeRow}>
-            {/* Date picker button */}
-            <Pressable
-              style={[styles.dateInput, { backgroundColor: theme.colors.surface, borderColor: departureDate ? theme.colors.primary : theme.colors.border }]}
-              onPress={() => setShowDatePicker(true)}
-            >
-              <Ionicons name="calendar-outline" size={20} color={departureDate ? theme.colors.primary : theme.colors.textMuted} />
-              <Text
-                style={[styles.dateText, {
-                  color: departureDate ? theme.colors.text : theme.colors.textMuted,
-                  fontFamily: departureDate ? 'Inter-Medium' : 'Inter-Regular',
-                }]}
-                numberOfLines={1}
-              >
-                {displayDate || 'Select date'}
-              </Text>
-            </Pressable>
-
-            {/* Time picker button */}
-            <Pressable
-              style={[styles.dateInput, { backgroundColor: theme.colors.surface, borderColor: departureTime ? theme.colors.primary : theme.colors.border, flex: 0.8 }]}
-              onPress={() => setShowTimePicker(true)}
-            >
-              <Ionicons name="time-outline" size={20} color={departureTime ? theme.colors.primary : theme.colors.textMuted} />
-              <Text
-                style={[styles.dateText, {
-                  color: departureTime ? theme.colors.text : theme.colors.textMuted,
-                  fontFamily: departureTime ? 'Inter-Medium' : 'Inter-Regular',
-                }]}
-                numberOfLines={1}
-              >
-                {displayTime || 'Select time'}
-              </Text>
-            </Pressable>
-          </View>
-
-          <Text style={[styles.sectionTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', marginTop: 24 }]}>Fare Option</Text>
-          <Pressable
-            style={[
-              styles.freeFareToggle,
-              { 
-                backgroundColor: theme.colors.surface, 
-                borderColor: isFree ? theme.colors.primary : theme.colors.border,
-                borderWidth: isFree ? 1.5 : 1
-              }
-            ]}
-            onPress={() => setIsFree(!isFree)}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+          style={{ flex: 1 }}
+        >
+          <ScrollView
+            ref={step2ScrollRef}
+            style={styles.detailsContainer}
+            contentContainerStyle={[styles.detailsContent, { paddingBottom: 350 }]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
-            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-              <Ionicons 
-                name={isFree ? "gift-outline" : "cash-outline"} 
-                size={22} 
-                color={isFree ? theme.colors.primary : theme.colors.textMuted} 
-              />
-              <View style={{ marginLeft: 12 }}>
-                <Text style={{ color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 14 }}>
-                  Make this ride FREE
-                </Text>
-                <Text style={{ color: theme.colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 12, marginTop: 2 }}>
-                  Share your commute without charging passengers
-                </Text>
-              </View>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>Available Seats</Text>
+            <View style={styles.seatRow}>
+              {[1, 2, 3, 4, 5, 6].map((n) => (
+                <Pressable
+                  key={n}
+                  style={[styles.seatButton, {
+                    backgroundColor: n === availableSeats ? theme.colors.primary : theme.colors.surface,
+                    borderColor: n === availableSeats ? theme.colors.primary : theme.colors.border,
+                  }]}
+                  onPress={() => setAvailableSeats(n)}
+                >
+                  <Ionicons name="person" size={18} color={n === availableSeats ? '#fff' : theme.colors.textMuted} />
+                  <Text style={[styles.seatNum, { color: n === availableSeats ? '#fff' : theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>{n}</Text>
+                </Pressable>
+              ))}
             </View>
-            <Ionicons 
-              name={isFree ? "checkbox" : "square-outline"} 
-              size={24} 
-              color={isFree ? theme.colors.primary : theme.colors.textMuted} 
-            />
-          </Pressable>
 
-          {vehicle?.type === 'private' && !isFree && (
-            <View style={{ marginTop: 16 }}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>Set Fare (per seat)</Text>
-              <TextInput
-                style={[styles.fareInput, { backgroundColor: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }]}
-                keyboardType="numeric"
-                placeholder="Enter amount (e.g. 50)"
-                placeholderTextColor={theme.colors.textMuted}
-                value={manualFare}
-                onChangeText={setManualFare}
-              />
+            <Text style={[styles.sectionTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', marginTop: 24 }]}>Departure</Text>
+            <View style={styles.dateTimeRow}>
+              {/* Date picker button */}
+              <Pressable
+                style={[styles.dateInput, { backgroundColor: theme.colors.surface, borderColor: departureDate ? theme.colors.primary : theme.colors.border }]}
+                onPress={() => setShowDatePicker(true)}
+              >
+                <Ionicons name="calendar-outline" size={20} color={departureDate ? theme.colors.primary : theme.colors.textMuted} />
+                <Text
+                  style={[styles.dateText, {
+                    color: departureDate ? theme.colors.text : theme.colors.textMuted,
+                    fontFamily: departureDate ? 'Inter-Medium' : 'Inter-Regular',
+                  }]}
+                  numberOfLines={1}
+                >
+                  {displayDate || 'Select date'}
+                </Text>
+              </Pressable>
+
+              {/* Time picker button */}
+              <Pressable
+                style={[styles.dateInput, { backgroundColor: theme.colors.surface, borderColor: departureTime ? theme.colors.primary : theme.colors.border, flex: 0.8 }]}
+                onPress={() => setShowTimePicker(true)}
+              >
+                <Ionicons name="time-outline" size={20} color={departureTime ? theme.colors.primary : theme.colors.textMuted} />
+                <Text
+                  style={[styles.dateText, {
+                    color: departureTime ? theme.colors.text : theme.colors.textMuted,
+                    fontFamily: departureTime ? 'Inter-Medium' : 'Inter-Regular',
+                  }]}
+                  numberOfLines={1}
+                >
+                  {displayTime || 'Select time'}
+                </Text>
+              </Pressable>
             </View>
-          )}
+            {(!departureDate || !departureTime) ? (
+              <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginTop: 6, fontFamily: 'Inter-Regular' }}>
+                * Both departure date and time are required
+              </Text>
+            ) : isDepartureInPast ? (
+              <Text style={{ color: theme.colors.error, fontSize: 12, marginTop: 6, fontFamily: 'Inter-Regular' }}>
+                * Departure time cannot be in the past
+              </Text>
+            ) : null}
 
-          {fareBreakdown && vehicle?.type !== 'private' && (
-            <>
-              <Text style={[styles.sectionTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', marginTop: 24 }]}>Fare Estimate (Automatic Tariff)</Text>
-              <View style={[styles.fareCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, opacity: isFree ? 0.6 : 1 }]}>
-                <FareLine label="Base fare" amount={isFree ? 0 : fareBreakdown.baseFare} theme={theme} />
-                <FareLine label={`Distance (${routeInfo?.distanceKm} km)`} amount={isFree ? 0 : fareBreakdown.distanceCost} theme={theme} />
-                <FareLine label={`Duration (${routeInfo?.durationMin} min)`} amount={isFree ? 0 : fareBreakdown.timeCost} theme={theme} />
-                <View style={[styles.fareDivider, { backgroundColor: theme.colors.border }]} />
-                <View style={styles.fareRow}>
-                  <Text style={[styles.fareTotalLabel, { color: theme.colors.text, fontFamily: 'Inter-Bold' }]}>Total per seat</Text>
-                  <Text style={[styles.fareTotalAmount, { color: isFree ? theme.colors.success : theme.colors.primary, fontFamily: 'Inter-Bold' }]}>
-                    {isFree ? 'FREE' : formatCurrency(finalFarePerSeat)}
+            <Text style={[styles.sectionTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', marginTop: 24 }]}>Fare Option</Text>
+            <Pressable
+              style={[
+                styles.freeFareToggle,
+                { 
+                  backgroundColor: theme.colors.surface, 
+                  borderColor: isFree ? theme.colors.primary : theme.colors.border,
+                  borderWidth: isFree ? 1.5 : 1
+                }
+              ]}
+              onPress={() => setIsFree(!isFree)}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <Ionicons 
+                  name={isFree ? "gift-outline" : "cash-outline"} 
+                  size={22} 
+                  color={isFree ? theme.colors.primary : theme.colors.textMuted} 
+                />
+                <View style={{ marginLeft: 12 }}>
+                  <Text style={{ color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 14 }}>
+                    Make this ride FREE
+                  </Text>
+                  <Text style={{ color: theme.colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 12, marginTop: 2 }}>
+                    Share your commute without charging passengers
                   </Text>
                 </View>
               </View>
-            </>
-          )}
+              <Ionicons 
+                name={isFree ? "checkbox" : "square-outline"} 
+                size={24} 
+                color={isFree ? theme.colors.primary : theme.colors.textMuted} 
+              />
+            </Pressable>
 
-          <Pressable style={[styles.nextButton, { backgroundColor: theme.colors.primary, marginTop: 24 }]} onPress={() => setStep(3)}>
-            <Text style={styles.nextButtonText}>Review & Publish</Text>
-            <Ionicons name="arrow-forward" size={20} color="#fff" />
-          </Pressable>
-        </ScrollView>
+            {vehicle?.type === 'private' && !isFree && (
+              <View style={{ marginTop: 16 }}>
+                <Text style={[styles.sectionTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>Set Fare (per seat)</Text>
+                <TextInput
+                  style={[
+                    styles.fareInput,
+                    {
+                      backgroundColor: theme.colors.surface,
+                      color: theme.colors.text,
+                      borderColor: !manualFare.trim() ? theme.colors.border : isFareValid ? theme.colors.primary : theme.colors.error,
+                    }
+                  ]}
+                  keyboardType="numeric"
+                  placeholder="Enter amount (e.g. 50)"
+                  placeholderTextColor={theme.colors.textMuted}
+                  value={manualFare}
+                  onChangeText={setManualFare}
+                  onFocus={() => {
+                    setTimeout(() => {
+                      step2ScrollRef.current?.scrollTo({ y: 260, animated: true });
+                    }, 150);
+                  }}
+                />
+                {!manualFare.trim() ? (
+                  <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginTop: 6, fontFamily: 'Inter-Regular' }}>
+                    * Please enter a fare amount (or check "Make this ride FREE")
+                  </Text>
+                ) : !isFareValid ? (
+                  <Text style={{ color: theme.colors.error, fontSize: 12, marginTop: 6, fontFamily: 'Inter-Regular' }}>
+                    * Fare must be greater than ₱0
+                  </Text>
+                ) : null}
+              </View>
+            )}
+
+            {fareBreakdown && vehicle?.type !== 'private' && (
+              <>
+                <Text style={[styles.sectionTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', marginTop: 24 }]}>Fare Estimate (Automatic Tariff)</Text>
+                <View style={[styles.fareCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, opacity: isFree ? 0.6 : 1 }]}>
+                  <FareLine label="Base fare" amount={isFree ? 0 : fareBreakdown.baseFare} theme={theme} />
+                  <FareLine label={`Distance (${routeInfo?.distanceKm} km)`} amount={isFree ? 0 : fareBreakdown.distanceCost} theme={theme} />
+                  <FareLine label={`Duration (${routeInfo?.durationMin} min)`} amount={isFree ? 0 : fareBreakdown.timeCost} theme={theme} />
+                  <View style={[styles.fareDivider, { backgroundColor: theme.colors.border }]} />
+                  <View style={styles.fareRow}>
+                    <Text style={[styles.fareTotalLabel, { color: theme.colors.text, fontFamily: 'Inter-Bold' }]}>Total per seat</Text>
+                    <Text style={[styles.fareTotalAmount, { color: isFree ? theme.colors.success : theme.colors.primary, fontFamily: 'Inter-Bold' }]}>
+                      {isFree ? 'FREE' : formatCurrency(finalFarePerSeat)}
+                    </Text>
+                  </View>
+                </View>
+              </>
+            )}
+
+            {/* Trip Notes & Preferences (Optional) */}
+            <Text style={[styles.sectionTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', marginTop: 24 }]}>
+              Trip Notes & Preferences <Text style={{ color: theme.colors.textMuted, fontSize: 13, fontFamily: 'Inter-Regular' }}>(Optional)</Text>
+            </Text>
+            <TextInput
+              style={[
+                styles.descriptionInput,
+                {
+                  backgroundColor: theme.colors.surface,
+                  color: theme.colors.text,
+                  borderColor: theme.colors.border,
+                }
+              ]}
+              multiline
+              numberOfLines={3}
+              maxLength={300}
+              placeholder="e.g. No large luggage, quiet ride preferred, female commuters only, students welcome..."
+              placeholderTextColor={theme.colors.textMuted}
+              value={description}
+              onChangeText={setDescription}
+              textAlignVertical="top"
+              onFocus={() => {
+                setTimeout(() => {
+                  step2ScrollRef.current?.scrollToEnd({ animated: true });
+                }, 150);
+              }}
+            />
+            <Text style={{ color: theme.colors.textMuted, fontSize: 11, textAlign: 'right', marginTop: 4, fontFamily: 'Inter-Regular' }}>
+              {description.length}/300
+            </Text>
+
+            <Pressable 
+              style={[
+                styles.nextButton, 
+                { 
+                  backgroundColor: isStep2Valid ? theme.colors.primary : theme.colors.primary + '80', 
+                  marginTop: 24,
+                  opacity: isStep2Valid ? 1 : 0.6,
+                }
+              ]} 
+              onPress={handleProceedToStep3}
+            >
+              <Text style={styles.nextButtonText}>Review & Publish</Text>
+              <Ionicons name="arrow-forward" size={20} color="#fff" />
+            </Pressable>
+          </ScrollView>
+        </KeyboardAvoidingView>
       ) : (
         /* ═══ Step 3: Confirm ═══ */
         <ScrollView style={styles.detailsContainer} contentContainerStyle={styles.detailsContent}>
@@ -818,6 +988,20 @@ export default function CreateRideScreen() {
               {isFree ? 'FREE' : formatCurrency(finalFarePerSeat)} per seat
             </Text>
           </View>
+
+          {description.trim() ? (
+            <View style={[styles.confirmCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <Ionicons name="chatbox-ellipses-outline" size={16} color={theme.colors.primary} />
+                <Text style={[styles.confirmTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', marginBottom: 0 }]}>
+                  Trip Notes & Preferences
+                </Text>
+              </View>
+              <Text style={[styles.confirmText, { color: theme.colors.text, lineHeight: 20 }]}>
+                {description.trim()}
+              </Text>
+            </View>
+          ) : null}
 
           <View style={[styles.confirmCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
@@ -1070,6 +1254,7 @@ const styles = StyleSheet.create({
   publishButton: { height: 56, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 8, shadowColor: '#0D9488', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
   publishText: { color: '#fff', fontSize: 16, fontFamily: 'Inter-SemiBold' },
   fareInput: { height: 52, borderWidth: 1, borderRadius: 14, paddingHorizontal: 16, fontSize: 16, fontFamily: 'Inter-Medium' },
+  descriptionInput: { minHeight: 96, borderWidth: 1, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, fontFamily: 'Inter-Regular', lineHeight: 22 },
 });
 
 // ══════════════════════════════════════════════════════════════════════════════

@@ -24,6 +24,7 @@ import { VoiceAssistantProvider } from '@/context/VoiceAssistantContext';
 import VoiceAssistantFab from '@/components/assistant/VoiceAssistantFab';
 import VoiceAssistantSheet from '@/components/assistant/VoiceAssistantSheet';
 import { ToastProvider } from '@/components/common/Toast';
+import '@/services/backgroundLocation';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -107,9 +108,9 @@ function RootLayoutNav() {
   }, [session, isLoading, segments, navigationState?.key, hasSkippedVerification, hasCompletedOnboarding]);
 
   return (
-    <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
-      <Stack.Screen name="(auth)" />
-      <Stack.Screen name="(main)" />
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
+      <Stack.Screen name="(main)" options={{ animation: 'fade' }} />
       <Stack.Screen name="+not-found" />
     </Stack>
   );

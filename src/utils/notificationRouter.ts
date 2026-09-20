@@ -175,8 +175,8 @@ export async function handleNotificationNavigation(
   if (postId && (type === 'hub_post' || type === 'hub_mention' || type === 'hub_like' || type === 'hub_comment')) {
     try {
       const { data: post, error } = await supabase
-        .from('posts')
-        .select('id')
+        .from('hub_posts')
+        .select('id, route_hash')
         .eq('id', postId)
         .maybeSingle();
 

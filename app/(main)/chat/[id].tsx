@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { MessageWithSender } from '@/types/database';
-import { getMessages, sendMessage } from '@/services/messages';
+import { getMessages, sendMessage, getMemoryCachedMessages, getCachedMessages, saveCachedMessages } from '@/services/messages';
 import { supabase } from '@/lib/supabase';
 import { formatMessageTime } from '@/utils/dateFormatter';
 import Avatar from '@/components/common/Avatar';
@@ -41,7 +41,16 @@ export default function ChatScreen() {
   const { theme, mode } = useTheme();
   const { profile } = useAuth();
 
-  const [messages, setMessages] = useState<MessageWithSender[]>([]);
+  // Instant synchronous memory cache hydration (0ms delay if opened before)
+  const [actualChatRoomId, setActualChatRoomId] = useState<string>(id || '');
+  const [messages, setMessages] = useState<MessageWithSender[]>(() => {
+    return (id ? getMemoryCachedMessages(id) : null) || [];
+  });
+  const [initialLoading, setInitialLoading] = useState<boolean>(() => {
+    const cached = id ? getMemoryCachedMessages(id) : null;
+    return !cached || cached.length === 0;
+  });
+
   const [chatRoomData, setChatRoomData] = useState<any>(null);
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
@@ -57,14 +66,59 @@ export default function ChatScreen() {
     }
   }, [profile]);
 
+  // Fast disk cache hydration & tripId to chatRoomId fallback resolution
   useEffect(() => {
     if (!id) return;
-    loadMessages();
-    loadRoomDetails();
+    let isMounted = true;
+
+    // Fast-hydrate from disk cache if memory was empty
+    getCachedMessages(id).then((cached) => {
+      if (isMounted && cached.length > 0) {
+        setMessages((prev) => (prev.length === 0 ? cached : prev));
+        setInitialLoading(false);
+      }
+    });
+
+    // Check if id was a trip_id instead of a chat_room_id
+    getChatRoomWithTrip(id).then((room) => {
+      if (isMounted && room?.id) {
+        if (room.id !== id) {
+          setActualChatRoomId(room.id);
+          // Check cache for the resolved room id as well
+          getCachedMessages(room.id).then((roomCached) => {
+            if (isMounted && roomCached.length > 0) {
+              setMessages((prev) => (prev.length === 0 ? roomCached : prev));
+              setInitialLoading(false);
+            }
+          });
+        }
+      }
+    }).catch(() => {});
+
+    return () => {
+      isMounted = false;
+    };
+  }, [id]);
+
+  useEffect(() => {
+    const targetRoomId = actualChatRoomId || id;
+    if (!targetRoomId) return;
+
+    loadMessages(targetRoomId);
+    loadRoomDetails(targetRoomId);
+
+    // Clean up any stale channel before subscribing to prevent "cannot add callbacks after subscribe()"
+    const existingChat = supabase.getChannels().find((c) => c.topic === `realtime:chat:${targetRoomId}`);
+    if (existingChat) {
+      supabase.removeChannel(existingChat);
+      try {
+        (supabase.realtime as any)._remove?.(existingChat);
+      } catch {}
+    }
 
     // High-performance Realtime: Broadcast (sub-50ms) + Postgres Changes (fallback)
     const channel = supabase
-      .channel(`chat:${id}`, {
+      .channel(`chat:${targetRoomId}`, {
         config: {
           broadcast: { self: false },
         },
@@ -90,7 +144,9 @@ export default function ChatScreen() {
               ) {
                 return prev;
               }
-              return [...prev, incomingMsg];
+              const updated = [...prev, incomingMsg];
+              saveCachedMessages(targetRoomId, updated).catch(() => {});
+              return updated;
             });
             setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 30);
           }
@@ -98,7 +154,7 @@ export default function ChatScreen() {
       )
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_room_id=eq.${id}` },
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_room_id=eq.${targetRoomId}` },
         async (payload) => {
           const newMsg = payload.new as any;
           if (!newMsg || newMsg.content?.startsWith(LIVE_FACE_PREFIX)) return;
@@ -109,9 +165,11 @@ export default function ChatScreen() {
               (m) => m.id.startsWith('temp_') && m.sender_id === newMsg.sender_id && m.content === newMsg.content
             );
             if (tempMatch) {
-              return prev.map((m) =>
+              const updated = prev.map((m) =>
                 m.id === tempMatch.id ? ({ ...m, id: newMsg.id, created_at: newMsg.created_at } as MessageWithSender) : m
               );
+              saveCachedMessages(targetRoomId, updated).catch(() => {});
+              return updated;
             }
 
             if (prev.some((m) => m.id === newMsg.id)) {
@@ -123,7 +181,9 @@ export default function ChatScreen() {
               profilesCacheRef.current[newMsg.sender_id] ||
               (newMsg.sender_id === profile?.id ? profile : { id: newMsg.sender_id, full_name: 'Member' });
 
-            return [...prev, { ...newMsg, sender: cachedSender } as MessageWithSender];
+            const updated = [...prev, { ...newMsg, sender: cachedSender } as MessageWithSender];
+            saveCachedMessages(targetRoomId, updated).catch(() => {});
+            return updated;
           });
           setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 30);
 
@@ -137,13 +197,15 @@ export default function ChatScreen() {
               .then(({ data }) => {
                 if (data) {
                   profilesCacheRef.current[newMsg.sender_id] = data;
-                  setMessages((prev) =>
-                    prev.map((m) =>
+                  setMessages((prev) => {
+                    const updated = prev.map((m) =>
                       m.sender_id === newMsg.sender_id && (!m.sender || m.sender.full_name === 'Member')
                         ? { ...m, sender: data }
                         : m
-                    )
-                  );
+                    );
+                    saveCachedMessages(targetRoomId, updated).catch(() => {});
+                    return updated;
+                  });
                 }
               });
           }
@@ -155,33 +217,40 @@ export default function ChatScreen() {
 
     return () => {
       supabase.removeChannel(channel);
+      try {
+        (supabase.realtime as any)._remove?.(channel);
+      } catch {}
       channelRef.current = null;
     };
-  }, [id, profile?.id]);
+  }, [actualChatRoomId, id, profile?.id]);
 
-  const loadRoomDetails = async () => {
-    if (!id) return;
+  const loadRoomDetails = async (roomIdToUse: string) => {
+    if (!roomIdToUse) return;
     try {
-      const room = await getChatRoomWithTrip(id);
+      const room = await getChatRoomWithTrip(roomIdToUse);
       setChatRoomData(room);
     } catch (e) {
       console.error('Failed to load room details:', e);
     }
   };
 
-  const loadMessages = async () => {
-    if (!id) return;
+  const loadMessages = async (roomIdToUse: string) => {
+    if (!roomIdToUse) return;
     try {
-      const msgs = await getMessages(id);
+      const msgs = await getMessages(roomIdToUse);
       msgs.forEach((m) => {
         if (m.sender_id && m.sender) {
           profilesCacheRef.current[m.sender_id] = m.sender;
         }
       });
-      setMessages(msgs.filter((m) => !m.content?.startsWith(LIVE_FACE_PREFIX)));
+      const filtered = msgs.filter((m) => !m.content?.startsWith(LIVE_FACE_PREFIX));
+      setMessages(filtered);
+      saveCachedMessages(roomIdToUse, filtered).catch(() => {});
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 50);
     } catch (e) {
       console.error('Failed to load messages:', e);
+    } finally {
+      setInitialLoading(false);
     }
   };
 
@@ -210,7 +279,8 @@ export default function ChatScreen() {
   }, [isTripCompleted, completionRefTime, isChatExpired]);
 
   const handleSend = async () => {
-    if (!newMessage.trim() || !id || !profile) return;
+    const targetRoomId = actualChatRoomId || id;
+    if (!newMessage.trim() || !targetRoomId || !profile) return;
     const content = newMessage.trim();
 
     // 1. Immediately clear input so user can type next message right away
@@ -226,7 +296,7 @@ export default function ChatScreen() {
     const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
     const optimisticMsg: MessageWithSender = {
       id: tempId,
-      chat_room_id: id,
+      chat_room_id: targetRoomId,
       sender_id: profile.id,
       content,
       is_alert: false,
@@ -234,7 +304,11 @@ export default function ChatScreen() {
       sender: profile,
     };
 
-    setMessages((prev) => [...prev, optimisticMsg]);
+    setMessages((prev) => {
+      const updated = [...prev, optimisticMsg];
+      saveCachedMessages(targetRoomId, updated).catch(() => {});
+      return updated;
+    });
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 30);
 
     // 3. Ultra-fast Broadcast to peers over WebSocket (<50ms delivery)
@@ -246,19 +320,29 @@ export default function ChatScreen() {
 
     // 4. Persist to database in background
     try {
-      const { data: sent, error } = await sendMessage(id, profile.id, content);
+      const { data: sent, error } = await sendMessage(targetRoomId, profile.id, content);
       if (sent && !error) {
-        setMessages((prev) =>
-          prev.map((m) => (m.id === tempId ? ({ ...sent, sender: profile } as MessageWithSender) : m))
-        );
+        setMessages((prev) => {
+          const updated = prev.map((m) => (m.id === tempId ? ({ ...sent, sender: profile } as MessageWithSender) : m));
+          saveCachedMessages(targetRoomId, updated).catch(() => {});
+          return updated;
+        });
       } else if (error) {
         // Rollback optimistic message if error occurred
-        setMessages((prev) => prev.filter((m) => m.id !== tempId));
+        setMessages((prev) => {
+          const updated = prev.filter((m) => m.id !== tempId);
+          saveCachedMessages(targetRoomId, updated).catch(() => {});
+          return updated;
+        });
         setNewMessage(content);
       }
     } catch (e) {
       console.error('Failed to send message:', e);
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      setMessages((prev) => {
+        const updated = prev.filter((m) => m.id !== tempId);
+        saveCachedMessages(targetRoomId, updated).catch(() => {});
+        return updated;
+      });
       setNewMessage(content);
     }
   };
@@ -355,6 +439,26 @@ export default function ChatScreen() {
     </View>
   );
 
+  const renderEmptyOrLoading = () => {
+    if (initialLoading && messages.length === 0) {
+      return (
+        <View style={styles.skeletonContainer}>
+          <View style={[styles.skeletonBubble, styles.skeletonBubbleLeft, { backgroundColor: mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: theme.colors.border }]} />
+          <View style={[styles.skeletonBubble, styles.skeletonBubbleRight, { backgroundColor: `${theme.colors.primary}20` }]} />
+          <View style={[styles.skeletonBubble, styles.skeletonBubbleLeft, { backgroundColor: mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: theme.colors.border, width: '60%' }]} />
+        </View>
+      );
+    }
+    return renderEmptyChat();
+  };
+
+  const headerSubtitle = useMemo(() => {
+    if (initialLoading && messages.length === 0) {
+      return 'Connecting...';
+    }
+    return `${messages.length} message${messages.length !== 1 ? 's' : ''}`;
+  }, [initialLoading, messages.length]);
+
   return (
     <KeyboardAvoidingView style={[styles.container, { backgroundColor: theme.colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={[styles.header, { paddingTop: insets.top + 8, backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
@@ -364,7 +468,7 @@ export default function ChatScreen() {
         <View style={styles.headerTitleWrap}>
           <Text style={[styles.headerTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>Chat</Text>
           <Text style={[styles.headerSubtitle, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]} numberOfLines={1}>
-            {messages.length} message{messages.length !== 1 ? 's' : ''}
+            {headerSubtitle}
           </Text>
         </View>
         <View style={styles.headerBtn} />
@@ -388,7 +492,7 @@ export default function ChatScreen() {
           />
           <Text
             style={[
-              styles.bannerText,
+            styles.bannerText,
               {
                 color: isChatExpired ? theme.colors.textMuted : theme.colors.text,
                 fontFamily: 'Inter-Medium',
@@ -409,7 +513,7 @@ export default function ChatScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={[styles.messagesList, messages.length === 0 && { flex: 1 }]}
         onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
-        ListEmptyComponent={renderEmptyChat}
+        ListEmptyComponent={renderEmptyOrLoading}
       />
 
       {isChatExpired ? (
@@ -466,6 +570,25 @@ const styles = StyleSheet.create({
   bannerText: { fontSize: 12, flex: 1, lineHeight: 16 },
   textInput: { flex: 1, borderRadius: 22, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 10, fontSize: 15, maxHeight: 100 },
   sendBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+
+  /* Skeleton Loading */
+  skeletonContainer: {
+    padding: 16,
+    gap: 16,
+  },
+  skeletonBubble: {
+    height: 48,
+    borderRadius: 18,
+  },
+  skeletonBubbleLeft: {
+    width: '72%',
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+  },
+  skeletonBubbleRight: {
+    width: '58%',
+    alignSelf: 'flex-end',
+  },
 
   /* Date separators */
   dateSeparator: {

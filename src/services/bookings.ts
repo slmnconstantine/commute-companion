@@ -41,9 +41,14 @@ export async function createBooking(bookingData: Omit<Booking, 'id' | 'created_a
     }
 
     // Notify the driver
-    const { data: tripData } = await supabase.from('trips').select('driver:profiles!driver_id(id, push_token)').eq('id', bookingData.trip_id).single();
+    const { data: tripData } = await supabase
+      .from('trips')
+      .select('driver_id, driver:profiles!driver_id(id, push_token)')
+      .eq('id', bookingData.trip_id)
+      .single();
+    const driverId = tripData?.driver_id || (tripData?.driver as any)?.id;
     const pushToken = (tripData?.driver as any)?.push_token;
-    if (pushToken) {
+    if (driverId) {
       const notifTitle = bookingData.is_reservation ? 'Seat Reservation Request' : 'New Ride Request';
       const notifBody = bookingData.is_reservation
         ? 'A commuter submitted a seat reservation with a GCash receipt!'
@@ -53,7 +58,7 @@ export async function createBooking(bookingData: Omit<Booking, 'id' | 'created_a
         notifTitle,
         notifBody,
         { type: 'booking', bookingId: booking.id, tripId: bookingData.trip_id, is_reservation: bookingData.is_reservation },
-        (tripData?.driver as any)?.id
+        driverId
       );
     }
   }
@@ -132,8 +137,9 @@ export async function updateBookingStatus(
   if (error) throw new Error(`DB Error: ${error.message} (Code: ${error.code})`);
   if (!data) return; // Already in this status, idempotently skip duplicate push notifications
 
+  const commuterId = data.commuter_id;
   const pushToken = (data.commuter as any)?.push_token;
-  if (pushToken) {
+  if (commuterId) {
     let title = 'Booking Update';
     let body = `Your booking was updated to ${status}.`;
     if (status === 'accepted') {
@@ -148,7 +154,7 @@ export async function updateBookingStatus(
       title = 'Ride Declined';
       body = 'The driver declined your booking request.';
     }
-    await sendPushNotification(pushToken, title, body, { type: 'booking_update', status, bookingId: id, tripId: data.trip_id }, data.commuter_id);
+    await sendPushNotification(pushToken, title, body, { type: 'booking_update', status, bookingId: id, tripId: data.trip_id }, commuterId);
   }
   if (status === 'accepted') {
     // Schedule ride reminders for the commuter
@@ -201,16 +207,17 @@ export async function confirmCommuterArrival(bookingId: string): Promise<void> {
     await checkAndCompleteTrip(updatedBooking.trip_id);
   }
 
-  // Send push notification to the driver
+  // Send notification to the driver
+  const driverId = (updatedBooking.trip as any)?.driver_id;
   const driverPushToken = (updatedBooking.trip as any)?.driver?.push_token;
   const passengerName = (updatedBooking.commuter as any)?.full_name || 'A passenger';
-  if (driverPushToken) {
+  if (driverId) {
     await sendPushNotification(
       driverPushToken,
-      'Passenger Arrived!',
+      'Passenger Arrived! 🏁',
       `${passengerName} has confirmed their arrival at the destination.`,
       { type: 'passenger_arrival', bookingId },
-      (updatedBooking.trip as any)?.driver_id
+      driverId
     );
   }
 }
@@ -240,15 +247,16 @@ export async function confirmDriverArrival(bookingId: string): Promise<void> {
     await checkAndCompleteTrip(updatedBooking.trip_id);
   }
 
-  // Send push notification to the passenger
+  // Send notification to the passenger
+  const commuterId = updatedBooking.commuter_id;
   const commuterPushToken = (updatedBooking.commuter as any)?.push_token;
-  if (commuterPushToken) {
+  if (commuterId) {
     await sendPushNotification(
       commuterPushToken,
-      'Driver Confirmed Arrival',
+      'Driver Confirmed Arrival 🚗',
       'Your driver has confirmed arrival at your destination. Tap to confirm.',
       { type: 'driver_arrival', bookingId },
-      updatedBooking.commuter_id
+      commuterId
     );
   }
 }

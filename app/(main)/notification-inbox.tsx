@@ -46,8 +46,9 @@ export default function NotificationInboxScreen() {
 
   useEffect(() => {
     if (!profile?.id) return;
+    const channelName = `user_notifications_${profile.id}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     const channel = supabase
-      .channel(`user_notifications_${profile.id}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -64,6 +65,9 @@ export default function NotificationInboxScreen() {
 
     return () => {
       supabase.removeChannel(channel);
+      try {
+        (supabase.realtime as any)._remove?.(channel);
+      } catch {}
     };
   }, [profile?.id, loadNotifications]);
 

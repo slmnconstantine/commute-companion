@@ -6,81 +6,223 @@ import { handleServiceError } from '@/utils/errorHelper';
 
 import { isJsonLabel } from '@/utils/routeHash';
 
-export const getPosts = async (routeHash: string, currentUserId: string): Promise<HubPostWithAuthor[]> => {
-  // Fetch posts with author info and counts for likes/comments
-  const { data: posts, error } = await supabase
+export interface GetPostsOptions {
+  tag?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export const getPosts = async (
+  routeHash: string,
+  currentUserId: string,
+  options?: GetPostsOptions
+): Promise<HubPostWithAuthor[]> => {
+  const limit = options?.limit ?? 20;
+  const offset = options?.offset ?? 0;
+
+  // Build query
+  let query = supabase
     .from('hub_posts')
     .select(`
       *,
       author:profiles!hub_posts_author_id_fkey(*),
+      trip:trips(*),
       post_likes(count),
       post_comments(count)
     `)
-    .eq('route_hash', routeHash)
-    .order('created_at', { ascending: false });
+    .eq('route_hash', routeHash);
+
+  // Tag filter
+  if (options?.tag && options.tag.toLowerCase() !== 'all') {
+    query = query.eq('status_tag', options.tag.toLowerCase());
+  }
+
+  // Search filter
+  if (options?.search && options.search.trim().length > 0) {
+    query = query.ilike('message', `%${options.search.trim()}%`);
+  }
+
+  // Ordering: newest first
+  query = query
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1);
+
+  const { data: posts, error } = await query;
 
   if (error) {
     handleServiceError('Error fetching posts:', error);
     return [];
   }
 
-  // Fetch the current user's likes for these posts to determine user_has_liked
-  let userLikes = new Set<string>();
-  if (posts.length && currentUserId) {
-    const postIds = posts.map(p => p.id);
+  if (!posts || posts.length === 0) {
+    return [];
+  }
+
+  const postIds = posts.map((p) => p.id);
+
+  // Fetch reactions and user's reaction for these posts
+  let userReactionsMap: Record<string, string> = {};
+  let postReactionsMap: Record<string, Record<string, number>> = {};
+
+  if (postIds.length > 0) {
     const { data: likes } = await supabase
       .from('post_likes')
-      .select('post_id')
-      .eq('user_id', currentUserId)
+      .select('post_id, user_id, reaction_type')
       .in('post_id', postIds);
 
     if (likes) {
-      likes.forEach(like => userLikes.add(like.post_id));
+      likes.forEach((like) => {
+        const type = like.reaction_type || 'like';
+        if (!postReactionsMap[like.post_id]) {
+          postReactionsMap[like.post_id] = {};
+        }
+        postReactionsMap[like.post_id][type] = (postReactionsMap[like.post_id][type] || 0) + 1;
+
+        if (currentUserId && like.user_id === currentUserId) {
+          userReactionsMap[like.post_id] = type;
+        }
+      });
     }
   }
 
-  // Map the response to our HubPostWithAuthor type
-  return posts.map(post => ({
+  // Fetch up to 2 recent comments per post for inline preview
+  let recentCommentsMap: Record<string, PostCommentWithAuthor[]> = {};
+  if (postIds.length > 0) {
+    const { data: commentsData } = await supabase
+      .from('post_comments')
+      .select(`
+        *,
+        author:profiles!post_comments_author_id_fkey(*)
+      `)
+      .in('post_id', postIds)
+      .order('created_at', { ascending: false });
+
+    if (commentsData) {
+      commentsData.forEach((c) => {
+        if (!recentCommentsMap[c.post_id]) {
+          recentCommentsMap[c.post_id] = [];
+        }
+        if (recentCommentsMap[c.post_id].length < 2) {
+          recentCommentsMap[c.post_id].push({
+            ...c,
+            author: Array.isArray(c.author) ? c.author[0] : c.author,
+          });
+        }
+      });
+    }
+  }
+
+  // Map the response to HubPostWithAuthor
+  return posts.map((post) => ({
     ...post,
-    author: Array.isArray(post.author) ? post.author[0] : post.author, // Handle one-to-one relation parsing
+    author: Array.isArray(post.author) ? post.author[0] : post.author,
+    trip: Array.isArray(post.trip) ? post.trip[0] : post.trip,
     likes_count: post.post_likes?.[0]?.count || 0,
     comments_count: post.post_comments?.[0]?.count || 0,
-    user_has_liked: userLikes.has(post.id)
+    user_has_liked: !!userReactionsMap[post.id],
+    user_reaction: userReactionsMap[post.id] || null,
+    reactions_count: postReactionsMap[post.id] || {},
+    recent_comments: recentCommentsMap[post.id] || [],
   }));
 };
 
-export const toggleLike = async (postId: string, userId: string, currentlyLiked: boolean): Promise<boolean> => {
-  if (currentlyLiked) {
-    const { error } = await supabase
+/** Toggle reaction or like */
+export const toggleReaction = async (
+  postId: string,
+  userId: string,
+  reactionType: string = 'like'
+): Promise<{ success: boolean; activeReaction: string | null }> => {
+  try {
+    // Check existing reaction
+    const { data: existing } = await supabase
       .from('post_likes')
-      .delete()
-      .match({ post_id: postId, user_id: userId });
-    
-    if (error) {
-      handleServiceError('Error unliking post:', error);
-      return false;
-    }
-  } else {
-    const { error } = await supabase
-      .from('post_likes')
-      .insert({ post_id: postId, user_id: userId });
-      
-    if (error) {
-      handleServiceError('Error liking post:', error);
-      return false;
-    }
-    
-    // Send push notification to the post author
-    const { data: postData } = await supabase.from('hub_posts').select('author_id').eq('id', postId).single();
-    if (postData && postData.author_id !== userId) {
-      const { data: authorData } = await supabase.from('profiles').select('id, push_token').eq('id', postData.author_id).single();
-      const { data: likerData } = await supabase.from('profiles').select('full_name').eq('id', userId).single();
-      if (authorData?.push_token && likerData?.full_name) {
-        sendPushNotification(authorData.push_token, 'New Like', `${likerData.full_name} liked your post!`, { type: 'hub_post', postId }, authorData.id);
+      .select('id, reaction_type')
+      .match({ post_id: postId, user_id: userId })
+      .maybeSingle();
+
+    if (existing) {
+      if (existing.reaction_type === reactionType) {
+        // Same reaction -> remove it
+        const { error } = await supabase
+          .from('post_likes')
+          .delete()
+          .match({ post_id: postId, user_id: userId });
+        if (error) throw error;
+        return { success: true, activeReaction: null };
+      } else {
+        // Different reaction -> update it
+        const { error } = await supabase
+          .from('post_likes')
+          .update({ reaction_type: reactionType })
+          .match({ post_id: postId, user_id: userId });
+        if (error) throw error;
+        return { success: true, activeReaction: reactionType };
       }
+    } else {
+      // New reaction -> insert it
+      const { error } = await supabase
+        .from('post_likes')
+        .insert({ post_id: postId, user_id: userId, reaction_type: reactionType });
+      if (error) throw error;
+
+      // Send push notification to post author
+      const { data: postData } = await supabase.from('hub_posts').select('author_id').eq('id', postId).single();
+      if (postData && postData.author_id !== userId) {
+        const { data: authorData } = await supabase.from('profiles').select('id, push_token').eq('id', postData.author_id).single();
+        const { data: likerData } = await supabase.from('profiles').select('full_name').eq('id', userId).single();
+        if (authorData?.id && likerData?.full_name) {
+          sendPushNotification(authorData.push_token, 'New Reaction', `${likerData.full_name} reacted to your post!`, { type: 'hub_post', postId }, authorData.id);
+        }
+      }
+      return { success: true, activeReaction: reactionType };
     }
+  } catch (err) {
+    handleServiceError('Error toggling reaction:', err);
+    return { success: false, activeReaction: null };
   }
-  return true;
+};
+
+/** Backward compatible toggleLike */
+export const toggleLike = async (postId: string, userId: string, currentlyLiked: boolean): Promise<boolean> => {
+  const result = await toggleReaction(postId, userId, 'like');
+  return result.success;
+};
+
+/** Toggle Pin / Unpin Post (enforces max 1 pinned post per user on route) */
+export const togglePinPost = async (
+  postId: string,
+  userId: string,
+  routeHash: string,
+  currentlyPinned: boolean
+): Promise<boolean> => {
+  try {
+    if (!currentlyPinned) {
+      // Unpin any existing pinned post from this author on this route
+      await supabase
+        .from('hub_posts')
+        .update({ is_pinned: false })
+        .match({ author_id: userId, route_hash: routeHash });
+
+      // Pin the new post
+      const { error } = await supabase
+        .from('hub_posts')
+        .update({ is_pinned: true })
+        .match({ id: postId, author_id: userId });
+      if (error) throw error;
+    } else {
+      // Unpin the post
+      const { error } = await supabase
+        .from('hub_posts')
+        .update({ is_pinned: false })
+        .match({ id: postId, author_id: userId });
+      if (error) throw error;
+    }
+    return true;
+  } catch (err) {
+    handleServiceError('Error toggling pin status:', err);
+    return false;
+  }
 };
 
 export const getComments = async (postId: string): Promise<PostCommentWithAuthor[]> => {
@@ -125,7 +267,7 @@ export const createComment = async (postId: string, userId: string, content: str
   if (postData && postData.author_id !== userId) {
     const { data: authorData } = await supabase.from('profiles').select('id, push_token').eq('id', postData.author_id).single();
     const commenterName = Array.isArray(data.author) ? data.author[0].full_name : data.author.full_name;
-    if (authorData?.push_token && commenterName) {
+    if (authorData?.id && commenterName) {
       sendPushNotification(authorData.push_token, 'New Comment', `${commenterName} commented: "${content}"`, { type: 'hub_post', postId }, authorData.id);
     }
   }
@@ -143,7 +285,9 @@ export const createPost = async (
   message: string, 
   locationLat: number, 
   locationLng: number,
-  locationLabel?: string
+  locationLabel?: string,
+  imageUrls?: string[],
+  tripId?: string
 ) => {
   const { data, error } = await supabase
     .from('hub_posts')
@@ -154,11 +298,15 @@ export const createPost = async (
       message,
       location_lat: locationLat,
       location_lng: locationLng,
-      location_label: locationLabel
+      location_label: locationLabel,
+      image_urls: imageUrls && imageUrls.length > 0 ? imageUrls : null,
+      is_pinned: false,
+      trip_id: tripId || null,
     })
     .select(`
       *,
-      author:profiles!hub_posts_author_id_fkey(*)
+      author:profiles!hub_posts_author_id_fkey(*),
+      trip:trips(*)
     `)
     .single();
 
@@ -234,9 +382,7 @@ export const createPost = async (
       
       if (profilesData) {
         profilesData.forEach(p => {
-          if (p.push_token) {
-            sendPushNotification(p.push_token, `Community Update: ${statusTag}`, `${authorProfile.full_name} posted an update on your route.`, { type: 'hub_post', routeHash }, p.id);
-          }
+          sendPushNotification(p.push_token, `Community Update: ${statusTag}`, `${authorProfile.full_name} posted an update on your route.`, { type: 'hub_post', routeHash }, p.id);
         });
       }
     }
@@ -245,9 +391,13 @@ export const createPost = async (
   return {
     ...data,
     author: authorProfile,
+    trip: Array.isArray(data.trip) ? data.trip[0] : data.trip,
     likes_count: 0,
     comments_count: 0,
-    user_has_liked: false
+    user_has_liked: false,
+    user_reaction: null,
+    reactions_count: {},
+    recent_comments: [],
   } as HubPostWithAuthor;
 };
 
@@ -320,19 +470,42 @@ export const getUserExpiringPosts = async (userId: string, minDaysOld: number = 
     likes_count: post.post_likes?.[0]?.count || 0,
     comments_count: post.post_comments?.[0]?.count || 0,
     user_has_liked: false,
+    user_reaction: null,
+    reactions_count: {},
+    recent_comments: [],
   })) as HubPostWithAuthor[];
 };
 
-export const updatePost = async (postId: string, userId: string, statusTag: string, message: string): Promise<HubPostWithAuthor | null> => {
+export const updatePost = async (
+  postId: string,
+  userId: string,
+  statusTag: string,
+  message: string,
+  imageUrls?: string[]
+): Promise<HubPostWithAuthor | null> => {
+  const updatePayload: any = {
+    status_tag: statusTag,
+    message,
+    edited_at: new Date().toISOString(),
+  };
+
+  if (imageUrls !== undefined) {
+    updatePayload.image_urls = imageUrls;
+  }
+
   const { data, error } = await supabase
     .from('hub_posts')
-    .update({ status_tag: statusTag, message })
+    .update(updatePayload)
     .match({ id: postId, author_id: userId })
     .select(`*, author:profiles!hub_posts_author_id_fkey(*)`)
-    .single();
+    .maybeSingle();
 
   if (error) {
     handleServiceError('Error updating post:', error);
+    return null;
+  }
+
+  if (!data) {
     return null;
   }
 
@@ -358,3 +531,76 @@ export const deleteAllUserPosts = async (userId: string, routeHash?: string): Pr
   return true;
 };
 
+/** Subscribe to Realtime Hub Posts for a route */
+export const subscribeToHubPosts = (
+  routeHash: string,
+  onPayload: (payload: { eventType: string; new: any; old: any }) => void
+) => {
+  const channelName = `hub_posts_${routeHash}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'hub_posts',
+        filter: `route_hash=eq.${routeHash}`,
+      },
+      (payload) => {
+        onPayload({
+          eventType: payload.eventType,
+          new: payload.new,
+          old: payload.old,
+        });
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+    try {
+      (supabase.realtime as any)._remove?.(channel);
+    } catch {}
+  };
+};
+
+/** Subscribe to Realtime Comments for a post */
+export const subscribeToComments = (
+  postId: string,
+  onComment: (comment: PostCommentWithAuthor) => void
+) => {
+  const channelName = `post_comments_${postId}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'post_comments',
+        filter: `post_id=eq.${postId}`,
+      },
+      async (payload) => {
+        const { data } = await supabase
+          .from('post_comments')
+          .select(`*, author:profiles!post_comments_author_id_fkey(*)`)
+          .eq('id', payload.new.id)
+          .single();
+        if (data) {
+          onComment({
+            ...data,
+            author: Array.isArray(data.author) ? data.author[0] : data.author,
+          });
+        }
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+    try {
+      (supabase.realtime as any)._remove?.(channel);
+    } catch {}
+  };
+};

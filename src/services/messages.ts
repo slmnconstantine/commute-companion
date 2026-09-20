@@ -1,6 +1,50 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
 import { Message, MessageWithSender } from '@/types/database';
 import { sendPushNotification } from './pushNotifications';
+import { LIVE_FACE_PREFIX } from './liveFaceVerification';
+
+const CHAT_CACHE_KEY_PREFIX = '@chat_cache_msgs_';
+const memoryMessageCache: Record<string, MessageWithSender[]> = {};
+
+/** Synchronously retrieve cached messages from in-memory cache */
+export function getMemoryCachedMessages(chatRoomId: string): MessageWithSender[] | null {
+  return memoryMessageCache[chatRoomId] || null;
+}
+
+/** Retrieve cached messages from memory or AsyncStorage */
+export async function getCachedMessages(chatRoomId: string): Promise<MessageWithSender[]> {
+  if (memoryMessageCache[chatRoomId]?.length) {
+    return memoryMessageCache[chatRoomId];
+  }
+  try {
+    const raw = await AsyncStorage.getItem(`${CHAT_CACHE_KEY_PREFIX}${chatRoomId}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        memoryMessageCache[chatRoomId] = parsed;
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to read messages from cache:', e);
+  }
+  return [];
+}
+
+/** Persist messages to memory and AsyncStorage */
+export async function saveCachedMessages(chatRoomId: string, messages: MessageWithSender[]): Promise<void> {
+  const cleanMsgs = messages.filter(m => !m.content?.startsWith(LIVE_FACE_PREFIX));
+  memoryMessageCache[chatRoomId] = cleanMsgs;
+  try {
+    await AsyncStorage.setItem(
+      `${CHAT_CACHE_KEY_PREFIX}${chatRoomId}`,
+      JSON.stringify(cleanMsgs.slice(-100))
+    );
+  } catch (e) {
+    console.warn('Failed to save messages to cache:', e);
+  }
+}
 
 /** Send a message */
 export async function sendMessage(
@@ -38,9 +82,7 @@ export async function sendMessage(
               const notificationTitle = isAlert ? `Alert from ${senderName}` : `New message from ${senderName}`;
               
               profilesData.forEach((user: any) => {
-                if (user.push_token) {
-                  sendPushNotification(user.push_token, notificationTitle, content, { type: 'chat', chatRoomId }, user.id);
-                }
+                sendPushNotification(user.push_token, notificationTitle, content, { type: 'chat', chatRoomId }, user.id);
               });
             }
           }
@@ -54,7 +96,7 @@ export async function sendMessage(
   return { data: data as Message | null, error: error as Error | null };
 }
 
-/** Get messages for a chat room */
+/** Get messages for a chat room (excludes massive live face verification payloads at database level for sub-100ms load times) */
 export async function getMessages(
   chatRoomId: string,
   limit: number = 50,
@@ -64,8 +106,13 @@ export async function getMessages(
     .from('messages')
     .select(`*, sender:profiles!messages_sender_id_fkey(*)`)
     .eq('chat_room_id', chatRoomId)
+    .not('content', 'like', `${LIVE_FACE_PREFIX}%`)
     .order('created_at', { ascending: true })
     .range(offset, offset + limit - 1);
   if (error) throw error;
-  return (data || []) as MessageWithSender[];
+  const msgs = (data || []) as MessageWithSender[];
+  if (msgs.length > 0 && offset === 0) {
+    saveCachedMessages(chatRoomId, msgs).catch(() => {});
+  }
+  return msgs;
 }

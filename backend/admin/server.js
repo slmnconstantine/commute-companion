@@ -8,6 +8,7 @@ const PORT = process.env.PORT || 8080;
 function parseEnv() {
   const env = {};
   const envPaths = [
+    path.join(__dirname, '../../.env'),
     path.join(__dirname, '../.env'),
     path.join(process.cwd(), '.env'),
     path.join(__dirname, '.env')
@@ -100,7 +101,12 @@ const server = http.createServer((req, res) => {
 
       const ext = path.extname(filePath).toLowerCase();
       const mimeType = MIME_TYPES[ext] || 'application/octet-stream';
-      res.writeHead(200, { 'Content-Type': mimeType });
+      res.writeHead(200, {
+        'Content-Type': mimeType,
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      });
       res.end(content);
     });
   });

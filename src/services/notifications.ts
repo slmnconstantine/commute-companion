@@ -48,27 +48,20 @@ export async function getUserNotifications(userId: string): Promise<AppNotificat
 
     if (!error && remoteData) {
       const remoteList = remoteData as AppNotification[];
-      
-      // Merge remote and local without duplicates
-      const seenIds = new Set(remoteList.map((n) => n.id));
-      const merged = [...remoteList];
 
-      for (const localNotif of localList) {
-        if (!seenIds.has(localNotif.id)) {
-          // Check if there is an equivalent remote item created within 10s
-          const isDuplicate = remoteList.some(
+      // Only preserve local offline notifications (those starting with 'local_') that haven't synced yet
+      const pendingLocal = localList.filter(
+        (localNotif) =>
+          localNotif.id.startsWith('local_') &&
+          !remoteList.some(
             (r) =>
               r.title === localNotif.title &&
               r.body === localNotif.body &&
               Math.abs(new Date(r.created_at).getTime() - new Date(localNotif.created_at).getTime()) < 10000
-          );
-          if (!isDuplicate) {
-            seenIds.add(localNotif.id);
-            merged.push(localNotif);
-          }
-        }
-      }
+          )
+      );
 
+      const merged = [...remoteList, ...pendingLocal];
       merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       await saveLocalNotifications(userId, merged);
       return merged;
@@ -184,44 +177,72 @@ export async function createNotification(
     created_at: new Date().toISOString(),
   };
 
-  // 1. Immediately save to local AsyncStorage
+  let isSelf = false;
   try {
-    const current = await getLocalNotifications(userId);
-    // Prevent duplicate entries for the same title & body within 5 seconds
-    const isRecentDuplicate = current.slice(0, 5).some(
-      (n) => n.title === title && n.body === body && Math.abs(Date.now() - new Date(n.created_at).getTime()) < 5000
-    );
-    if (!isRecentDuplicate) {
-      await saveLocalNotifications(userId, [localNotif, ...current]);
+    const { data: authData } = await supabase.auth.getUser();
+    isSelf = authData.user?.id === userId;
+  } catch {}
+
+  // 1. Immediately save to local AsyncStorage if notifying current user
+  if (isSelf) {
+    try {
+      const current = await getLocalNotifications(userId);
+      // Prevent duplicate entries for the same title & body within 5 seconds
+      const isRecentDuplicate = current.slice(0, 5).some(
+        (n) => n.title === title && n.body === body && Math.abs(Date.now() - new Date(n.created_at).getTime()) < 5000
+      );
+      if (!isRecentDuplicate) {
+        await saveLocalNotifications(userId, [localNotif, ...current]);
+      }
+    } catch (e) {
+      console.warn('Failed to save local notification:', e);
     }
-  } catch (e) {
-    console.warn('Failed to save local notification:', e);
   }
 
   // 2. Attempt remote insert into Supabase notifications table
   try {
-    const { data: inserted, error } = await supabase
-      .from('notifications')
-      .insert({
-        user_id: userId,
-        title,
-        body,
-        type,
-        data: data || {},
-      })
-      .select()
-      .single();
+    if (isSelf) {
+      const { data: inserted, error } = await supabase
+        .from('notifications')
+        .insert({
+          user_id: userId,
+          title,
+          body,
+          type,
+          data: data || {},
+        })
+        .select()
+        .single();
 
-    if (!error && inserted) {
-      // Replace temporary local ID with database ID
-      const list = await getLocalNotifications(userId);
-      const updated = list.map((n) => (n.id === localNotif.id ? (inserted as AppNotification) : n));
-      await saveLocalNotifications(userId, updated);
-      return inserted as AppNotification;
+      if (!error && inserted) {
+        // Replace temporary local ID with database ID
+        const list = await getLocalNotifications(userId);
+        const updated = list.map((n) => (n.id === localNotif.id ? (inserted as AppNotification) : n));
+        await saveLocalNotifications(userId, updated);
+        return inserted as AppNotification;
+      }
+    } else {
+      // For another recipient: do not chain .select().single() because RLS SELECT policy
+      // only permits users to view their own notifications. A .select() will return 0 rows
+      // causing PGRST116 and rolling back the transaction. Pure INSERT succeeds with WITH CHECK (true).
+      const { error } = await supabase
+        .from('notifications')
+        .insert({
+          user_id: userId,
+          title,
+          body,
+          type,
+          data: data || {},
+        });
+
+      if (error) {
+        console.error('Failed to insert notification into database for recipient:', error);
+      }
     }
   } catch (err) {
-    // If Supabase RLS rejects insert from third party, local notification is already preserved!
+    console.error('Failed to create notification:', err);
   }
 
   return localNotif;
 }
+

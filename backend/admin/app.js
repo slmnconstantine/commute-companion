@@ -10,45 +10,58 @@ let dbConfig = {
 
 let supabaseClient = null;
 let usersData = [];
-let activeTab = 'dashboard';
-let mockMode = true; // Default to true for sandbox demo ease, can toggle to live
+let tripsData = [];
+let bookingsData = [];
+let vehiclesData = [];
+let hubPostsData = [];
+let reportsData = [];
 
-// Filters and Sorting State
+let activeTab = 'dashboard';
+
+// Filter and Search States
 let searchText = '';
+
+// Users Filter
 let filterRole = 'all';
 let filterVerify = 'all';
 let sortBy = 'created_at-desc';
 
-// Selected item in Verification Inbox
+// Verification Inbox Selected User
 let selectedUserId = null;
+
+// Trips Filter
+let filterTrip = 'all';
+let tripSearchText = '';
+
+// Bookings Filter
+let filterBooking = 'all';
+let filterPayment = 'all';
+
+// Hub Filter
+let hubSearchText = '';
+let hubFilterStatus = 'all';
+
+// Lightbox Action Callback
+let currentLightboxAction = null;
 
 // Initialize on Load
 window.addEventListener('DOMContentLoaded', async () => {
-  // Initialize Lucide Icons
-  lucide.createIcons();
+  if (window.lucide) lucide.createIcons();
   
-  // Load configuration from server
+  // 1. Load configuration from Node server API
   await loadServerConfig();
   
-  // Load localStorage overrides if any
+  // 2. Load localStorage overrides if any
   loadLocalSettings();
   
-  // Initialize Supabase Client
+  // 3. Initialize Supabase Client
   initSupabase();
   
-  // Bind search box input
-  const globalSearchInput = document.getElementById('global-search');
-  if (globalSearchInput) {
-    globalSearchInput.addEventListener('input', (e) => {
-      searchText = e.target.value;
-      if (activeTab === 'users') {
-        renderUserDirectory();
-      }
-    });
-  }
-
-  // Initial fetch
+  // 4. Initial fetch across all platform tables
   await refreshData();
+
+  // 5. Initialize Realtime Subscriptions for reports and hub updates
+  setupAdminRealtime();
 });
 
 // Load DB Configuration from Node server API
@@ -56,12 +69,11 @@ async function loadServerConfig() {
   try {
     const res = await fetch('/api/config');
     const data = await res.json();
-    dbConfig.supabaseUrl = data.supabaseUrl || '';
-    dbConfig.supabaseAnonKey = data.supabaseAnonKey || '';
-    dbConfig.supabaseServiceRoleKey = data.supabaseServiceRoleKey || '';
+    if (data.supabaseUrl) dbConfig.supabaseUrl = data.supabaseUrl;
+    if (data.supabaseAnonKey) dbConfig.supabaseAnonKey = data.supabaseAnonKey;
+    if (data.supabaseServiceRoleKey) dbConfig.supabaseServiceRoleKey = data.supabaseServiceRoleKey;
   } catch (err) {
     console.error('Failed to load server config:', err);
-    showToast('Failed to fetch server credentials. Running offline.', 'error');
   }
 }
 
@@ -70,28 +82,21 @@ function loadLocalSettings() {
   const savedUrl = localStorage.getItem('admin_supabase_url');
   const savedAnon = localStorage.getItem('admin_supabase_anon_key');
   const savedService = localStorage.getItem('admin_supabase_service_role_key');
-  const savedMock = localStorage.getItem('admin_mock_mode');
 
   if (savedUrl) dbConfig.supabaseUrl = savedUrl;
   if (savedAnon) dbConfig.supabaseAnonKey = savedAnon;
   if (savedService) dbConfig.supabaseServiceRoleKey = savedService;
-  
-  if (savedMock !== null) {
-    mockMode = savedMock === 'true';
-  } else {
-    // If we have a service role key, we can default mockMode to false
-    mockMode = !dbConfig.supabaseServiceRoleKey;
-  }
 
-  // Set form inputs in settings modal
-  document.getElementById('settings-supabase-url').value = dbConfig.supabaseUrl;
-  document.getElementById('settings-supabase-anon-key').value = dbConfig.supabaseAnonKey;
-  document.getElementById('settings-supabase-service-role').value = dbConfig.supabaseServiceRoleKey;
-  
-  updateMockModeUI();
+  // Pre-fill inputs in settings modal
+  const urlInput = document.getElementById('settings-supabase-url');
+  const anonInput = document.getElementById('settings-supabase-anon-key');
+  const serviceInput = document.getElementById('settings-supabase-service-role');
+  if (urlInput) urlInput.value = dbConfig.supabaseUrl;
+  if (anonInput) anonInput.value = dbConfig.supabaseAnonKey;
+  if (serviceInput) serviceInput.value = dbConfig.supabaseServiceRoleKey;
 }
 
-// Initialize Supabase client
+// Initialize Supabase Client
 function initSupabase() {
   const statusPill = document.getElementById('db-status-pill');
   const statusText = document.getElementById('db-status-text');
@@ -101,171 +106,121 @@ function initSupabase() {
     statusPill.className = 'connection-status-pill unconfigured';
     statusText.innerText = 'Unconfigured';
     roleLevelText.innerText = 'Offline';
-    showToast('Database credentials unconfigured. Open settings to configure.', 'warning');
     return;
   }
 
   try {
-    // Use service role key if provided, else fall back to anon key
     const activeKey = dbConfig.supabaseServiceRoleKey || dbConfig.supabaseAnonKey;
     supabaseClient = createClient(dbConfig.supabaseUrl, activeKey, {
-      auth: {
-        persistSession: false
-      }
+      auth: { persistSession: false }
     });
 
     if (dbConfig.supabaseServiceRoleKey) {
       statusPill.className = 'connection-status-pill connected';
       statusText.innerText = 'Connected (Admin)';
-      roleLevelText.innerText = 'Full Database Access';
+      roleLevelText.innerText = 'Full Service Role';
     } else {
       statusPill.className = 'connection-status-pill connected-anon';
-      statusText.innerText = 'Connected (Anon)';
-      roleLevelText.innerText = 'Read-Only (Standard)';
+      statusText.innerText = 'Connected (Live DB)';
+      roleLevelText.innerText = 'Direct RPC Access';
     }
   } catch (err) {
-    console.error('Supabase init failed:', err);
+    console.error('Supabase initialization failed:', err);
     statusPill.className = 'connection-status-pill unconfigured';
     statusText.innerText = 'Error';
     roleLevelText.innerText = 'Error';
-    showToast('Connection initialization failed.', 'error');
   }
 }
 
-// Fetch all profiles from Supabase database
+// Refresh all platform data (Users, Vehicles, Trips, Bookings, Hub Posts)
 async function refreshData() {
   if (!supabaseClient) {
-    // Fill dummy users for zero config demonstration
-    loadMockUsers();
+    showToast('Supabase client not connected. Please check configuration in settings.', 'error');
     updateUI();
     return;
   }
 
   try {
-    const { data, error } = await supabaseClient
-      .from('profiles')
-      .select('*')
-      .order('created_at', { ascending: false });
+    const [profilesRes, vehiclesRes, tripsRes, bookingsRes, hubRes, reportsRes] = await Promise.all([
+      supabaseClient.from('profiles').select('*').order('created_at', { ascending: false }),
+      supabaseClient.from('vehicles').select('*'),
+      supabaseClient.from('trips').select('*').order('created_at', { ascending: false }),
+      supabaseClient.from('bookings').select('*').order('created_at', { ascending: false }),
+      supabaseClient.from('hub_posts').select('*').order('created_at', { ascending: false }),
+      supabaseClient.from('reports').select('*').order('created_at', { ascending: false }),
+    ]);
 
-    if (error) throw error;
+    if (profilesRes.error) throw profilesRes.error;
+    if (vehiclesRes.error) throw vehiclesRes.error;
+    if (tripsRes.error) throw tripsRes.error;
+    if (bookingsRes.error) throw bookingsRes.error;
+    if (hubRes.error) throw hubRes.error;
 
-    usersData = data || [];
-    
-    // If database is empty, fill with mock data for display
-    if (usersData.length === 0) {
-      loadMockUsers();
-      showToast('Database empty. Loaded demonstration users.', 'info');
-    }
-    
+    usersData = profilesRes.data || [];
+    vehiclesData = vehiclesRes.data || [];
+    tripsData = tripsRes.data || [];
+    bookingsData = bookingsRes.data || [];
+    hubPostsData = hubRes.data || [];
+    reportsData = (reportsRes && reportsRes.data) ? reportsRes.data : [];
+
+    // Associate vehicles with driver profiles
+    const vehicleMap = new Map();
+    vehiclesData.forEach(v => {
+      if (v.driver_id) vehicleMap.set(v.driver_id, v);
+    });
+
+    usersData.forEach(u => {
+      u.vehicle = vehicleMap.get(u.id) || null;
+    });
+
+    // Associate driver info with trips
+    const userMap = new Map();
+    usersData.forEach(u => userMap.set(u.id, u));
+
+    tripsData.forEach(t => {
+      t.driver = userMap.get(t.driver_id) || null;
+      t.vehicle = t.driver ? vehicleMap.get(t.driver_id) : null;
+      t.bookings = bookingsData.filter(b => b.trip_id === t.id);
+    });
+
+    // Associate commuter and trip info with bookings
+    const tripMap = new Map();
+    tripsData.forEach(t => tripMap.set(t.id, t));
+
+    bookingsData.forEach(b => {
+      b.commuter = userMap.get(b.commuter_id) || null;
+      b.trip = tripMap.get(b.trip_id) || null;
+    });
+
+    // Associate author info and active reports with hub posts
+    hubPostsData.forEach(p => {
+      p.author = userMap.get(p.author_id) || null;
+      p.reports = reportsData.filter(r => r.post_id === p.id && r.status !== 'dismissed' && r.status !== 'resolved');
+    });
+
     updateUI();
   } catch (err) {
-    console.error('Fetch users failed:', err);
-    showToast('RLS / Fetch failed. Displaying mock data.', 'warning');
-    loadMockUsers();
+    console.error('Live database fetch failed:', err);
+    showToast(`Failed to load data from live database: ${err.message || 'Error'}`, 'error');
     updateUI();
   }
 }
 
-// Generate beautiful demonstration accounts if DB is empty or disconnected
-function loadMockUsers() {
-  usersData = [
-    {
-      id: '0e3f5ae6-5982-405f-ace7-2808c7ac5d0f',
-      full_name: 'Jane Doe',
-      username: 'jane_doe',
-      role: 'commuter',
-      is_verified: false,
-      verified_badge: false,
-      government_id_url: 'https://images.unsplash.com/photo-1554774853-aae0a22c8aa4?auto=format&fit=crop&q=80&w=600',
-      avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150',
-      rating_avg: 4.8,
-      total_ratings: 12,
-      created_at: new Date(Date.now() - 7 * 86400000).toISOString() // 7 days ago
-    },
-    {
-      id: '60966180-4fc9-4965-a89d-29889292e472',
-      full_name: 'Ann Rose Destacamento',
-      username: 'annrose',
-      role: 'commuter',
-      is_verified: false,
-      verified_badge: false,
-      government_id_url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&q=80&w=600',
-      avatar_url: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&q=80&w=150',
-      rating_avg: 4.2,
-      total_ratings: 5,
-      created_at: new Date(Date.now() - 5 * 86400000).toISOString()
-    },
-    {
-      id: '74d8bfe5-2590-4afb-be2d-60e638dbc4ca',
-      full_name: 'Ripercaube',
-      username: 'Ripercaube_123',
-      role: 'commuter',
-      is_verified: false,
-      verified_badge: false,
-      government_id_url: null,
-      avatar_url: null,
-      rating_avg: 0,
-      total_ratings: 0,
-      created_at: new Date(Date.now() - 12 * 86400000).toISOString()
-    },
-    {
-      id: 'daec943a-0e0b-4ed6-888d-d0de513ad243',
-      full_name: 'Solomon Constantine',
-      username: 'slmn11',
-      role: 'driver',
-      is_verified: true,
-      verified_badge: true,
-      government_id_url: 'https://images.unsplash.com/photo-1557177324-56c542165309?auto=format&fit=crop&q=80&w=600',
-      avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150',
-      rating_avg: 4.9,
-      total_ratings: 48,
-      created_at: new Date(Date.now() - 30 * 86400000).toISOString()
-    },
-    {
-      id: '3f1e4a2c-fb69-4cd7-83b4-b1ed0f6a606e',
-      full_name: 'Solomon Tester',
-      username: 'slmn',
-      role: 'driver',
-      is_verified: true,
-      verified_badge: true,
-      government_id_url: null,
-      avatar_url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=150',
-      rating_avg: 4.7,
-      total_ratings: 24,
-      created_at: new Date(Date.now() - 40 * 86400000).toISOString()
-    },
-    {
-      id: 'a2371514-5b14-4b15-b4fc-83dea902c1b5',
-      full_name: 'Solomon Hub',
-      username: 'slmncons',
-      role: 'commuter',
-      is_verified: true,
-      verified_badge: true,
-      government_id_url: null,
-      avatar_url: null,
-      rating_avg: 5.0,
-      total_ratings: 2,
-      created_at: new Date(Date.now() - 15 * 86400000).toISOString()
-    },
-    {
-      id: '7841d492-2abd-4695-a967-bb2245094046',
-      full_name: 'Test Commuter',
-      username: 'test_commuter_99',
-      role: 'commuter',
-      is_verified: false,
-      verified_badge: false,
-      government_id_url: 'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?auto=format&fit=crop&q=80&w=600',
-      avatar_url: null,
-      rating_avg: 0,
-      total_ratings: 0,
-      created_at: new Date(Date.now() - 1 * 86400000).toISOString()
-    }
-  ];
+// Manual Refresh Trigger
+async function manualRefresh() {
+  const btn = document.getElementById('btn-refresh-data');
+  if (btn) btn.classList.add('spinning');
+  showToast('Refreshing platform records from database...', 'info');
+  await refreshData();
+  setTimeout(() => {
+    if (btn) btn.classList.remove('spinning');
+    showToast('Platform records up to date.', 'success');
+  }, 500);
 }
 
 // Update UI Layout with values
 function updateUI() {
-  // Nav badges
+  // Navigation badges
   document.getElementById('badge-total-users').innerText = usersData.length;
   
   const pendingCount = usersData.filter(u => u.government_id_url && !u.is_verified).length;
@@ -273,64 +228,100 @@ function updateUI() {
   pendingBadge.innerText = pendingCount;
   pendingBadge.style.display = pendingCount > 0 ? 'inline-block' : 'none';
 
-  // Render current active tab content
-  calculateStats();
-  renderUserDirectory();
-  renderVerificationInbox();
-  renderQuickInboxPreview();
+  const badgeTrips = document.getElementById('badge-total-trips');
+  if (badgeTrips) badgeTrips.innerText = tripsData.length;
 
-  // Re-run Lucide Icons to render new icons
-  lucide.createIcons();
+  const badgeBookings = document.getElementById('badge-total-bookings');
+  if (badgeBookings) badgeBookings.innerText = bookingsData.length;
+
+  const badgeHub = document.getElementById('badge-total-posts');
+  if (badgeHub) badgeHub.innerText = hubPostsData.length;
+
+  // Reported posts badge
+  const reportedCount = hubPostsData.filter(p => p.reports && p.reports.length > 0).length;
+  const badgeReported = document.getElementById('badge-reported-posts');
+  if (badgeReported) {
+    if (reportedCount > 0) {
+      badgeReported.innerText = `${reportedCount} reported`;
+      badgeReported.style.display = 'inline-block';
+    } else {
+      badgeReported.style.display = 'none';
+    }
+  }
+
+  // Render stats and active tab
+  calculateStats();
+
+  if (activeTab === 'dashboard') {
+    renderQuickInboxPreview();
+    renderRecentActivityFeed();
+  } else if (activeTab === 'users') {
+    renderUserDirectory();
+  } else if (activeTab === 'verification') {
+    renderVerificationInbox();
+  } else if (activeTab === 'trips') {
+    renderTripsManagement();
+  } else if (activeTab === 'bookings') {
+    renderBookingsManagement();
+  } else if (activeTab === 'hub') {
+    renderHubModeration();
+  }
+
+  if (window.lucide) lucide.createIcons();
 }
 
-// Swtich tab panel view
+// Switch Tab Navigation
 function switchTab(tabId) {
   activeTab = tabId;
   
-  // Set navbar classes
   document.querySelectorAll('.nav-item').forEach(btn => {
     btn.classList.remove('active');
   });
-  document.getElementById(`btn-tab-${tabId}`).classList.add('active');
+  const tabBtn = document.getElementById(`btn-tab-${tabId}`);
+  if (tabBtn) tabBtn.classList.add('active');
 
-  // Set tab view panels visibility
   document.querySelectorAll('.tab-view').forEach(view => {
     view.classList.remove('active');
   });
-  document.getElementById(`view-${tabId}`).classList.add('active');
+  const targetView = document.getElementById(`view-${tabId}`);
+  if (targetView) targetView.classList.add('active');
 
-  // Refresh view contents
   updateUI();
 }
 
-// Calculate dashboard analytics stats
+// Calculate Dashboard KPI Analytics
 function calculateStats() {
   const total = usersData.length;
   const drivers = usersData.filter(u => u.role === 'driver').length;
   const commuters = usersData.filter(u => u.role === 'commuter').length;
-  
-  // Avg rating
-  const ratedUsers = usersData.filter(u => u.rating_avg > 0);
-  const avgRating = ratedUsers.length > 0
-    ? (ratedUsers.reduce((sum, u) => sum + u.rating_avg, 0) / ratedUsers.length).toFixed(1)
-    : '0.0';
 
-  // Verification counts
   const verified = usersData.filter(u => u.is_verified || u.verified_badge).length;
   const pending = usersData.filter(u => u.government_id_url && !u.is_verified && !u.verified_badge).length;
-  const unverified = total - verified - pending;
+  const unverified = Math.max(0, total - verified - pending);
+
+  const activeTrips = tripsData.filter(t => t.status === 'open' || t.status === 'ongoing').length;
+  const reservations = bookingsData.filter(b => b.is_reservation).length;
+
+  // Total Platform Fees (10% of fares)
+  const totalPlatformFees = bookingsData
+    .filter(b => b.status === 'accepted' || b.status === 'completed')
+    .reduce((sum, b) => sum + (b.platform_fee || (b.fare_paid ? b.fare_paid * 0.1 : 0)), 0);
 
   // Set metric text
   document.getElementById('stat-total-users').innerText = total;
   document.getElementById('stat-drivers').innerText = drivers;
   document.getElementById('stat-commuters').innerText = commuters;
-  document.getElementById('stat-avg-rating').innerText = avgRating;
+  document.getElementById('stat-total-trips').innerText = tripsData.length;
+  document.getElementById('stat-active-trips').innerText = activeTrips;
+  document.getElementById('stat-total-bookings').innerText = bookingsData.length;
+  document.getElementById('stat-reservation-count').innerText = reservations;
+  document.getElementById('stat-platform-fees').innerText = formatCurrency(totalPlatformFees);
 
   document.getElementById('stat-verified-count').innerText = verified;
   document.getElementById('stat-pending-count').innerText = pending;
   document.getElementById('stat-unverified-count').innerText = unverified;
 
-  // Percentage strings
+  // Percentage bars
   const driversPct = total > 0 ? Math.round((drivers / total) * 100) : 0;
   const commutersPct = total > 0 ? Math.round((commuters / total) * 100) : 0;
 
@@ -340,7 +331,6 @@ function calculateStats() {
   document.getElementById('stat-commuters-percentage').style.width = `${commutersPct}%`;
   document.getElementById('stat-commuters-pct-text').innerText = `${commutersPct}%`;
 
-  // Funnel progress bars
   const verifiedPct = total > 0 ? Math.round((verified / total) * 100) : 0;
   const pendingPct = total > 0 ? Math.round((pending / total) * 100) : 0;
   const unverifiedPct = total > 0 ? Math.round((unverified / total) * 100) : 0;
@@ -350,30 +340,32 @@ function calculateStats() {
   document.getElementById('funnel-unverified-bar').style.width = `${unverifiedPct}%`;
 }
 
-// Render Dashboard Quick Action checklist
+// Render Dashboard Quick Review Preview
 function renderQuickInboxPreview() {
   const container = document.getElementById('quick-inbox-list');
+  if (!container) return;
+
   const pending = usersData.filter(u => u.government_id_url && !u.is_verified);
 
   if (pending.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
         <i data-lucide="check-circle" class="empty-icon text-green"></i>
-        <p>All verification reviews completed!</p>
+        <p>All verification reviews are up to date!</p>
       </div>
     `;
     return;
   }
 
-  container.innerHTML = pending.map(user => `
+  container.innerHTML = pending.slice(0, 5).map(user => `
     <div class="quick-item-row animate-slide-up">
       <div class="quick-item-info">
         <div class="user-avatar" style="${user.avatar_url ? `background-image: url(${user.avatar_url})` : ''}">
-          ${!user.avatar_url ? user.full_name.substring(0, 2).toUpperCase() : ''}
+          ${!user.avatar_url ? (user.full_name || 'U').substring(0, 2).toUpperCase() : ''}
         </div>
         <div class="quick-item-meta">
           <h5>${escapeHTML(user.full_name)}</h5>
-          <span>Role: ${user.role} • ID Document submitted</span>
+          <span>Role: ${user.role} • ${user.vehicle ? `${user.vehicle.model} (${user.vehicle.plate_number})` : 'ID Document Attached'}</span>
         </div>
       </div>
       <button class="btn-chevron" onclick="goToSubmission('${user.id}')" title="Review Document">
@@ -383,23 +375,103 @@ function renderQuickInboxPreview() {
   `).join('');
 }
 
-// Helper to transition from dashboard to specific pending user in verification inbox
+// Render Recent Activity Timeline on Dashboard
+function renderRecentActivityFeed() {
+  const container = document.getElementById('recent-activity-feed');
+  if (!container) return;
+
+  const events = [];
+
+  // Recent trips
+  tripsData.forEach(t => {
+    events.push({
+      type: 'trip',
+      title: `Ride Published: ${t.origin_label.split(',')[0]} → ${t.destination_label.split(',')[0]}`,
+      desc: `Driver: ${t.driver?.full_name || 'Driver'} • Fare: ${formatCurrency(t.fare_per_seat)}`,
+      time: new Date(t.created_at || Date.now()),
+      icon: 'map-pin',
+      iconBg: 'rgba(16, 185, 129, 0.15)',
+      iconColor: '#10b981'
+    });
+  });
+
+  // Recent bookings
+  bookingsData.forEach(b => {
+    events.push({
+      type: 'booking',
+      title: b.is_reservation
+        ? `Seat Reservation: ₱${b.reservation_fee || 0} deposit via GCash`
+        : `Ride Booking: ${b.seats_booked} seat(s) requested`,
+      desc: `Commuter: ${b.commuter?.full_name || 'Passenger'} • Status: ${b.status}`,
+      time: new Date(b.created_at || Date.now()),
+      icon: b.is_reservation ? 'wallet' : 'user-check',
+      iconBg: b.is_reservation ? 'rgba(0, 125, 254, 0.15)' : 'rgba(162, 89, 255, 0.15)',
+      iconColor: b.is_reservation ? '#007DFE' : '#a259ff'
+    });
+  });
+
+  // Recent users
+  usersData.forEach(u => {
+    events.push({
+      type: 'user',
+      title: `User Registered: ${u.full_name}`,
+      desc: `Role: ${u.role} • ${u.is_verified ? 'Verified' : 'Unverified'}`,
+      time: new Date(u.created_at || Date.now()),
+      icon: 'user-plus',
+      iconBg: 'rgba(59, 130, 246, 0.15)',
+      iconColor: '#3b82f6'
+    });
+  });
+
+  // Recent reports
+  reportsData.forEach(r => {
+    events.push({
+      type: 'report',
+      title: `Moderation Alert: Post Reported`,
+      desc: `Reason: ${r.reason || 'Flagged content'} • Status: ${r.status || 'pending'}`,
+      time: new Date(r.created_at || Date.now()),
+      icon: 'flag',
+      iconBg: 'rgba(239, 68, 68, 0.15)',
+      iconColor: '#ef4444'
+    });
+  });
+
+  events.sort((a, b) => b.time - a.time);
+  const displayEvents = events.slice(0, 6);
+
+  if (displayEvents.length === 0) {
+    container.innerHTML = `<p style="color: var(--text-muted); font-size: 13px;">No recent events recorded yet.</p>`;
+    return;
+  }
+
+  container.innerHTML = displayEvents.map(evt => `
+    <div class="timeline-item animate-slide-up">
+      <div class="timeline-icon-box" style="background: ${evt.iconBg}; color: ${evt.iconColor}">
+        <i data-lucide="${evt.icon}"></i>
+      </div>
+      <div class="timeline-content">
+        <h5>${escapeHTML(evt.title)}</h5>
+        <p>${escapeHTML(evt.desc)}</p>
+      </div>
+      <div class="timeline-time">${formatTimeAgo(evt.time)}</div>
+    </div>
+  `).join('');
+}
+
 function goToSubmission(userId) {
   selectedUserId = userId;
   switchTab('verification');
 }
 
-// Set filters from UI click events
+// ═════ 2. USER DIRECTORY RENDERER ═════
 function setRoleFilter(role) {
   filterRole = role;
   document.querySelectorAll('#filter-role-all, #filter-role-drivers, #filter-role-commuters').forEach(btn => {
     btn.classList.remove('active');
   });
-  
   if (role === 'all') document.getElementById('filter-role-all').classList.add('active');
   if (role === 'driver') document.getElementById('filter-role-drivers').classList.add('active');
   if (role === 'commuter') document.getElementById('filter-role-commuters').classList.add('active');
-  
   renderUserDirectory();
 }
 
@@ -408,12 +480,10 @@ function setVerifyFilter(status) {
   document.querySelectorAll('#filter-verify-all, #filter-verify-verified, #filter-verify-pending, #filter-verify-unverified').forEach(btn => {
     btn.classList.remove('active');
   });
-  
   if (status === 'all') document.getElementById('filter-verify-all').classList.add('active');
   if (status === 'verified') document.getElementById('filter-verify-verified').classList.add('active');
   if (status === 'pending') document.getElementById('filter-verify-pending').classList.add('active');
   if (status === 'unverified') document.getElementById('filter-verify-unverified').classList.add('active');
-  
   renderUserDirectory();
 }
 
@@ -424,27 +494,25 @@ function setSorting(value) {
 
 function handleGlobalSearch(val) {
   searchText = val.trim().toLowerCase();
-  if (activeTab === 'users') {
-    renderUserDirectory();
-  }
+  if (activeTab === 'users') renderUserDirectory();
+  else if (activeTab === 'trips') renderTripsManagement();
+  else if (activeTab === 'bookings') renderBookingsManagement();
+  else if (activeTab === 'hub') renderHubModeration();
 }
 
-// Render User Accounts Grid Directory
 function renderUserDirectory() {
   const grid = document.getElementById('users-grid');
+  if (!grid) return;
   
-  // Filter data
   let filtered = usersData.filter(user => {
-    // Search text match
     const matchSearch = !searchText || 
-      user.full_name.toLowerCase().includes(searchText) || 
+      (user.full_name && user.full_name.toLowerCase().includes(searchText)) || 
       (user.username && user.username.toLowerCase().includes(searchText)) ||
+      (user.gcash_number && user.gcash_number.includes(searchText)) ||
       user.id.includes(searchText);
       
-    // Role filter match
     const matchRole = filterRole === 'all' || user.role === filterRole;
     
-    // Verification status filter match
     let matchVerify = true;
     if (filterVerify === 'verified') matchVerify = user.is_verified || user.verified_badge;
     else if (filterVerify === 'pending') matchVerify = user.government_id_url && !user.is_verified && !user.verified_badge;
@@ -453,11 +521,10 @@ function renderUserDirectory() {
     return matchSearch && matchRole && matchVerify;
   });
 
-  // Sort data
   filtered.sort((a, b) => {
     if (sortBy === 'created_at-desc') return new Date(b.created_at) - new Date(a.created_at);
     if (sortBy === 'created_at-asc') return new Date(a.created_at) - new Date(b.created_at);
-    if (sortBy === 'full_name-asc') return a.full_name.localeCompare(b.full_name);
+    if (sortBy === 'full_name-asc') return (a.full_name || '').localeCompare(b.full_name || '');
     if (sortBy === 'rating_avg-desc') return (b.rating_avg || 0) - (a.rating_avg || 0);
     return 0;
   });
@@ -466,10 +533,10 @@ function renderUserDirectory() {
     grid.innerHTML = `
       <div class="empty-state" style="grid-column: 1 / -1;">
         <i data-lucide="users" class="empty-icon"></i>
-        <p>No user accounts matched the filter criteria.</p>
+        <p>No user accounts matched the current filter criteria.</p>
       </div>
     `;
-    lucide.createIcons();
+    if (window.lucide) lucide.createIcons();
     return;
   }
 
@@ -481,16 +548,16 @@ function renderUserDirectory() {
     if (isUserVerified) {
       verifyBadgeHtml = `<span class="badge-verify verified"><i data-lucide="check-circle-2"></i> Verified</span>`;
     } else if (isUserPending) {
-      verifyBadgeHtml = `<span class="badge-verify pending"><i data-lucide="hourglass"></i> Pending</span>`;
+      verifyBadgeHtml = `<span class="badge-verify pending"><i data-lucide="hourglass"></i> Pending Review</span>`;
     } else {
       verifyBadgeHtml = `<span class="badge-verify unverified"><i data-lucide="shield-alert"></i> Unverified</span>`;
     }
 
-    const initials = user.full_name.substring(0, 2).toUpperCase();
+    const initials = (user.full_name || 'User').substring(0, 2).toUpperCase();
     const joinedDate = new Date(user.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
     return `
-      <div class="user-card animate-slide-up" style="animation-delay: ${Math.min(idx * 0.03, 0.4)}s;">
+      <div class="user-card animate-slide-up" style="animation-delay: ${Math.min(idx * 0.03, 0.3)}s;">
         <div class="card-header-meta">
           <div class="user-avatar" style="${user.avatar_url ? `background-image: url(${user.avatar_url})` : ''}">
             ${!user.avatar_url ? initials : ''}
@@ -501,9 +568,19 @@ function renderUserDirectory() {
           </div>
         </div>
         
-        <div class="pills-row">
-          <span class="badge-role ${user.role}">${user.role}</span>
-          ${verifyBadgeHtml}
+        <div class="user-card-body">
+          <div class="pills-row">
+            <span class="badge-role ${user.role}">${user.role}</span>
+            ${verifyBadgeHtml}
+            ${user.vehicle ? `<span class="badge-role badge-vehicle">${escapeHTML(user.vehicle.model)}</span>` : ''}
+          </div>
+
+          ${user.gcash_number ? `
+            <div class="user-gcash-box">
+              <i data-lucide="wallet"></i>
+              <span>GCash: <strong>${escapeHTML(user.gcash_number)}</strong> (${escapeHTML(user.gcash_name || user.full_name)})</span>
+            </div>
+          ` : ''}
         </div>
         
         <div class="rating-row">
@@ -523,26 +600,25 @@ function renderUserDirectory() {
     `;
   }).join('');
 
-  lucide.createIcons();
+  if (window.lucide) lucide.createIcons();
 }
 
-// Render Verification ID reviews inbox
+// ═════ 3. VERIFICATION INBOX RENDERER ═════
 function renderVerificationInbox() {
   const submissionsContainer = document.getElementById('inbox-submissions-list');
   const viewerContainer = document.getElementById('inbox-submission-viewer');
+  if (!submissionsContainer || !viewerContainer) return;
   
   const pendingUsers = usersData.filter(u => u.government_id_url && !u.is_verified);
 
-  // If inbox selectedUser is not in the pending list anymore, reset it
   if (selectedUserId && !pendingUsers.some(u => u.id === selectedUserId)) {
     selectedUserId = null;
   }
 
-  // Set up list
   if (pendingUsers.length === 0) {
     submissionsContainer.innerHTML = `
       <div class="empty-state">
-        <i data-lucide="check" class="empty-icon text-green"></i>
+        <i data-lucide="check-circle" class="empty-icon text-green"></i>
         <p>No pending verification submissions!</p>
       </div>
     `;
@@ -550,10 +626,10 @@ function renderVerificationInbox() {
       <div class="empty-viewer-state">
         <i data-lucide="eye" class="empty-viewer-icon"></i>
         <h3>Select a submission to review</h3>
-        <p>Verify Government ID documents, cross-reference account credentials, and toggle user verification status.</p>
+        <p>Verify Government ID documents, cross-reference account credentials, inspect vehicle details, and approve accounts.</p>
       </div>
     `;
-    lucide.createIcons();
+    if (window.lucide) lucide.createIcons();
     return;
   }
 
@@ -561,7 +637,7 @@ function renderVerificationInbox() {
     <div class="submission-item ${selectedUserId === user.id ? 'active' : ''}" onclick="selectSubmission('${user.id}')">
       <div class="submission-item-meta">
         <div class="user-avatar" style="${user.avatar_url ? `background-image: url(${user.avatar_url})` : ''}">
-          ${!user.avatar_url ? user.full_name.substring(0, 2).toUpperCase() : ''}
+          ${!user.avatar_url ? (user.full_name || 'U').substring(0, 2).toUpperCase() : ''}
         </div>
         <div class="submission-item-details">
           <h4>${escapeHTML(user.full_name)}</h4>
@@ -572,9 +648,7 @@ function renderVerificationInbox() {
     </div>
   `).join('');
 
-  // Set up detailed view
   if (!selectedUserId) {
-    // Auto-select first one if none selected
     selectedUserId = pendingUsers[0].id;
   }
 
@@ -584,26 +658,39 @@ function renderVerificationInbox() {
       <div class="viewer-header">
         <div class="viewer-user-profile">
           <div class="viewer-avatar" style="${selectedUser.avatar_url ? `background-image: url(${selectedUser.avatar_url})` : ''}">
-            ${!selectedUser.avatar_url ? selectedUser.full_name.substring(0, 2).toUpperCase() : ''}
+            ${!selectedUser.avatar_url ? (selectedUser.full_name || 'U').substring(0, 2).toUpperCase() : ''}
           </div>
           <div class="viewer-meta">
             <h3>${escapeHTML(selectedUser.full_name)}</h3>
             <span>Username: @${escapeHTML(selectedUser.username || 'unnamed')} • ID: ${selectedUser.id}</span>
             <div class="viewer-pills">
               <span class="badge-role ${selectedUser.role}">${selectedUser.role}</span>
-              <span class="badge-verify pending"><i data-lucide="hourglass"></i> Verification Review</span>
+              <span class="badge-verify pending"><i data-lucide="hourglass"></i> Pending Approval</span>
+              ${selectedUser.gcash_number ? `<span class="badge-role" style="background: rgba(0, 125, 254, 0.12); color: #007DFE;">GCash: ${selectedUser.gcash_number}</span>` : ''}
             </div>
           </div>
         </div>
       </div>
 
+      ${selectedUser.vehicle ? `
+        <div class="vehicle-info-box" style="margin-bottom: 16px;">
+          <h4>Vehicle Details (Driver Application)</h4>
+          <div class="vehicle-spec-grid">
+            <div class="vehicle-spec-item"><span>Model:</span> <strong>${escapeHTML(selectedUser.vehicle.model || 'N/A')}</strong></div>
+            <div class="vehicle-spec-item"><span>Plate Number:</span> <strong>${escapeHTML(selectedUser.vehicle.plate_number || 'N/A')}</strong></div>
+            <div class="vehicle-spec-item"><span>Color:</span> <strong>${escapeHTML(selectedUser.vehicle.color || 'N/A')}</strong></div>
+            <div class="vehicle-spec-item"><span>Capacity:</span> <strong>${selectedUser.vehicle.capacity || 1} seat(s)</strong></div>
+          </div>
+        </div>
+      ` : ''}
+
       <div class="document-view-container">
-        <div class="document-title">Uploaded Government ID document</div>
-        <div class="document-image-frame" onclick="openLightbox('${selectedUser.government_id_url}', '${escapeHTML(selectedUser.full_name)}\\'s Government ID')">
+        <div class="document-title">Uploaded Government Document / Driver's License</div>
+        <div class="document-image-frame" onclick="openLightbox('${selectedUser.government_id_url}', '${escapeHTML(selectedUser.full_name)}\\'s Document')">
           <img src="${selectedUser.government_id_url}" alt="Government ID" onerror="handleImageLoadError(this)">
           <div class="image-zoom-overlay">
             <i data-lucide="maximize-2"></i>
-            Click to expand
+            Click to expand and inspect
           </div>
         </div>
       </div>
@@ -621,24 +708,7 @@ function renderVerificationInbox() {
     `;
   }
 
-  lucide.createIcons();
-}
-
-function handleImageLoadError(img) {
-  img.style.display = 'none';
-  const parent = img.parentNode;
-  
-  // Check if placeholder is already there
-  if (!parent.querySelector('.document-placeholder')) {
-    const placeholder = document.createElement('div');
-    placeholder.className = 'document-placeholder';
-    placeholder.innerHTML = `
-      <i data-lucide="image-off"></i>
-      <p>Failed to load ID document image.<br><small style="color: var(--text-dark)">Invalid image URL or storage access denied.</small></p>
-    `;
-    parent.appendChild(placeholder);
-    lucide.createIcons();
-  }
+  if (window.lucide) lucide.createIcons();
 }
 
 function selectSubmission(userId) {
@@ -650,33 +720,25 @@ function selectSubmission(userId) {
 async function approveVerification(userId) {
   showLoading(true);
   try {
-    if (mockMode) {
-      // Offline mock save
-      const user = usersData.find(u => u.id === userId);
-      if (user) {
-        user.is_verified = true;
-        user.verified_badge = true;
-      }
-      showToast(`Approved verification for ${user.full_name} (Mock Mode)`, 'success');
-      updateUI();
-    } else {
-      // Live database save
+    // Execute live database update via RPC, fallback to direct update
+    const { error: rpcErr } = await supabaseClient.rpc('admin_verify_user', {
+      target_user_id: userId,
+      approve: true
+    });
+
+    if (rpcErr) {
       const { error } = await supabaseClient
         .from('profiles')
-        .update({
-          is_verified: true,
-          verified_badge: true
-        })
+        .update({ is_verified: true, verified_badge: true })
         .eq('id', userId);
-
       if (error) throw error;
-      
-      showToast(`Verification Approved successfully`, 'success');
-      await refreshData();
     }
+
+    showToast(`Verification approved successfully.`, 'success');
+    await refreshData();
   } catch (err) {
     console.error('Approve failed:', err);
-    showToast(`Approval failed: ${err.message || 'Row Level Security policy blocked.'}`, 'error');
+    showToast(`Approval failed: ${err.message || 'Error occurred.'}`, 'error');
   } finally {
     showLoading(false);
   }
@@ -686,41 +748,792 @@ async function approveVerification(userId) {
 async function rejectVerification(userId) {
   showLoading(true);
   try {
-    if (mockMode) {
-      // Offline mock save
-      const user = usersData.find(u => u.id === userId);
-      if (user) {
-        user.government_id_url = null;
-        user.is_verified = false;
-        user.verified_badge = false;
-      }
-      showToast(`Rejected ID submission for ${user.full_name} (Mock Mode)`, 'warning');
-      updateUI();
-    } else {
-      // Live database save
+    const { error: rpcErr } = await supabaseClient.rpc('admin_verify_user', {
+      target_user_id: userId,
+      approve: false
+    });
+
+    if (rpcErr) {
       const { error } = await supabaseClient
         .from('profiles')
-        .update({
-          government_id_url: null,
-          is_verified: false,
-          verified_badge: false
-        })
+        .update({ government_id_url: null, is_verified: false, verified_badge: false })
         .eq('id', userId);
-
       if (error) throw error;
-      
-      showToast(`ID Submission Rejected. Government ID url reset.`, 'success');
-      await refreshData();
     }
+
+    showToast(`ID Submission rejected. User record reset.`, 'success');
+    await refreshData();
   } catch (err) {
     console.error('Reject failed:', err);
-    showToast(`Rejection failed: ${err.message || 'Row Level Security policy blocked.'}`, 'error');
+    showToast(`Rejection failed: ${err.message || 'Error occurred.'}`, 'error');
   } finally {
     showLoading(false);
   }
 }
 
-// Settings modal trigger
+// ═════ 4. TRIPS & RIDES RENDERER ═════
+function setTripFilter(status) {
+  filterTrip = status;
+  document.querySelectorAll('#filter-trip-all, #filter-trip-open, #filter-trip-ongoing, #filter-trip-completed, #filter-trip-cancelled').forEach(btn => {
+    btn.classList.remove('active');
+  });
+  const activeBtn = document.getElementById(`filter-trip-${status}`);
+  if (activeBtn) activeBtn.classList.add('active');
+  renderTripsManagement();
+}
+
+function handleTripSearch(val) {
+  tripSearchText = val.trim().toLowerCase();
+  renderTripsManagement();
+}
+
+function renderTripsManagement() {
+  const grid = document.getElementById('trips-grid');
+  if (!grid) return;
+
+  let filtered = tripsData.filter(trip => {
+    const matchStatus = filterTrip === 'all' || trip.status === filterTrip;
+    const matchSearch = !tripSearchText ||
+      (trip.origin_label && trip.origin_label.toLowerCase().includes(tripSearchText)) ||
+      (trip.destination_label && trip.destination_label.toLowerCase().includes(tripSearchText)) ||
+      (trip.driver && trip.driver.full_name && trip.driver.full_name.toLowerCase().includes(tripSearchText)) ||
+      trip.id.includes(tripSearchText);
+
+    return matchStatus && matchSearch;
+  });
+
+  if (filtered.length === 0) {
+    grid.innerHTML = `
+      <div class="empty-state" style="grid-column: 1 / -1;">
+        <i data-lucide="map-pin-off" class="empty-icon"></i>
+        <p>No trips found matching the selected filters.</p>
+      </div>
+    `;
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
+
+  grid.innerHTML = filtered.map(trip => {
+    const depDate = new Date(trip.departure_time);
+    const timeString = depDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const dateString = depDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
+
+    return `
+      <div class="trip-card animate-slide-up">
+        <div class="trip-card-header">
+          <div class="trip-driver-info">
+            <div class="user-avatar" style="${trip.driver?.avatar_url ? `background-image: url(${trip.driver.avatar_url})` : ''}">
+              ${!trip.driver?.avatar_url ? (trip.driver?.full_name || 'D').substring(0, 2).toUpperCase() : ''}
+            </div>
+            <div>
+              <h4 style="font-size: 14px; font-weight: 600; color: var(--text-title);">${escapeHTML(trip.driver?.full_name || 'Driver')}</h4>
+              <span style="font-size: 11px; color: var(--text-muted);">${trip.vehicle ? `${trip.vehicle.model} • ${trip.vehicle.plate_number}` : 'Car'}</span>
+            </div>
+          </div>
+          <span class="badge-trip-status badge-trip-${trip.status}">${trip.status}</span>
+        </div>
+
+        <div class="trip-route-box">
+          <div class="trip-route-stop">
+            <div class="trip-route-dot pickup"></div>
+            <span class="trip-route-text" title="${escapeHTML(trip.origin_label)}">${escapeHTML(trip.origin_label)}</span>
+          </div>
+          <div class="trip-route-stop">
+            <div class="trip-route-dot dropoff"></div>
+            <span class="trip-route-text" title="${escapeHTML(trip.destination_label)}">${escapeHTML(trip.destination_label)}</span>
+          </div>
+        </div>
+
+        <div class="trip-meta-grid">
+          <div class="trip-meta-item">
+            <span class="trip-meta-label">Departure</span>
+            <span class="trip-meta-val">${dateString} • ${timeString}</span>
+          </div>
+          <div class="trip-meta-item">
+            <span class="trip-meta-label">Fare / Seat</span>
+            <span class="trip-meta-val" style="color: var(--accent-secondary);">${trip.fare_per_seat === 0 ? 'FREE' : formatCurrency(trip.fare_per_seat)}</span>
+          </div>
+          <div class="trip-meta-item">
+            <span class="trip-meta-label">Available Seats</span>
+            <span class="trip-meta-val">${trip.available_seats} remaining</span>
+          </div>
+          <div class="trip-meta-item">
+            <span class="trip-meta-label">Bookings</span>
+            <span class="trip-meta-val">${trip.bookings?.length || 0} passengers</span>
+          </div>
+        </div>
+
+        <div class="trip-card-actions">
+          <button class="btn btn-secondary btn-small" onclick="openTripDetailModal('${trip.id}')">
+            <i data-lucide="info"></i>
+            Inspect Trip
+          </button>
+          ${trip.status === 'open' || trip.status === 'ongoing' ? `
+            <button class="btn btn-danger btn-small" onclick="adminCancelTrip('${trip.id}')">
+              <i data-lucide="slash"></i>
+              Cancel Trip
+            </button>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  if (window.lucide) lucide.createIcons();
+}
+
+// Cancel trip admin action
+async function adminCancelTrip(tripId) {
+  if (!confirm('Are you sure you want to cancel this trip as Admin? This will mark all bookings as cancelled.')) {
+    return;
+  }
+
+  showLoading(true);
+  try {
+    const { error: rpcErr } = await supabaseClient.rpc('admin_cancel_trip', { target_trip_id: tripId });
+    if (rpcErr) {
+      const { error } = await supabaseClient.from('trips').update({ status: 'cancelled' }).eq('id', tripId);
+      if (error) throw error;
+    }
+    showToast('Trip cancelled successfully in database.', 'success');
+    await refreshData();
+  } catch (err) {
+    console.error('Cancel trip failed:', err);
+    showToast(`Cancel failed: ${err.message || 'Error occurred'}`, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+// Open Trip Details Modal
+function openTripDetailModal(tripId) {
+  const trip = tripsData.find(t => t.id === tripId);
+  if (!trip) return;
+
+  const modal = document.getElementById('trip-detail-modal');
+  const body = document.getElementById('trip-modal-body');
+  
+  const tripBookings = bookingsData.filter(b => b.trip_id === trip.id);
+
+  body.innerHTML = `
+    <div style="display: flex; flex-direction: column; gap: 14px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <h4 style="color: var(--text-title); font-size: 16px;">${escapeHTML(trip.driver?.full_name || 'Driver')}</h4>
+          <span style="font-size: 12px; color: var(--text-muted);">${trip.driver?.gcash_number ? `GCash: ${trip.driver.gcash_number}` : 'No GCash configured'}</span>
+        </div>
+        <span class="badge-trip-status badge-trip-${trip.status}">${trip.status}</span>
+      </div>
+
+      <div class="trip-route-box">
+        <div class="trip-route-stop">
+          <div class="trip-route-dot pickup"></div>
+          <span class="trip-route-text"><strong>Pickup:</strong> ${escapeHTML(trip.origin_label)}</span>
+        </div>
+        <div class="trip-route-stop">
+          <div class="trip-route-dot dropoff"></div>
+          <span class="trip-route-text"><strong>Drop-off:</strong> ${escapeHTML(trip.destination_label)}</span>
+        </div>
+      </div>
+
+      <div class="trip-meta-grid">
+        <div class="trip-meta-item"><span>Fare per seat:</span> <strong>${formatCurrency(trip.fare_per_seat)}</strong></div>
+        <div class="trip-meta-item"><span>Seats left:</span> <strong>${trip.available_seats}</strong></div>
+      </div>
+
+      <div>
+        <h5 style="font-size: 13px; font-weight: 700; color: var(--text-title); margin-bottom: 8px;">Booked Commuters (${tripBookings.length})</h5>
+        ${tripBookings.length === 0 ? '<p style="color: var(--text-muted); font-size: 12px;">No bookings recorded yet.</p>' : `
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            ${tripBookings.map(b => `
+              <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.03); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color);">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="font-size: 13px; font-weight: 600; color: var(--text-title);">${escapeHTML(b.commuter?.full_name || 'Passenger')}</span>
+                  <span style="font-size: 11px; color: var(--text-muted);">(${b.seats_booked} seat)</span>
+                  ${b.is_reservation ? '<span class="badge-gcash-reservation" style="font-size: 10px; padding: 2px 6px;">Reserved (₱' + (b.reservation_fee || 0) + ')</span>' : ''}
+                </div>
+                <span class="badge-payment-status badge-pay-${b.payment_status || 'unpaid'}">${b.status}</span>
+              </div>
+            `).join('')}
+          </div>
+        `}
+      </div>
+    </div>
+  `;
+
+  modal.classList.add('active');
+  if (window.lucide) lucide.createIcons();
+}
+
+function closeTripDetailModal() {
+  document.getElementById('trip-detail-modal').classList.remove('active');
+}
+
+// ═════ 5. BOOKINGS & GCASH RENDERER ═════
+function setBookingFilter(type) {
+  filterBooking = type;
+  document.querySelectorAll('#filter-booking-all, #filter-booking-reservations, #filter-booking-standard').forEach(btn => btn.classList.remove('active'));
+  if (type === 'all') document.getElementById('filter-booking-all').classList.add('active');
+  if (type === 'reservation') document.getElementById('filter-booking-reservations').classList.add('active');
+  if (type === 'standard') document.getElementById('filter-booking-standard').classList.add('active');
+  renderBookingsManagement();
+}
+
+function setPaymentFilter(status) {
+  filterPayment = status;
+  document.querySelectorAll('#filter-pay-all, #filter-pay-submitted, #filter-pay-verified, #filter-pay-unpaid').forEach(btn => btn.classList.remove('active'));
+  const btn = document.getElementById(`filter-pay-${status}`);
+  if (btn) btn.classList.add('active');
+  renderBookingsManagement();
+}
+
+function renderBookingsManagement() {
+  const grid = document.getElementById('bookings-grid');
+  if (!grid) return;
+
+  let filtered = bookingsData.filter(b => {
+    let matchType = true;
+    if (filterBooking === 'reservation') matchType = b.is_reservation === true;
+    if (filterBooking === 'standard') matchType = !b.is_reservation;
+
+    let matchPay = true;
+    if (filterPayment !== 'all') matchPay = (b.payment_status || 'unpaid') === filterPayment;
+
+    return matchType && matchPay;
+  });
+
+  if (filtered.length === 0) {
+    grid.innerHTML = `
+      <div class="empty-state" style="grid-column: 1 / -1;">
+        <i data-lucide="wallet" class="empty-icon"></i>
+        <p>No bookings or GCash reservations found for this filter.</p>
+      </div>
+    `;
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
+
+  grid.innerHTML = filtered.map(booking => {
+    const isReservation = booking.is_reservation;
+    const paymentStatus = booking.payment_status || 'unpaid';
+
+    return `
+      <div class="booking-card ${isReservation ? 'reservation-highlight' : ''} animate-slide-up">
+        <div class="booking-card-header">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="user-avatar" style="${booking.commuter?.avatar_url ? `background-image: url(${booking.commuter.avatar_url})` : ''}">
+              ${!booking.commuter?.avatar_url ? (booking.commuter?.full_name || 'P').substring(0, 2).toUpperCase() : ''}
+            </div>
+            <div>
+              <h4 style="font-size: 14px; font-weight: 600; color: var(--text-title);">${escapeHTML(booking.commuter?.full_name || 'Commuter')}</h4>
+              <span style="font-size: 11px; color: var(--text-muted);">${booking.seats_booked || 1} seat(s) booked</span>
+            </div>
+          </div>
+          <span class="badge-role" style="text-transform: capitalize;">${booking.status}</span>
+        </div>
+
+        <div class="booking-pills-row">
+          ${isReservation ? `
+            <span class="badge-gcash-reservation">
+              <i data-lucide="wallet"></i>
+              GCash Seat Reservation (₱${booking.reservation_fee || 0})
+            </span>
+          ` : `
+            <span class="badge-role commuter">Standard Cash</span>
+          `}
+          <span class="badge-payment-status badge-pay-${paymentStatus}">
+            Payment: ${paymentStatus}
+          </span>
+        </div>
+
+        <div class="trip-meta-grid">
+          <div class="trip-meta-item">
+            <span class="trip-meta-label">Total Fare</span>
+            <span class="trip-meta-val">${formatCurrency(booking.fare_paid || 0)}</span>
+          </div>
+          <div class="trip-meta-item">
+            <span class="trip-meta-label">Platform Fee (10%)</span>
+            <span class="trip-meta-val" style="color: var(--accent-secondary);">${formatCurrency(booking.platform_fee || ((booking.fare_paid || 0) * 0.1))}</span>
+          </div>
+          <div class="trip-meta-item">
+            <span class="trip-meta-label">Ride Driver</span>
+            <span class="trip-meta-val">${escapeHTML(booking.trip?.driver?.full_name || 'Driver')}</span>
+          </div>
+          <div class="trip-meta-item">
+            <span class="trip-meta-label">Deposit Amount</span>
+            <span class="trip-meta-val" style="color: #007DFE;">₱${booking.reservation_fee || 0}</span>
+          </div>
+        </div>
+
+        ${booking.payment_proof_url ? `
+          <div class="receipt-preview-banner" onclick="openLightbox('${booking.payment_proof_url}', 'GCash Receipt - ${escapeHTML(booking.commuter?.full_name || 'Commuter')}', '${booking.id}')">
+            <div class="receipt-preview-left">
+              <img src="${booking.payment_proof_url}" class="receipt-thumb-img" alt="Receipt">
+              <div>
+                <strong style="color: #007DFE; font-size: 12px; display: block;">View GCash Receipt Proof</strong>
+                <span style="color: var(--text-muted); font-size: 11px;">Tap to open full receipt verification</span>
+              </div>
+            </div>
+            <i data-lucide="chevron-right" style="color: #007DFE; width: 16px;"></i>
+          </div>
+        ` : ''}
+
+        <div class="trip-card-actions">
+          <span style="font-size: 11px; color: var(--text-dark);">Booked: ${new Date(booking.created_at).toLocaleDateString()}</span>
+          ${isReservation && paymentStatus !== 'verified' ? `
+            <button class="btn btn-primary btn-small" onclick="adminVerifyPayment('${booking.id}', 'verified')">
+              <i data-lucide="check-circle-2"></i>
+              Verify GCash Payment
+            </button>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  if (window.lucide) lucide.createIcons();
+}
+
+// Verify booking payment admin action
+async function adminVerifyPayment(bookingId, newStatus) {
+  showLoading(true);
+  try {
+    const { error: rpcErr } = await supabaseClient.rpc('admin_verify_booking_payment', {
+      target_booking_id: bookingId,
+      new_status: newStatus
+    });
+
+    if (rpcErr) {
+      const { error } = await supabaseClient.from('bookings').update({ payment_status: newStatus }).eq('id', bookingId);
+      if (error) throw error;
+    }
+
+    showToast(`GCash payment marked as ${newStatus} in database.`, 'success');
+    closeLightbox();
+    await refreshData();
+  } catch (err) {
+    console.error('Verify payment failed:', err);
+    showToast(`Action failed: ${err.message || 'Error occurred'}`, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+
+
+// ═════ 6. COMMUNITY HUB MODERATION ═════
+function handleHubSearch(val) {
+  hubSearchText = val.trim().toLowerCase();
+  renderHubModeration();
+}
+
+function handleHubFilterStatus(val) {
+  hubFilterStatus = val;
+  renderHubModeration();
+}
+
+// Render Community Hub Moderation Tab
+function renderHubModeration() {
+  const container = document.getElementById('hub-posts-grid');
+  if (!container) return;
+
+  let filtered = hubPostsData.filter(post => {
+    const text = (post.message || post.content || '').toLowerCase();
+    const authorName = (post.author?.full_name || '').toLowerCase();
+    const tag = (post.status_tag || '').toLowerCase();
+    const matchesSearch = !hubSearchText || text.includes(hubSearchText) || authorName.includes(hubSearchText) || tag.includes(hubSearchText);
+    const matchesStatus = hubFilterStatus === 'all' || (hubFilterStatus === 'reported' && post.reports && post.reports.length > 0);
+    return matchesSearch && matchesStatus;
+  });
+
+  // Prioritize reported posts so the admin immediately sees flagged content
+  filtered.sort((a, b) => {
+    const aRep = a.reports && a.reports.length > 0 ? 1 : 0;
+    const bRep = b.reports && b.reports.length > 0 ? 1 : 0;
+    if (aRep !== bRep) return bRep - aRep;
+    return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+  });
+
+  if (filtered.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <i data-lucide="message-square-off" class="empty-icon"></i>
+        <p>${hubFilterStatus === 'reported' ? 'No reported posts pending review!' : 'No community hub posts found.'}</p>
+      </div>
+    `;
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
+
+  container.innerHTML = filtered.map(post => {
+    const isReported = post.reports && post.reports.length > 0;
+    const bodyText = post.message || post.content || '';
+    const images = post.image_urls || [];
+    
+    return `
+    <div class="hub-card animate-slide-up" style="${isReported ? 'border: 1.5px solid #EF4444;' : ''}">
+      ${isReported ? `
+        <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 6px; color: #DC2626; font-size: 12px; font-weight: 600;">
+            <i data-lucide="flag" style="width: 14px; height: 14px;"></i>
+            <span>Reported (${post.reports.length}): ${post.reports.map(r => escapeHTML(r.reason)).join('; ')}</span>
+          </div>
+          <button class="btn btn-secondary btn-small" onclick="adminDismissReports('${post.id}')" title="Dismiss reports and mark as reviewed" style="font-size: 11px; padding: 4px 8px; flex-shrink: 0;">
+            <i data-lucide="check-check" style="width: 12px; height: 12px;"></i> Dismiss
+          </button>
+        </div>
+      ` : ''}
+
+      <div class="hub-author-header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div class="user-avatar" style="${post.author?.avatar_url ? `background-image: url(${post.author.avatar_url})` : ''}">
+            ${!post.author?.avatar_url ? (post.author?.full_name || 'A').substring(0, 2).toUpperCase() : ''}
+          </div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <h4 style="font-size: 14px; font-weight: 600; color: var(--text-title);">${escapeHTML(post.author?.full_name || 'Community Member')}</h4>
+              ${post.is_pinned ? `<span style="font-size: 10px; background: rgba(13, 148, 136, 0.15); color: #0D9488; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Pinned</span>` : ''}
+              ${post.trip_id ? `<span style="font-size: 10px; background: rgba(2, 132, 199, 0.15); color: #0284C7; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Attached Ride</span>` : ''}
+            </div>
+            <span style="font-size: 11px; color: var(--text-muted);">@${escapeHTML(post.author?.username || 'member')} • ${post.author?.role || 'user'}</span>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 8px;">
+          ${post.status_tag ? `
+            <span style="font-size: 11px; text-transform: uppercase; font-weight: 600; background: var(--bg-card-subtle); color: var(--text-title); padding: 3px 8px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+              ${escapeHTML(post.status_tag)}
+            </span>
+          ` : ''}
+          <button class="btn btn-danger btn-small" onclick="adminDeleteHubPost('${post.id}')" title="Delete inappropriate post">
+            <i data-lucide="trash-2"></i>
+            Delete
+          </button>
+        </div>
+      </div>
+
+      <p class="hub-content-body" style="margin: 10px 0; font-size: 14px; line-height: 1.5; color: var(--text-title);">${escapeHTML(bodyText)}</p>
+
+      ${images.length > 0 ? `
+        <div style="display: flex; gap: 10px; margin: 10px 0;">
+          ${images.map(url => `
+            <img src="${url}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 10px; border: 1px solid var(--border-subtle); cursor: pointer;" onclick="openLightbox('${url}', 'Attached Post Image')" title="Click to view full image" />
+          `).join('')}
+        </div>
+      ` : ''}
+
+      <div class="hub-footer-meta" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text-muted);">
+        <span>${post.location_label ? `<i data-lucide="map-pin" style="width: 12px; height: 12px; display: inline-block; vertical-align: middle;"></i> ${escapeHTML(post.location_label)}` : ''}</span>
+        <span>Posted: ${new Date(post.created_at).toLocaleDateString()}</span>
+      </div>
+    </div>
+    `;
+  }).join('');
+
+  if (window.lucide) lucide.createIcons();
+}
+
+// ═════ CONFIRMATION MODAL SYSTEM ═════
+let confirmActionCallback = null;
+
+function showConfirmModal({ title, message, confirmText = 'Confirm', isDanger = true, onConfirm }) {
+  const modal = document.getElementById('confirm-dialog-modal');
+  if (!modal) {
+    if (confirm(message)) {
+      onConfirm();
+    }
+    return;
+  }
+
+  document.getElementById('confirm-dialog-title').innerText = title;
+  document.getElementById('confirm-dialog-message').innerText = message;
+  
+  const actionBtn = document.getElementById('btn-confirm-dialog-action');
+  actionBtn.innerText = confirmText;
+  actionBtn.className = isDanger ? 'btn btn-danger' : 'btn btn-primary';
+  
+  confirmActionCallback = onConfirm;
+  
+  actionBtn.onclick = async () => {
+    const callbackToRun = confirmActionCallback;
+    closeConfirmModal();
+    if (callbackToRun) {
+      try {
+        await callbackToRun();
+      } catch (err) {
+        console.error('Confirm action execution error:', err);
+      }
+    }
+  };
+
+  modal.classList.add('active');
+  if (window.lucide) lucide.createIcons();
+}
+
+function closeConfirmModal() {
+  const modal = document.getElementById('confirm-dialog-modal');
+  if (modal) modal.classList.remove('active');
+  confirmActionCallback = null;
+}
+
+// Dismiss/Resolve reports for a post
+function adminDismissReports(postId) {
+  showConfirmModal({
+    title: 'Dismiss Post Reports',
+    message: 'Are you sure you want to mark all pending reports for this post as reviewed and dismissed? The post will stay in the community feed.',
+    confirmText: 'Dismiss Reports',
+    isDanger: false,
+    onConfirm: async () => {
+      showLoading(true);
+      try {
+        // 1. Update status to dismissed
+        const { error: updateErr } = await supabaseClient
+          .from('reports')
+          .update({ status: 'dismissed' })
+          .eq('post_id', postId);
+
+        // 2. If update failed, delete the reports directly
+        if (updateErr) {
+          console.warn('Update report status failed, falling back to delete:', updateErr);
+          const { error: delErr } = await supabaseClient
+            .from('reports')
+            .delete()
+            .eq('post_id', postId);
+          if (delErr) throw delErr;
+        }
+
+        // 3. Optimistically update local data immediately
+        reportsData = reportsData.filter(r => r.post_id !== postId);
+        hubPostsData.forEach(p => {
+          if (p.id === postId) p.reports = [];
+        });
+        updateUI();
+
+        showToast('Reports marked as dismissed.', 'success');
+        await refreshData();
+      } catch (err) {
+        console.error('Dismiss report error:', err);
+        showToast(`Dismiss failed: ${err.message}`, 'error');
+        await refreshData();
+      } finally {
+        showLoading(false);
+      }
+    }
+  });
+}
+
+// Delete hub post admin action
+function adminDeleteHubPost(postId) {
+  const post = hubPostsData.find(p => p.id === postId);
+  const snippet = post?.message ? `"${post.message.substring(0, 50)}${post.message.length > 50 ? '...' : ''}"` : 'this post';
+
+  showConfirmModal({
+    title: 'Delete Community Hub Post',
+    message: `Are you sure you want to permanently delete ${snippet}? All comments, likes, and reports attached to this post will also be deleted from the database.`,
+    confirmText: 'Permanently Delete',
+    isDanger: true,
+    onConfirm: async () => {
+      showLoading(true);
+      try {
+        // 1. Delete associated reports first to ensure clean cascade
+        await supabaseClient.from('reports').delete().eq('post_id', postId);
+
+        // 2. Call RPC to delete post
+        const { error: rpcErr } = await supabaseClient.rpc('admin_delete_hub_post', { target_post_id: postId });
+
+        // 3. Direct table delete to ensure post is deleted even if RPC had any issue
+        const { error: directErr } = await supabaseClient.from('hub_posts').delete().eq('id', postId);
+
+        if (rpcErr && directErr) {
+          throw directErr || rpcErr;
+        }
+
+        // 4. Optimistic local update so UI removes the card immediately
+        hubPostsData = hubPostsData.filter(p => p.id !== postId);
+        reportsData = reportsData.filter(r => r.post_id !== postId);
+        updateUI();
+
+        showToast('Community post deleted from database.', 'success');
+        await refreshData();
+      } catch (err) {
+        console.error('Delete hub post failed:', err);
+        showToast(`Delete failed: ${err.message || 'Error occurred'}`, 'error');
+        await refreshData();
+      } finally {
+        showLoading(false);
+      }
+    }
+  });
+}
+
+// ═════ USER EDIT / DETAIL MODAL ═════
+function openUserEditModal(userId) {
+  const user = usersData.find(u => u.id === userId);
+  if (!user) return;
+
+  document.getElementById('edit-user-id').value = user.id;
+  document.getElementById('edit-full-name').value = user.full_name || '';
+  document.getElementById('edit-username').value = user.username || '';
+  document.getElementById('edit-role').value = user.role || 'commuter';
+  document.getElementById('edit-rating').value = user.rating_avg || 0;
+  
+  document.getElementById('edit-gcash-number').value = user.gcash_number || '';
+  document.getElementById('edit-gcash-name').value = user.gcash_name || '';
+
+  document.getElementById('edit-is-verified').checked = !!user.is_verified;
+  document.getElementById('edit-verified-badge').checked = !!user.verified_badge;
+
+  // Display vehicle info if driver
+  handleRoleChange(user.role);
+  const vehicleBox = document.getElementById('modal-vehicle-section');
+  const vehicleDetails = document.getElementById('modal-vehicle-details');
+  if (user.vehicle) {
+    vehicleBox.style.display = 'block';
+    vehicleDetails.innerHTML = `
+      <div class="vehicle-spec-grid">
+        <div class="vehicle-spec-item"><span>Model:</span> <strong>${escapeHTML(user.vehicle.model || 'N/A')}</strong></div>
+        <div class="vehicle-spec-item"><span>Plate:</span> <strong>${escapeHTML(user.vehicle.plate_number || 'N/A')}</strong></div>
+        <div class="vehicle-spec-item"><span>Type:</span> <strong>${escapeHTML(user.vehicle.type || 'N/A')}</strong></div>
+        <div class="vehicle-spec-item"><span>Color:</span> <strong>${escapeHTML(user.vehicle.color || 'N/A')}</strong></div>
+      </div>
+    `;
+  } else {
+    vehicleBox.style.display = 'none';
+  }
+
+  updateModalIdPreview(user.government_id_url);
+  document.getElementById('user-edit-modal').classList.add('active');
+  if (window.lucide) lucide.createIcons();
+}
+
+function handleRoleChange(role) {
+  const vehicleBox = document.getElementById('modal-vehicle-section');
+  if (role === 'driver') {
+    const userId = document.getElementById('edit-user-id').value;
+    const user = usersData.find(u => u.id === userId);
+    if (user?.vehicle) vehicleBox.style.display = 'block';
+  } else {
+    vehicleBox.style.display = 'none';
+  }
+}
+
+function closeUserEditModal() {
+  document.getElementById('user-edit-modal').classList.remove('active');
+}
+
+function updateModalIdPreview(url) {
+  const frame = document.getElementById('edit-id-preview-container');
+  const clearBtn = document.getElementById('btn-clear-id');
+  
+  if (url) {
+    frame.innerHTML = `<img id="edit-id-image" src="${url}" alt="Document" onerror="handleImageLoadError(this)">`;
+    clearBtn.style.display = 'flex';
+  } else {
+    frame.innerHTML = `
+      <div class="document-placeholder">
+        <i data-lucide="file-text"></i>
+        <p>No document submitted</p>
+      </div>
+    `;
+    clearBtn.style.display = 'none';
+    if (window.lucide) lucide.createIcons();
+  }
+}
+
+function clearGovernmentId() {
+  updateModalIdPreview(null);
+}
+
+async function saveUserProfile() {
+  const userId = document.getElementById('edit-user-id').value;
+  const fullName = document.getElementById('edit-full-name').value.trim();
+  const username = document.getElementById('edit-username').value.trim();
+  const role = document.getElementById('edit-role').value;
+  const rating = parseFloat(document.getElementById('edit-rating').value) || 0;
+  const gcashNumber = document.getElementById('edit-gcash-number').value.trim();
+  const gcashName = document.getElementById('edit-gcash-name').value.trim();
+  const isVerified = document.getElementById('edit-is-verified').checked;
+  const verifiedBadge = document.getElementById('edit-verified-badge').checked;
+
+  const idImgElement = document.getElementById('edit-id-image');
+  const governmentIdUrl = idImgElement ? idImgElement.src : null;
+
+  if (!fullName) {
+    showToast('Name cannot be empty.', 'error');
+    return;
+  }
+
+  showLoading(true);
+  try {
+    const { error: rpcErr } = await supabaseClient.rpc('admin_update_profile', {
+      target_user_id: userId,
+      new_full_name: fullName,
+      new_username: username || null,
+      new_role: role,
+      new_rating: rating,
+      new_is_verified: isVerified,
+      new_verified_badge: verifiedBadge,
+      new_government_id_url: governmentIdUrl,
+      new_gcash_number: gcashNumber || null,
+      new_gcash_name: gcashName || null
+    });
+
+    if (rpcErr) {
+      const { error } = await supabaseClient
+        .from('profiles')
+        .update({
+          full_name: fullName,
+          username: username || null,
+          role,
+          rating_avg: rating,
+          is_verified: isVerified,
+          verified_badge: verifiedBadge,
+          government_id_url: governmentIdUrl,
+          gcash_number: gcashNumber || null,
+          gcash_name: gcashName || null
+        })
+        .eq('id', userId);
+      if (error) throw error;
+    }
+    
+    showToast('User details updated successfully in database.', 'success');
+    closeUserEditModal();
+    await refreshData();
+  } catch (err) {
+    console.error('Update profile failed:', err);
+    showToast(`Update failed: ${err.message || 'Error occurred.'}`, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+async function deleteUserProfile() {
+  const userId = document.getElementById('edit-user-id').value;
+  const fullName = document.getElementById('edit-full-name').value;
+  
+  if (!confirm(`Are you absolutely sure you want to delete account: ${fullName}? All linked records will be affected.`)) {
+    return;
+  }
+
+  showLoading(true);
+  try {
+    const { error: rpcErr } = await supabaseClient.rpc('admin_delete_user', { target_user_id: userId });
+    if (rpcErr) {
+      const { error } = await supabaseClient.from('profiles').delete().eq('id', userId);
+      if (error) throw error;
+    }
+    showToast('Profile deleted successfully from database.', 'success');
+    closeUserEditModal();
+    await refreshData();
+  } catch (err) {
+    console.error('Delete failed:', err);
+    showToast(`Delete failed: ${err.message || 'Error occurred.'}`, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+// ═════ SETTINGS & CONNECTION MODAL ═════
 function openSettingsModal() {
   document.getElementById('settings-modal').classList.add('active');
   testSettingsConnection();
@@ -730,7 +1543,6 @@ function closeSettingsModal() {
   document.getElementById('settings-modal').classList.remove('active');
 }
 
-// Verify connection live status in settings modal
 async function testSettingsConnection() {
   const url = document.getElementById('settings-supabase-url').value.trim();
   const anon = document.getElementById('settings-supabase-anon-key').value.trim();
@@ -739,13 +1551,13 @@ async function testSettingsConnection() {
 
   if (!url || !anon) {
     box.className = 'modal-status-box';
-    box.innerHTML = `<i data-lucide="alert-circle" class="status-icon"></i> <span>Credentials missing. Add URL and Anon Key.</span>`;
-    lucide.createIcons();
+    box.innerHTML = `<i data-lucide="alert-circle" class="status-icon"></i> <span>Credentials missing. Provide URL and Anon Key.</span>`;
+    if (window.lucide) lucide.createIcons();
     return;
   }
 
   box.className = 'modal-status-box';
-  box.innerHTML = `<span>Checking connection...</span>`;
+  box.innerHTML = `<span>Checking connection to Supabase...</span>`;
 
   try {
     const keyToUse = service || anon;
@@ -755,24 +1567,14 @@ async function testSettingsConnection() {
     if (error) throw error;
     
     box.className = 'modal-status-box success';
-    if (service) {
-      box.innerHTML = `<i data-lucide="check-circle" class="status-icon"></i> <span>Connected! Admin Service Role privileges verified.</span>`;
-    } else {
-      box.innerHTML = `<i data-lucide="check-circle" class="status-icon"></i> <span>Connected with Anon Key (Read Only capability).</span>`;
-    }
+    box.innerHTML = `<i data-lucide="check-circle" class="status-icon"></i> <span>Connected! Live connection verified.</span>`;
   } catch (err) {
     box.className = 'modal-status-box error';
-    box.innerHTML = `<i data-lucide="x-circle" class="status-icon"></i> <span>Connection failed: ${err.message || 'Invalid key or URL'}</span>`;
+    box.innerHTML = `<i data-lucide="x-circle" class="status-icon"></i> <span>Connection failed: ${err.message || 'Check URL and Key'}</span>`;
   }
-  lucide.createIcons();
+  if (window.lucide) lucide.createIcons();
 }
 
-// Add connection key change listeners to validate
-document.getElementById('settings-supabase-url').addEventListener('change', testSettingsConnection);
-document.getElementById('settings-supabase-anon-key').addEventListener('change', testSettingsConnection);
-document.getElementById('settings-supabase-service-role').addEventListener('change', testSettingsConnection);
-
-// Save configuration credentials to localStorage
 function saveSettings() {
   const url = document.getElementById('settings-supabase-url').value.trim();
   const anon = document.getElementById('settings-supabase-anon-key').value.trim();
@@ -786,219 +1588,72 @@ function saveSettings() {
   dbConfig.supabaseAnonKey = anon;
   dbConfig.supabaseServiceRoleKey = service;
 
-  // Re-init client
   initSupabase();
   closeSettingsModal();
   
-  // Refresh views
   showToast('Settings saved. Refreshing database data...', 'success');
   refreshData();
+  setupAdminRealtime();
 }
 
-// User Edit modal management
-function openUserEditModal(userId) {
-  const user = usersData.find(u => u.id === userId);
-  if (!user) return;
-
-  document.getElementById('edit-user-id').value = user.id;
-  document.getElementById('edit-full-name').value = user.full_name;
-  document.getElementById('edit-username').value = user.username || '';
-  document.getElementById('edit-role').value = user.role;
-  document.getElementById('edit-rating').value = user.rating_avg || 0;
-  
-  document.getElementById('edit-is-verified').checked = user.is_verified;
-  document.getElementById('edit-verified-badge').checked = user.verified_badge;
-
-  // Set ID Preview URL
-  updateModalIdPreview(user.government_id_url);
-
-  document.getElementById('user-edit-modal').classList.add('active');
-}
-
-function closeUserEditModal() {
-  document.getElementById('user-edit-modal').classList.remove('remove');
-  document.getElementById('user-edit-modal').classList.remove('active');
-}
-
-function updateModalIdPreview(url) {
-  const frame = document.getElementById('edit-id-preview-container');
-  const clearBtn = document.getElementById('btn-clear-id');
-  
-  if (url) {
-    frame.innerHTML = `<img id="edit-id-image" src="${url}" alt="Government ID" onerror="handleImageLoadError(this)">`;
-    clearBtn.style.display = 'flex';
-  } else {
-    frame.innerHTML = `
-      <div class="document-placeholder">
-        <i data-lucide="file-text"></i>
-        <p>No document submitted</p>
-      </div>
-    `;
-    clearBtn.style.display = 'none';
-    lucide.createIcons();
-  }
-}
-
-// Clear government ID URL
-function clearGovernmentId() {
-  updateModalIdPreview(null);
-}
-
-// Mock helper to generate a government ID image URL for demo reviews
-function generateMockId() {
-  const mockIdUrls = [
-    'https://images.unsplash.com/photo-1554774853-aae0a22c8aa4?auto=format&fit=crop&q=80&w=600',
-    'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&q=80&w=600',
-    'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?auto=format&fit=crop&q=80&w=600',
-    'https://images.unsplash.com/photo-1557177324-56c542165309?auto=format&fit=crop&q=80&w=600'
-  ];
-  
-  // Pick random ID
-  const randUrl = mockIdUrls[Math.floor(Math.random() * mockIdUrls.length)];
-  updateModalIdPreview(randUrl);
-  showToast('Generated Mock ID document URL', 'success');
-}
-
-// Update profile details save handler
-async function saveUserProfile() {
-  const userId = document.getElementById('edit-user-id').value;
-  const fullName = document.getElementById('edit-full-name').value.trim();
-  const username = document.getElementById('edit-username').value.trim();
-  const role = document.getElementById('edit-role').value;
-  const rating = parseFloat(document.getElementById('edit-rating').value) || 0;
-  
-  const isVerified = document.getElementById('edit-is-verified').checked;
-  const verifiedBadge = document.getElementById('edit-verified-badge').checked;
-
-  const idImgElement = document.getElementById('edit-id-image');
-  const governmentIdUrl = idImgElement ? idImgElement.src : null;
-
-  if (!fullName) {
-    showToast('Name cannot be empty.', 'error');
-    return;
-  }
-
-  const updates = {
-    full_name: fullName,
-    username: username || null,
-    role: role,
-    rating_avg: rating,
-    is_verified: isVerified,
-    verified_badge: verifiedBadge,
-    government_id_url: governmentIdUrl
-  };
-
-  showLoading(true);
-  try {
-    if (mockMode) {
-      // Mock save
-      const user = usersData.find(u => u.id === userId);
-      if (user) {
-        Object.assign(user, updates);
-      }
-      showToast(`User details updated (Mock Mode)`, 'success');
-      updateUI();
-      closeUserEditModal();
-    } else {
-      // Live database save
-      const { error } = await supabaseClient
-        .from('profiles')
-        .update(updates)
-        .eq('id', userId);
-
-      if (error) throw error;
-      
-      showToast(`User details updated successfully`, 'success');
-      closeUserEditModal();
-      await refreshData();
-    }
-  } catch (err) {
-    console.error('Update profile failed:', err);
-    showToast(`Update failed: ${err.message || 'Row Level Security policy blocked.'}`, 'error');
-  } finally {
-    showLoading(false);
-  }
-}
-
-// Delete user profile operation
-async function deleteUserProfile() {
-  const userId = document.getElementById('edit-user-id').value;
-  const fullName = document.getElementById('edit-full-name').value;
-  
-  if (!confirm(`Are you absolutely sure you want to delete account: ${fullName}? This operation is irreversible.`)) {
-    return;
-  }
-
-  showLoading(true);
-  try {
-    if (mockMode) {
-      // Mock deletion
-      usersData = usersData.filter(u => u.id !== userId);
-      showToast(`Deleted profile of ${fullName} (Mock Mode)`, 'warning');
-      updateUI();
-      closeUserEditModal();
-    } else {
-      // Live database deletion
-      const { error } = await supabaseClient
-        .from('profiles')
-        .delete()
-        .eq('id', userId);
-
-      if (error) throw error;
-      
-      showToast(`Profile deleted successfully`, 'success');
-      closeUserEditModal();
-      await refreshData();
-    }
-  } catch (err) {
-    console.error('Delete failed:', err);
-    showToast(`Delete failed: ${err.message || 'Row Level Security policy blocked.'}`, 'error');
-  } finally {
-    showLoading(false);
-  }
-}
-
-// Mock Mode toggle
-function toggleMockMode() {
-  mockMode = !mockMode;
-  localStorage.setItem('admin_mock_mode', mockMode);
-  updateMockModeUI();
-  
-  const msg = mockMode 
-    ? 'Mock Mode Enabled. Writes will be simulated locally.'
-    : 'Mock Mode Disabled. Admin operations will write to live database.';
-  showToast(msg, mockMode ? 'info' : 'warning');
-}
-
-function updateMockModeUI() {
-  const pill = document.getElementById('btn-mock-mode-toggle');
-  const label = document.getElementById('mock-mode-label');
-  
-  if (mockMode) {
-    pill.className = 'mock-mode-pill active';
-    label.innerText = 'Mock Mode: Active';
-  } else {
-    pill.className = 'mock-mode-pill';
-    label.innerText = 'Mock Mode: Disabled';
-  }
-}
-
-// Lightbox modal details
-function openLightbox(url, caption) {
+// ═════ LIGHTBOX MODAL ═════
+function openLightbox(url, caption, bookingId = null) {
   if (!url) return;
   const modal = document.getElementById('lightbox-modal');
   document.getElementById('lightbox-image').src = url;
   document.getElementById('lightbox-caption').innerText = caption;
+
+  const actionsContainer = document.getElementById('lightbox-actions-container');
+  if (bookingId) {
+    actionsContainer.innerHTML = `
+      <button class="btn btn-primary" onclick="adminVerifyPayment('${bookingId}', 'verified')">
+        <i data-lucide="check-circle-2"></i>
+        Verify Payment
+      </button>
+      <button class="btn btn-danger" onclick="adminVerifyPayment('${bookingId}', 'unpaid')">
+        <i data-lucide="x-circle"></i>
+        Reject Payment
+      </button>
+    `;
+  } else {
+    actionsContainer.innerHTML = '';
+  }
+
   modal.classList.add('active');
+  if (window.lucide) lucide.createIcons();
 }
 
 function closeLightbox() {
-  document.getElementById('lightbox-modal').classList.remove('active');
+  const modal = document.getElementById('lightbox-modal');
+  if (modal) modal.classList.remove('active');
 }
 
-// Toast System
+function handleLightboxClick(e) {
+  if (e.target.id === 'lightbox-modal') {
+    closeLightbox();
+  }
+}
+
+function handleImageLoadError(img) {
+  img.style.display = 'none';
+  const parent = img.parentNode;
+  if (!parent.querySelector('.document-placeholder')) {
+    const placeholder = document.createElement('div');
+    placeholder.className = 'document-placeholder';
+    placeholder.innerHTML = `
+      <i data-lucide="image-off"></i>
+      <p>Failed to load image.<br><small style="color: var(--text-dark)">Invalid image URL or access denied.</small></p>
+    `;
+    parent.appendChild(placeholder);
+    if (window.lucide) lucide.createIcons();
+  }
+}
+
+// ═════ TOAST NOTIFICATIONS ═════
 function showToast(message, type = 'success') {
   const container = document.getElementById('toast-container');
+  if (!container) return;
+
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
   
@@ -1013,47 +1668,44 @@ function showToast(message, type = 'success') {
   `;
   
   container.appendChild(toast);
-  lucide.createIcons();
+  if (window.lucide) lucide.createIcons();
   
-  // Micro-interaction: slide-in trigger
-  setTimeout(() => {
-    toast.classList.add('active');
-  }, 10);
-
-  // Auto-remove toast after 4 seconds
+  setTimeout(() => toast.classList.add('active'), 10);
   setTimeout(() => {
     toast.classList.remove('active');
-    setTimeout(() => {
-      toast.remove();
-    }, 350);
+    setTimeout(() => toast.remove(), 350);
   }, 4000);
 }
 
-// Global loader spinner visual feedback
 function showLoading(isLoading) {
   const saveBtn = document.getElementById('btn-save-user');
   const deleteBtn = document.getElementById('btn-delete-profile');
-  const saveSettingsBtn = document.getElementById('btn-save-settings');
-
-  if (saveBtn) {
-    saveBtn.disabled = isLoading;
-    if (isLoading) saveBtn.innerHTML = 'Saving...';
-    else saveBtn.innerHTML = 'Save Changes';
-  }
-  
-  if (deleteBtn) {
-    deleteBtn.disabled = isLoading;
-  }
-
-  if (saveSettingsBtn) {
-    saveSettingsBtn.disabled = isLoading;
-  }
+  if (saveBtn) saveBtn.disabled = isLoading;
+  if (deleteBtn) deleteBtn.disabled = isLoading;
 }
 
-// HTML XSS Escaping Helper
+// Format Utilities
+function formatCurrency(amount) {
+  return '₱' + Number(amount || 0).toLocaleString('en-PH', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+}
+
+function formatTimeAgo(date) {
+  const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
+  if (seconds < 60) return 'Just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
 function escapeHTML(str) {
   if (!str) return '';
-  return str.replace(/[&<>'"]/g, 
+  return String(str).replace(/[&<>'"]/g, 
     tag => ({
       '&': '&amp;',
       '<': '&lt;',
@@ -1062,4 +1714,92 @@ function escapeHTML(str) {
       '"': '&quot;'
     }[tag] || tag)
   );
+}
+
+// ═════ ADMIN REALTIME NOTIFICATIONS & AUDIO ═════
+let adminRealtimeChannel = null;
+let titleFlashInterval = null;
+
+function setupAdminRealtime() {
+  if (!supabaseClient) return;
+
+  if (adminRealtimeChannel) {
+    try {
+      supabaseClient.removeChannel(adminRealtimeChannel);
+    } catch (e) {}
+  }
+
+  try {
+    adminRealtimeChannel = supabaseClient
+      .channel('admin_live_moderation')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'reports' },
+        async (payload) => {
+          console.log('[Admin Realtime] New report received:', payload.new);
+          const reason = payload.new?.reason || 'Safety / Moderation issue';
+          playNotificationSound();
+          showToast(`🚨 Moderation Alert: New report submitted! (${reason})`, 'warning');
+          flashDocumentTitle('⚠️ New Report Alert!');
+          await refreshData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'hub_posts' },
+        async (payload) => {
+          console.log('[Admin Realtime] New hub post:', payload.new);
+          showToast('💬 New Community Hub post published.', 'info');
+          await refreshData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'hub_posts' },
+        async (payload) => {
+          await refreshData();
+        }
+      )
+      .subscribe((status) => {
+        console.log('[Admin Realtime] Channel subscription status:', status);
+      });
+  } catch (err) {
+    console.error('[Admin Realtime] Setup failed:', err);
+  }
+}
+
+function playNotificationSound() {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+    osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1); // A5
+    gain.gain.setValueAtTime(0.2, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.4);
+  } catch (e) {}
+}
+
+function flashDocumentTitle(alertText) {
+  if (titleFlashInterval) clearInterval(titleFlashInterval);
+  const originalTitle = 'Commute Companion - Admin Control Portal';
+  let isAlert = true;
+  let count = 0;
+  titleFlashInterval = setInterval(() => {
+    document.title = isAlert ? alertText : originalTitle;
+    isAlert = !isAlert;
+    count++;
+    if (count > 8) {
+      clearInterval(titleFlashInterval);
+      titleFlashInterval = null;
+      document.title = originalTitle;
+    }
+  }, 1000);
 }
