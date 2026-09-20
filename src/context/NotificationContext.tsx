@@ -85,6 +85,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     prefsRef.current = { pushEnabled, rideAlerts, chatAlerts };
   }, [pushEnabled, rideAlerts, chatAlerts]);
 
+  // Deduplication cache for preventing duplicate alerts (e.g., Supabase Realtime vs Expo Push)
+  const recentNotifKeysRef = useRef<Set<string>>(new Set());
+
   // Load preferences from AsyncStorage on mount
   useEffect(() => {
     const loadPreferences = async () => {
@@ -321,6 +324,53 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     };
   }, [profile?.id, profile?.role]);
 
+  // Realtime subscription to the 'notifications' table:
+  // Guarantees instant in-app sliding alerts and live unread badge updates even when remote push tokens are null (e.g. Expo Go)
+  useEffect(() => {
+    if (!profile?.id) return;
+
+    const channelName = `user_notifications_realtime_${profile.id}_${Date.now()}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${profile.id}`,
+        },
+        (payload) => {
+          refreshUnreadCount();
+
+          if (payload.eventType === 'INSERT') {
+            const newNotif = payload.new as any;
+            if (!newNotif) return;
+
+            const notifKey = `${newNotif.id || ''}_${newNotif.title}_${newNotif.body}`;
+            if (recentNotifKeysRef.current.has(notifKey)) {
+              return;
+            }
+            recentNotifKeysRef.current.add(notifKey);
+            setTimeout(() => {
+              recentNotifKeysRef.current.delete(notifKey);
+            }, 8000);
+
+            showInAppNotification(
+              newNotif.title || 'New Notification',
+              newNotif.body || '',
+              newNotif.data || { type: newNotif.type }
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [profile?.id, refreshUnreadCount]);
+
   // Push notifications foreground/background click handling
   useEffect(() => {
     if (!profile?.id) return;
@@ -344,6 +394,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
       // Refresh unread counts from authoritative database records
       refreshUnreadCount();
+
+      // Deduplicate in case Supabase Realtime already showed it
+      const notifKey = `${(data as any)?.id || ''}_${title}_${body}`;
+      if (recentNotifKeysRef.current.has(notifKey)) {
+        return;
+      }
+      recentNotifKeysRef.current.add(notifKey);
+      setTimeout(() => {
+        recentNotifKeysRef.current.delete(notifKey);
+      }, 8000);
 
       const { pushEnabled: push, rideAlerts: ride, chatAlerts: chat } = prefsRef.current;
       if (!push) {

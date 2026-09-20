@@ -70,14 +70,16 @@ function TripCard({ trip, onPress, loading = false, isJoined, userBookingStatus 
         </View>
 
         <View style={[styles.infoRow, { borderTopColor: theme.colors.border }]}>
-          <View style={styles.infoItem}>
-            <Skeleton width={60} height={14} />
+          <View style={styles.tripMetaContainer}>
+            <View style={styles.metaItem}>
+              <Skeleton width={90} height={14} />
+            </View>
+            <View style={styles.metaItem}>
+              <Skeleton width={70} height={14} />
+            </View>
           </View>
-          <View style={styles.infoItem}>
-            <Skeleton width={50} height={14} />
-          </View>
-          <View style={styles.infoItem}>
-            <Skeleton width={70} height={20} />
+          <View style={styles.fareContainer}>
+            <Skeleton width={60} height={20} />
           </View>
         </View>
       </View>
@@ -267,19 +269,22 @@ function TripCard({ trip, onPress, loading = false, isJoined, userBookingStatus 
 
       {/* Info Row */}
       <View style={[styles.infoRow, { borderTopColor: theme.colors.border }]}>
-        <View style={styles.infoItem}>
-          <Ionicons name="time-outline" size={16} color={theme.colors.textMuted} />
-          <Text style={[styles.infoText, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
-            {formatDepartureTime(trip.departure_time)}
-          </Text>
+        <View style={styles.tripMetaContainer}>
+          <View style={styles.metaItem}>
+            <Ionicons name="time-outline" size={15} color={theme.colors.textMuted} />
+            <Text style={[styles.infoText, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]}>
+              {formatDepartureTime(trip.departure_time)}
+            </Text>
+          </View>
+          <View style={styles.metaItem}>
+            <Ionicons name="people-outline" size={15} color={theme.colors.textMuted} />
+            <Text style={[styles.infoText, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
+              {displaySeats}
+            </Text>
+          </View>
         </View>
-        <View style={styles.infoItem}>
-          <Ionicons name="people-outline" size={16} color={theme.colors.textMuted} />
-          <Text style={[styles.infoText, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
-            {displaySeats}
-          </Text>
-        </View>
-        <View style={styles.infoItem}>
+
+        <View style={styles.fareContainer}>
           <Text style={[styles.fareText, { color: trip.fare_per_seat === 0 ? theme.colors.success : theme.colors.primary, fontFamily: 'Inter-Bold' }]}>
             {trip.fare_per_seat === 0 ? 'FREE' : formatCurrency(trip.fare_per_seat)}
           </Text>
@@ -397,20 +402,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 12,
     borderTopWidth: 1,
+    gap: 12,
   },
-  infoItem: {
+  tripMetaContainer: {
+    flex: 1,
+    gap: 4,
+    justifyContent: 'center',
+  },
+  metaItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
   },
   infoText: {
     fontSize: 13,
   },
+  fareContainer: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    paddingLeft: 8,
+  },
   fareText: {
-    fontSize: 16,
+    fontSize: 18,
   },
   perSeat: {
-    fontSize: 12,
+    fontSize: 11,
+    marginTop: -2,
   },
   descriptionRow: {
     flexDirection: 'row',

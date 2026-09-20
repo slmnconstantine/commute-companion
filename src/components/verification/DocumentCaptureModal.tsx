@@ -77,12 +77,15 @@ export default function DocumentCaptureModal({
       setStep('analyzing');
 
       // Analyze image quality & blurriness
-      const quality = await analyzeDocumentQuality({
-        width: asset.width,
-        height: asset.height,
-        base64: b64,
-        fileSize: asset.fileSize,
-      });
+      const quality = await analyzeDocumentQuality(
+        {
+          width: asset.width,
+          height: asset.height,
+          base64: b64,
+          fileSize: asset.fileSize,
+        },
+        documentType
+      );
 
       setQualityResult(quality);
       setStep('review');
@@ -98,7 +101,9 @@ export default function DocumentCaptureModal({
     if (qualityResult && !qualityResult.isClear) {
       Alert.alert(
         'Photo Appears Blurry',
-        'Your document may be rejected by administrators if details are unclear. Are you sure you want to proceed with this photo?',
+        documentType === 'vehicle'
+          ? 'Your vehicle photo may be rejected by administrators if details or license plate are unclear. Are you sure you want to proceed with this photo?'
+          : 'Your document may be rejected by administrators if details are unclear. Are you sure you want to proceed with this photo?',
         [
           { text: 'Retake', style: 'cancel', onPress: handleLaunchCamera },
           {
@@ -164,7 +169,7 @@ export default function DocumentCaptureModal({
               >
                 <Ionicons name="shield-checkmark" size={18} color={theme.colors.primary} />
                 <Text style={[styles.securityBadgeText, { color: theme.colors.primary }]}>
-                  Live Camera Capture Only — For your safety and anti-fraud verification, documents must be photographed in real-time. Gallery uploads are disabled.
+                  Live Camera Capture Only — For your safety and anti-fraud verification, {documentType === 'vehicle' ? 'vehicle photos' : 'documents'} must be photographed in real-time. Gallery uploads are disabled.
                 </Text>
               </View>
 
@@ -174,36 +179,73 @@ export default function DocumentCaptureModal({
 
               {/* Guidelines List */}
               <View style={styles.guideList}>
-                <GuideItem
-                  icon="layers-outline"
-                  title="Flat, Contrasting Surface"
-                  desc="Place your document flat on a dark or contrasting table so all borders stand out."
-                  theme={theme}
-                />
-                <GuideItem
-                  icon="sunny-outline"
-                  title="Good Lighting, Zero Glare"
-                  desc="Ensure even lighting from above. Avoid camera flash reflections or dark shadows over text."
-                  theme={theme}
-                />
-                <GuideItem
-                  icon="scan-outline"
-                  title="Frame All 4 Corners"
-                  desc="Align the document so that all four corners and edges are fully visible within the camera view."
-                  theme={theme}
-                />
-                <GuideItem
-                  icon="eye-outline"
-                  title="Sharp & Readable Text"
-                  desc="Hold your phone steady until the camera focuses. Name, ID number, and photo must be crisp."
-                  theme={theme}
-                />
-                <GuideItem
-                  icon="document-attach-outline"
-                  title="Original Physical Document"
-                  desc="Take a photo of the original physical document. Photocopies or screen shots will be rejected."
-                  theme={theme}
-                />
+                {documentType === 'vehicle' ? (
+                  <>
+                    <GuideItem
+                      icon="car-outline"
+                      title="Full Vehicle in View"
+                      desc="Capture the full exterior of your vehicle showing make, model, color, and condition clearly."
+                      theme={theme}
+                    />
+                    <GuideItem
+                      icon="card-outline"
+                      title="Clear License Plate"
+                      desc="Ensure the license plate is clean, fully visible, and legible from the camera angle."
+                      theme={theme}
+                    />
+                    <GuideItem
+                      icon="sunny-outline"
+                      title="Bright Daylight or Good Lighting"
+                      desc="Take the photo in well-lit conditions. Avoid extreme glare, heavy shadows, or night darkness."
+                      theme={theme}
+                    />
+                    <GuideItem
+                      icon="eye-outline"
+                      title="Sharp & Crisp Focus"
+                      desc="Hold your phone steady until the camera focuses so vehicle details and plate are sharp."
+                      theme={theme}
+                    />
+                    <GuideItem
+                      icon="shield-checkmark-outline"
+                      title="Original Live Vehicle"
+                      desc="Take a live photo of the actual vehicle. Photos of screens or paper prints will be rejected."
+                      theme={theme}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <GuideItem
+                      icon="layers-outline"
+                      title="Flat, Contrasting Surface"
+                      desc="Place your document flat on a dark or contrasting table so all borders stand out."
+                      theme={theme}
+                    />
+                    <GuideItem
+                      icon="sunny-outline"
+                      title="Good Lighting, Zero Glare"
+                      desc="Ensure even lighting from above. Avoid camera flash reflections or dark shadows over text."
+                      theme={theme}
+                    />
+                    <GuideItem
+                      icon="scan-outline"
+                      title="Frame All 4 Corners"
+                      desc="Align the document so that all four corners and edges are fully visible within the camera view."
+                      theme={theme}
+                    />
+                    <GuideItem
+                      icon="eye-outline"
+                      title="Sharp & Readable Text"
+                      desc="Hold your phone steady until the camera focuses. Name, ID number, and photo must be crisp."
+                      theme={theme}
+                    />
+                    <GuideItem
+                      icon="document-attach-outline"
+                      title="Original Physical Document"
+                      desc="Take a photo of the original physical document. Photocopies or screen shots will be rejected."
+                      theme={theme}
+                    />
+                  </>
+                )}
               </View>
 
               {/* Primary Action */}
@@ -224,7 +266,7 @@ export default function DocumentCaptureModal({
                 Analyzing Photo Clarity...
               </Text>
               <Text style={[styles.analyzingDesc, { color: theme.colors.textMuted }]}>
-                Checking document focus, contrast, and edge sharpness.
+                Checking {documentType === 'vehicle' ? 'vehicle photo' : 'document'} focus, contrast, and edge sharpness.
               </Text>
             </View>
           )}
@@ -392,7 +434,13 @@ export default function DocumentCaptureModal({
                 >
                   <Ionicons name="checkmark-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
                   <Text style={styles.confirmBtnText}>
-                    {qualityResult?.isClear ? 'Use Document' : 'Submit Anyway'}
+                    {qualityResult?.isClear
+                      ? documentType === 'vehicle'
+                        ? 'Use Vehicle Photo'
+                        : documentType === 'license'
+                        ? 'Use License'
+                        : 'Use Document'
+                      : 'Submit Anyway'}
                   </Text>
                 </Pressable>
               </View>

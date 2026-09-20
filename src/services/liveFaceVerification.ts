@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '@/lib/supabase';
 import { getOrCreateChatRoom } from './chatRooms';
 
@@ -18,6 +19,28 @@ const COMMUTERS_KEY_PREFIX = '@live_face_commuters_';
 export const LIVE_FACE_PREFIX = '###LIVE_FACE_PAYLOAD###';
 
 /**
+ * Saves a base64 photo string to local file storage and returns the file:// URI.
+ * This prevents multi-megabyte payloads from exceeding Android SQLite's 2MB CursorWindow limit.
+ */
+async function saveBase64ToCacheFile(prefix: string, id: string, photoData: string): Promise<string> {
+  if (!photoData || typeof photoData !== 'string') return photoData;
+  if (!photoData.startsWith('data:') && photoData.length < 1000) {
+    return photoData; // Already a file:// URI or remote URL
+  }
+  try {
+    const cleanBase64 = photoData.replace(/^data:image\/[a-z]+;base64,/, '');
+    const fileName = `${prefix}_${id.replace(/[^a-zA-Z0-9_-]/g, '_')}.jpg`;
+    const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
+    await FileSystem.writeAsStringAsync(fileUri, cleanBase64, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    return fileUri;
+  } catch {
+    return photoData;
+  }
+}
+
+/**
  * Persists the driver's live face capture for a specific trip
  */
 export async function saveDriverLiveCapture(
@@ -26,29 +49,37 @@ export async function saveDriverLiveCapture(
   photoData: string,
   confidenceScore: number = 98
 ): Promise<LiveFaceRecord> {
-  const record: LiveFaceRecord = {
+  const cachedPhotoUri = await saveBase64ToCacheFile('driver_live', `${tripId}_${driverId}`, photoData);
+
+  const localRecord: LiveFaceRecord = {
     tripId,
     userId: driverId,
     role: 'driver',
-    photoUri: photoData,
+    photoUri: cachedPhotoUri,
     timestamp: new Date().toISOString(),
     confidenceScore,
   };
 
   try {
-    await AsyncStorage.setItem(`${DRIVER_KEY_PREFIX}${tripId}`, JSON.stringify(record));
+    await AsyncStorage.setItem(`${DRIVER_KEY_PREFIX}${tripId}`, JSON.stringify(localRecord));
   } catch (err) {
     console.warn('Failed to cache driver live face capture:', err);
+    AsyncStorage.removeItem(`${DRIVER_KEY_PREFIX}${tripId}`).catch(() => {});
   }
 
   // Synchronize across devices via trip chat system payload
+  const broadcastRecord: LiveFaceRecord = {
+    ...localRecord,
+    photoUri: photoData,
+  };
+
   try {
     const room = await getOrCreateChatRoom(tripId);
     if (room?.id) {
       await supabase.from('messages').insert({
         chat_room_id: room.id,
         sender_id: driverId,
-        content: `${LIVE_FACE_PREFIX}${JSON.stringify(record)}`,
+        content: `${LIVE_FACE_PREFIX}${JSON.stringify(broadcastRecord)}`,
         is_alert: false,
       });
     }
@@ -56,7 +87,7 @@ export async function saveDriverLiveCapture(
     console.warn('Failed to broadcast driver live face capture payload:', networkErr);
   }
 
-  return record;
+  return localRecord;
 }
 
 /**
@@ -164,7 +195,8 @@ export async function getDriverLiveCapture(
       return JSON.parse(cached) as LiveFaceRecord;
     }
   } catch (err) {
-    console.warn('Failed to read driver live face cache:', err);
+    console.warn('Failed to read driver live face cache, purging oversized entry:', err);
+    AsyncStorage.removeItem(`${DRIVER_KEY_PREFIX}${tripId}`).catch(() => {});
   }
 
   // 2. Fetch from trip chat room messages
@@ -189,6 +221,9 @@ export async function getDriverLiveCapture(
             const rawJson = m.content.slice(LIVE_FACE_PREFIX.length);
             const parsed = JSON.parse(rawJson) as LiveFaceRecord;
             if (parsed.role === 'driver' && (!driverId || parsed.userId === driverId)) {
+              if (parsed.photoUri && parsed.photoUri.length > 1000) {
+                parsed.photoUri = await saveBase64ToCacheFile('driver_live', `${tripId}_${parsed.userId}`, parsed.photoUri);
+              }
               // Cache locally
               AsyncStorage.setItem(`${DRIVER_KEY_PREFIX}${tripId}`, JSON.stringify(parsed)).catch(() => {});
               return parsed;
@@ -214,12 +249,14 @@ export async function saveCommuterLiveCapture(
   photoData: string,
   confidenceScore: number = 96
 ): Promise<LiveFaceRecord> {
-  const record: LiveFaceRecord = {
+  const cachedPhotoUri = await saveBase64ToCacheFile('commuter_live', `${tripId}_${commuterId}`, photoData);
+
+  const localRecord: LiveFaceRecord = {
     tripId,
     userId: commuterId,
     role: 'commuter',
     bookingId,
-    photoUri: photoData,
+    photoUri: cachedPhotoUri,
     timestamp: new Date().toISOString(),
     confidenceScore,
   };
@@ -229,21 +266,27 @@ export async function saveCommuterLiveCapture(
     const key = `${COMMUTERS_KEY_PREFIX}${tripId}`;
     const raw = await AsyncStorage.getItem(key);
     const map: Record<string, LiveFaceRecord> = raw ? JSON.parse(raw) : {};
-    map[commuterId] = record;
-    if (bookingId) map[bookingId] = record;
+    map[commuterId] = localRecord;
+    if (bookingId) map[bookingId] = localRecord;
     await AsyncStorage.setItem(key, JSON.stringify(map));
   } catch (err) {
     console.warn('Failed to cache commuter live face capture:', err);
+    AsyncStorage.removeItem(`${COMMUTERS_KEY_PREFIX}${tripId}`).catch(() => {});
   }
 
   // Broadcast to trip chat room so driver can receive it in real-time
+  const broadcastRecord: LiveFaceRecord = {
+    ...localRecord,
+    photoUri: photoData,
+  };
+
   try {
     const room = await getOrCreateChatRoom(tripId);
     if (room?.id) {
       await supabase.from('messages').insert({
         chat_room_id: room.id,
         sender_id: commuterId,
-        content: `${LIVE_FACE_PREFIX}${JSON.stringify(record)}`,
+        content: `${LIVE_FACE_PREFIX}${JSON.stringify(broadcastRecord)}`,
         is_alert: false,
       });
     }
@@ -251,7 +294,7 @@ export async function saveCommuterLiveCapture(
     console.warn('Failed to broadcast commuter live face capture:', networkErr);
   }
 
-  return record;
+  return localRecord;
 }
 
 /**
@@ -288,7 +331,9 @@ export async function getTripCommuterCaptures(
       Object.assign(map, JSON.parse(raw));
     }
   } catch (err) {
-    console.warn('Failed to read commuter captures from cache:', err);
+    console.warn('Failed to read commuter captures from cache (purging oversized cache):', err);
+    // Purge the oversized entry so Android SQLite stops throwing CursorWindow error
+    AsyncStorage.removeItem(`${COMMUTERS_KEY_PREFIX}${tripId}`).catch(() => {});
   }
 
   // 2. Query remote payloads from chat room
@@ -313,6 +358,9 @@ export async function getTripCommuterCaptures(
             const rawJson = m.content.slice(LIVE_FACE_PREFIX.length);
             const parsed = JSON.parse(rawJson) as LiveFaceRecord;
             if (parsed.role === 'commuter') {
+              if (parsed.photoUri && parsed.photoUri.length > 1000) {
+                parsed.photoUri = await saveBase64ToCacheFile('commuter_live', `${tripId}_${parsed.userId}`, parsed.photoUri);
+              }
               map[parsed.userId] = parsed;
               if (parsed.bookingId) {
                 map[parsed.bookingId] = parsed;
@@ -320,7 +368,7 @@ export async function getTripCommuterCaptures(
             }
           }
         }
-        // Save back updated map to cache
+        // Save back updated map to cache (stored with file:// URIs, easily fitting in CursorWindow)
         AsyncStorage.setItem(`${COMMUTERS_KEY_PREFIX}${tripId}`, JSON.stringify(map)).catch(() => {});
       }
     }

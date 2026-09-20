@@ -4,7 +4,7 @@ import { sendPushNotification } from './pushNotifications';
 import { createNotification } from './notifications';
 import { handleServiceError } from '@/utils/errorHelper';
 
-import { isJsonLabel } from '@/utils/routeHash';
+import { isJsonLabel, getNearbyRouteHashes } from '@/utils/routeHash';
 
 export interface GetPostsOptions {
   tag?: string;
@@ -14,7 +14,7 @@ export interface GetPostsOptions {
 }
 
 export const getPosts = async (
-  routeHash: string,
+  routeHash: string | string[],
   currentUserId: string,
   options?: GetPostsOptions
 ): Promise<HubPostWithAuthor[]> => {
@@ -30,8 +30,14 @@ export const getPosts = async (
       trip:trips(*),
       post_likes(count),
       post_comments(count)
-    `)
-    .eq('route_hash', routeHash);
+    `);
+
+  if (Array.isArray(routeHash)) {
+    query = query.in('route_hash', routeHash);
+  } else {
+    const candidateHashes = getNearbyRouteHashes(routeHash);
+    query = query.in('route_hash', candidateHashes);
+  }
 
   // Tag filter
   if (options?.tag && options.tag.toLowerCase() !== 'all') {
@@ -289,7 +295,7 @@ export const createPost = async (
   imageUrls?: string[],
   tripId?: string
 ) => {
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('hub_posts')
     .insert({
       author_id: userId,
@@ -309,6 +315,32 @@ export const createPost = async (
       trip:trips(*)
     `)
     .single();
+
+  // If the database has a check constraint excluding 'ride', gracefully fallback to 'other'
+  if (error && error.message?.includes('hub_posts_status_tag_check') && statusTag === 'ride') {
+    const retryRes = await supabase
+      .from('hub_posts')
+      .insert({
+        author_id: userId,
+        route_hash: routeHash,
+        status_tag: 'other',
+        message,
+        location_lat: locationLat,
+        location_lng: locationLng,
+        location_label: locationLabel,
+        image_urls: imageUrls && imageUrls.length > 0 ? imageUrls : null,
+        is_pinned: false,
+        trip_id: tripId || null,
+      })
+      .select(`
+        *,
+        author:profiles!hub_posts_author_id_fkey(*),
+        trip:trips(*)
+      `)
+      .single();
+    data = retryRes.data;
+    error = retryRes.error;
+  }
 
   if (error) throw error;
   
@@ -493,12 +525,24 @@ export const updatePost = async (
     updatePayload.image_urls = imageUrls;
   }
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('hub_posts')
     .update(updatePayload)
     .match({ id: postId, author_id: userId })
     .select(`*, author:profiles!hub_posts_author_id_fkey(*)`)
     .maybeSingle();
+
+  if (error && error.message?.includes('hub_posts_status_tag_check') && statusTag === 'ride') {
+    updatePayload.status_tag = 'other';
+    const retryRes = await supabase
+      .from('hub_posts')
+      .update(updatePayload)
+      .match({ id: postId, author_id: userId })
+      .select(`*, author:profiles!hub_posts_author_id_fkey(*)`)
+      .maybeSingle();
+    data = retryRes.data;
+    error = retryRes.error;
+  }
 
   if (error) {
     handleServiceError('Error updating post:', error);

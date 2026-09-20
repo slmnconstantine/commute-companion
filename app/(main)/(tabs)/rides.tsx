@@ -270,6 +270,54 @@ export default function RidesScreen() {
     setShowRequestModal(true);
   };
 
+  const handleDismissRecentRequest = async (req: Route) => {
+    // Instantly remove from state
+    setRecentCommuterRequests((prev) =>
+      prev.filter((r) => r.id !== req.id && !(r.origin_label === req.origin_label && r.destination_label === req.destination_label))
+    );
+
+    try {
+      if (profile?.id) {
+        await supabase
+          .from('routes')
+          .delete()
+          .eq('user_id', profile.id)
+          .eq('origin_label', req.origin_label)
+          .eq('destination_label', req.destination_label);
+      }
+    } catch (e) {
+      console.warn('Failed to dismiss recent request:', e);
+    }
+  };
+
+  const handleClearAllRecentRequests = () => {
+    Alert.alert(
+      'Clear Recent Requests',
+      'Remove all recent ride requests from this list?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear All',
+          style: 'destructive',
+          onPress: async () => {
+            const reqIds = recentCommuterRequests.map((r) => r.id);
+            setRecentCommuterRequests([]);
+            try {
+              if (profile?.id && reqIds.length > 0) {
+                await supabase
+                  .from('routes')
+                  .delete()
+                  .in('id', reqIds);
+              }
+            } catch (e) {
+              console.warn('Failed to clear recent requests:', e);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const submitRideRequest = async () => {
     if (!profile) return;
     const targetOrigin = reqOrigin || (activeRoute ? { lat: activeRoute.origin_lat, lng: activeRoute.origin_lng, label: activeRoute.origin_label } : null);
@@ -775,10 +823,21 @@ export default function RidesScreen() {
               {/* Commuter Recent Ride Requests / Re-post */}
               {!isDriver && recentCommuterRequests.length > 0 && (
                 <View style={{ marginBottom: 16 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                     <Text style={[styles.myRidesTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', marginBottom: 0 }]}>
                       Recent Ride Requests
                     </Text>
+                    {recentCommuterRequests.length > 1 && (
+                      <Pressable
+                        hitSlop={8}
+                        onPress={handleClearAllRecentRequests}
+                        style={{ paddingVertical: 2, paddingHorizontal: 4 }}
+                      >
+                        <Text style={{ color: theme.colors.textMuted, fontSize: 12, fontFamily: 'Inter-Medium' }}>
+                          Clear all
+                        </Text>
+                      </Pressable>
+                    )}
                   </View>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingBottom: 4 }}>
                     {recentCommuterRequests.map((req) => {
@@ -800,13 +859,29 @@ export default function RidesScreen() {
                           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                               <Ionicons name="time-outline" size={16} color={theme.colors.textMuted} />
-                              <Text style={{ color: theme.colors.textMuted, fontSize: 13 }}>Re-post request</Text>
+                              <Text style={{ color: theme.colors.textMuted, fontSize: 13, fontFamily: 'Inter-Medium' }}>Re-post request</Text>
                             </View>
-                            <View style={{ backgroundColor: `${theme.colors.primary}15`, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                              <Ionicons name="people" size={12} color={theme.colors.primary} />
-                              <Text style={{ color: theme.colors.primary, fontSize: 11, fontFamily: 'Inter-SemiBold' }}>
-                                {seats} {seats === 1 ? 'seat' : 'seats'}
-                              </Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                              <View style={{ backgroundColor: `${theme.colors.primary}15`, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                                <Ionicons name="people" size={12} color={theme.colors.primary} />
+                                <Text style={{ color: theme.colors.primary, fontSize: 11, fontFamily: 'Inter-SemiBold' }}>
+                                  {seats} {seats === 1 ? 'seat' : 'seats'}
+                                </Text>
+                              </View>
+                              <Pressable
+                                hitSlop={10}
+                                style={({ pressed }) => ({
+                                  padding: 3,
+                                  borderRadius: 10,
+                                  backgroundColor: pressed ? `${theme.colors.textMuted}25` : `${theme.colors.textMuted}12`,
+                                })}
+                                onPress={(e) => {
+                                  e.stopPropagation();
+                                  handleDismissRecentRequest(req);
+                                }}
+                              >
+                                <Ionicons name="close" size={13} color={theme.colors.textMuted} />
+                              </Pressable>
                             </View>
                           </View>
                           <Text style={{ color: theme.colors.text, fontFamily: 'Inter-Medium', fontSize: 14 }} numberOfLines={1}>
