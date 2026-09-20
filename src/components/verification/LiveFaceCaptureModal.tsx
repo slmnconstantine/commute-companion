@@ -181,7 +181,7 @@ export default function LiveFaceCaptureModal({
                 </View>
 
                 <Text style={[styles.stepTitle, { color: theme.colors.text, fontFamily: 'Inter-Bold', marginTop: 14 }]}>
-                  Photo Verified! ({confidence}% Match)
+                  Photo Verified!
                 </Text>
 
                 <Text style={[styles.stepDesc, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>

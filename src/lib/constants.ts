@@ -47,6 +47,20 @@ export const PHOTON_BASE_URL = 'https://photon.komoot.io/api';
 // ---------------------------------------------------------------------------
 export const AVATAR_BUCKET = 'avatars';
 export const DOCUMENTS_BUCKET = 'documents';
+export const HUB_POSTS_BUCKET = 'hub-post-images';
+
+// ---------------------------------------------------------------------------
+// Community Hub Reactions
+// ---------------------------------------------------------------------------
+export const HUB_REACTIONS = [
+  { type: 'like', icon: 'heart', label: 'Like', color: '#EF4444' },
+  { type: 'helpful', icon: 'thumbs-up', label: 'Helpful', color: '#10B981' },
+  { type: 'warning', icon: 'alert-circle', label: 'Warning', color: '#F59E0B' },
+  { type: 'confirm', icon: 'checkmark-circle', label: 'Confirm', color: '#3B82F6' },
+  { type: 'sad', icon: 'sad', label: 'Sad', color: '#8B5CF6' },
+] as const;
+
+export type HubReactionType = typeof HUB_REACTIONS[number]['type'];
 
 // ---------------------------------------------------------------------------
 // Pagination

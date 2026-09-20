@@ -383,8 +383,12 @@ export default function RidesScreen() {
       await cancelExpiredTrips().catch(err => {
         console.warn('cancelExpiredTrips in rides loadData:', err);
       });
-      // Load all open rides (in a real app, this would use activeRoute to filter nearby rides via PostGIS)
-      const allRides = await getTrips({ limit: 50 });
+      // Load open/active upcoming rides directly with database filters so historical rides don't exhaust the limit
+      const allRides = await getTrips({
+        statuses: ['open', 'full', 'ongoing'],
+        upcomingOnly: true,
+        limit: 50,
+      });
       setAvailableRides(allRides.filter(t => (t.status === 'open' || t.status === 'full' || t.status === 'ongoing') && !isOlderThan24Hours(t.departure_time)));
 
       // Load user's commuter bookings to detect joined trips
@@ -611,6 +615,23 @@ export default function RidesScreen() {
       loadData();
     });
     return () => sub.remove();
+  }, [loadData]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`rides_realtime_${Date.now()}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'trips' },
+        () => {
+          loadData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [loadData]);
 
   const onRefresh = useCallback(async () => {

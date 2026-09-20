@@ -12,21 +12,20 @@ async function notifyReviewee(reviewData: Omit<Review, 'id' | 'created_at'>) {
       .eq('id', reviewData.reviewee_id)
       .single();
       
-    if (profileData?.push_token) {
-      const { data: reviewerData } = await supabase
-        .from('profiles')
-        .select('full_name')
-        .eq('id', reviewData.reviewer_id)
-        .single();
-      const reviewerName = reviewerData?.full_name || 'A user';
+    const { data: reviewerData } = await supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', reviewData.reviewer_id)
+      .single();
+    const reviewerName = reviewerData?.full_name || 'A user';
 
-      await sendPushNotification(
-        profileData.push_token,
-        'New Review Received',
-        `${reviewerName} rated you ${reviewData.rating} stars: "${reviewData.comment || ''}"`,
-        { type: 'review', bookingId: reviewData.booking_id }
-      );
-    }
+    await sendPushNotification(
+      profileData?.push_token,
+      'New Review Received ⭐',
+      `${reviewerName} rated you ${reviewData.rating} stars: "${reviewData.comment || ''}"`,
+      { type: 'review', bookingId: reviewData.booking_id },
+      reviewData.reviewee_id
+    );
   } catch (e) {
     handleServiceError('Error sending review push notification:', e);
   }

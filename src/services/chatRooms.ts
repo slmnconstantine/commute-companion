@@ -12,13 +12,23 @@ export async function getChatRoom(tripId: string, type: string = 'group'): Promi
   return data as ChatRoom | null;
 }
 
-/** Get chat room with associated trip data */
+/** Get chat room with associated trip data (supports lookup by chat_room_id or trip_id) */
 export async function getChatRoomWithTrip(chatRoomId: string) {
-  const { data } = await supabase
+  let { data } = await supabase
     .from('chat_rooms')
     .select('*, trip:trips!trip_id(*)')
     .eq('id', chatRoomId)
-    .single();
+    .maybeSingle();
+
+  if (!data) {
+    const res = await supabase
+      .from('chat_rooms')
+      .select('*, trip:trips!trip_id(*)')
+      .eq('trip_id', chatRoomId)
+      .maybeSingle();
+    data = res.data;
+  }
+
   return data as (ChatRoom & { trip?: any }) | null;
 }
 

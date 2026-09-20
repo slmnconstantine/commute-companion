@@ -19,6 +19,8 @@ import { decodePolyline, getRoute } from '@/services/routing';
 import { supabase } from '@/lib/supabase';
 import { formatDepartureTime } from '@/utils/dateFormatter';
 import { formatCurrency, calculateFare, getDriverPayout } from '@/utils/fareCalculator';
+import { createPost } from '@/services/hub';
+import { generateRouteHash } from '@/utils/routeHash';
 import { startBroadcastingLocation, stopBroadcastingLocation, subscribeToDriverLocation } from '@/services/liveTracking';
 import * as Location from 'expo-location';
 import Avatar from '@/components/common/Avatar';
@@ -233,8 +235,9 @@ export default function TripDetailScreen() {
       loadTrip(false);
     });
 
+    const channelName = `trip-live-sync-${id}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     const channel = supabase
-      .channel(`trip-live-sync-${id}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -268,6 +271,9 @@ export default function TripDetailScreen() {
       subRefresh.remove();
       subBooking.remove();
       supabase.removeChannel(channel);
+      try {
+        (supabase.realtime as any)._remove?.(channel);
+      } catch {}
     };
   }, [id]);
 
@@ -701,6 +707,7 @@ export default function TripDetailScreen() {
               const { error } = await deleteTrip(trip.id);
               if (error) throw error;
 
+              DeviceEventEmitter.emit('refresh_data');
               Alert.alert('Success', 'Ride successfully deleted.');
               router.back();
             } catch (err: any) {
@@ -708,6 +715,65 @@ export default function TripDetailScreen() {
             }
           }
         }
+      ]
+    );
+  };
+
+  const handleShareToHub = () => {
+    if (!trip || !profile?.id) return;
+
+    const defaultMsg = `🚗 I'm driving from ${trip.origin_label.split(',')[0]} to ${trip.destination_label.split(',')[0]}! ${trip.available_seats} seat${trip.available_seats === 1 ? '' : 's'} available (${trip.fare_per_seat === 0 ? 'Free' : formatCurrency(trip.fare_per_seat)}/seat). Click below to join my ride!`;
+    const routeHash = generateRouteHash(trip.origin_lat, trip.origin_lng, trip.destination_lat, trip.destination_lng);
+
+    Alert.alert(
+      'Share Ride to Community',
+      'Share this ride to the Route Community Hub so commuters traveling this corridor can find and join your carpool.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Customize Post',
+          onPress: () => {
+            router.push({
+              pathname: '/(main)/hub/create-post',
+              params: {
+                tripId: trip.id,
+                routeHash,
+                initialMessage: defaultMsg,
+              },
+            });
+          },
+        },
+        {
+          text: 'Share Now',
+          onPress: async () => {
+            try {
+              await createPost(
+                profile.id,
+                routeHash,
+                'ride',
+                defaultMsg,
+                trip.origin_lat,
+                trip.origin_lng,
+                trip.origin_label,
+                undefined,
+                trip.id
+              );
+              Alert.alert(
+                'Ride Shared!',
+                'Your ride has been posted to the Route Community Hub. Commuters can now see and join it!',
+                [
+                  {
+                    text: 'View in Hub',
+                    onPress: () => router.push('/(main)/(tabs)/community' as any),
+                  },
+                  { text: 'OK', style: 'cancel' },
+                ]
+              );
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Failed to share ride to Hub.');
+            }
+          },
+        },
       ]
     );
   };
@@ -830,7 +896,7 @@ export default function TripDetailScreen() {
               backgroundColor: trip.status === 'ongoing' ? theme.colors.success : theme.colors.surface,
               borderColor: trip.status === 'ongoing' ? 'transparent' : theme.colors.border,
               top: insets.top + 8,
-              right: (isDriver && trip.status === 'open') ? 64 : 16,
+              right: (isDriver && trip.status === 'open') ? 112 : ((isDriver && trip.status === 'full') ? 64 : 16),
               zIndex: 10,
               transform: [{ scale: pressed ? 0.9 : 1 }],
             },
@@ -843,6 +909,25 @@ export default function TripDetailScreen() {
             color={trip.status === 'ongoing' ? theme.colors.white : theme.colors.primary}
           />
         </Pressable>
+
+        {/* Share to Hub overlay button */}
+        {isDriver && (trip.status === 'open' || trip.status === 'full') && (
+          <Pressable
+            style={({ pressed }) => [
+              styles.shareBtn,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+                top: insets.top + 8,
+                right: trip.status === 'open' ? 64 : 16,
+                transform: [{ scale: pressed ? 0.9 : 1 }],
+              },
+            ]}
+            onPress={handleShareToHub}
+          >
+            <Ionicons name="share-social-outline" size={20} color={theme.colors.primary} />
+          </Pressable>
+        )}
 
         {/* Delete Ride button overlay */}
         {isDriver && trip.status === 'open' && (
@@ -882,18 +967,42 @@ export default function TripDetailScreen() {
         <BottomSheetScrollView contentContainerStyle={styles.contentInner}>
           {/* Status + Time */}
           <View style={styles.statusRow}>
-            <Badge
-              label={trip.status}
-              variant={
-                trip.status === 'open' || trip.status === 'full'
-                  ? 'pending'
-                  : trip.status === 'ongoing'
-                  ? 'active'
-                  : trip.status === 'cancelled'
-                  ? 'cancelled'
-                  : 'completed'
-              }
-            />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Badge
+                label={trip.status}
+                variant={
+                  trip.status === 'open' || trip.status === 'full'
+                    ? 'pending'
+                    : trip.status === 'ongoing'
+                    ? 'active'
+                    : trip.status === 'cancelled'
+                    ? 'cancelled'
+                    : 'completed'
+                }
+              />
+              {isDriver && (trip.status === 'open' || trip.status === 'full') && (
+                <Pressable
+                  onPress={handleShareToHub}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 4,
+                    paddingVertical: 4,
+                    paddingHorizontal: 10,
+                    borderRadius: 8,
+                    backgroundColor: `${theme.colors.primary}18`,
+                    borderWidth: 1,
+                    borderColor: `${theme.colors.primary}30`,
+                    opacity: pressed ? 0.75 : 1,
+                  })}
+                >
+                  <Ionicons name="share-social" size={13} color={theme.colors.primary} />
+                  <Text style={{ fontSize: 12, color: theme.colors.primary, fontFamily: 'Inter-SemiBold' }}>
+                    Share to Hub
+                  </Text>
+                </Pressable>
+              )}
+            </View>
             <Text style={[styles.timeText, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
               {formatDepartureTime(trip.departure_time)}
             </Text>
@@ -1039,6 +1148,40 @@ export default function TripDetailScreen() {
             </View>
           </View>
 
+          {/* Trip Notes & Preferences */}
+          {trip.description ? (
+            <View
+              style={[
+                styles.notesCard,
+                {
+                  backgroundColor: `${theme.colors.primary}0C`,
+                  borderColor: `${theme.colors.primary}25`,
+                },
+              ]}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <View
+                  style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: 12,
+                    backgroundColor: `${theme.colors.primary}18`,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Ionicons name="chatbox-ellipses" size={13} color={theme.colors.primary} />
+                </View>
+                <Text style={[styles.notesTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>
+                  Trip Notes & Preferences
+                </Text>
+              </View>
+              <Text style={[styles.notesText, { color: theme.colors.text, fontFamily: 'Inter-Regular' }]}>
+                {trip.description}
+              </Text>
+            </View>
+          ) : null}
+
           {/* Trip Stats */}
           <View style={styles.statsRow}>
             <StatItem icon="people" label={trip?.status === 'completed' ? "Filled Seats" : "Seats"} value={`${displaySeats}`} theme={theme} />
@@ -1145,6 +1288,7 @@ const styles = StyleSheet.create({
   map: { flex: 1, width: '100%', height: '100%' },
   backBtn: { position: 'absolute', left: 16, width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 4, zIndex: 10 },
   deleteBtn: { position: 'absolute', right: 16, width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 4, zIndex: 10 },
+  shareBtn: { position: 'absolute', width: 40, height: 40, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 4, zIndex: 10 },
   focusBtn: { position: 'absolute', width: 40, height: 40, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 4, zIndex: 10 },
   content: { flex: 1 },
   contentInner: { padding: 20, gap: 16, paddingBottom: 170 },
@@ -1184,5 +1328,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     marginTop: 4,
+  },
+  notesCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+  },
+  notesTitle: {
+    fontSize: 14,
+  },
+  notesText: {
+    fontSize: 13,
+    lineHeight: 19,
   },
 });

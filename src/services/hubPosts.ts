@@ -15,7 +15,7 @@ export async function createHubPost(postData: Omit<HubPost, 'id' | 'created_at'>
 export async function getHubPosts(limit: number = 20, offset: number = 0): Promise<HubPostWithAuthor[]> {
   const { data, error } = await supabase
     .from('hub_posts')
-    .select(`*, author:profiles!hub_posts_author_id_fkey(*)`)
+    .select(`*, author:profiles!hub_posts_author_id_fkey(*), trip:trips(*)`)
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);
   if (error) throw error;
@@ -26,7 +26,7 @@ export async function getHubPosts(limit: number = 20, offset: number = 0): Promi
 export async function getPostsByRoute(routeHash: string): Promise<HubPostWithAuthor[]> {
   const { data, error } = await supabase
     .from('hub_posts')
-    .select(`*, author:profiles!hub_posts_author_id_fkey(*)`)
+    .select(`*, author:profiles!hub_posts_author_id_fkey(*), trip:trips(*)`)
     .eq('route_hash', routeHash)
     .order('created_at', { ascending: false });
   if (error) throw error;

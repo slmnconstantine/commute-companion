@@ -186,11 +186,12 @@ export default function BookRideScreen() {
         // Notify the driver of renewed request
         const { data: tripData } = await supabase
           .from('trips')
-          .select('driver:profiles!driver_id(id, push_token)')
+          .select('driver_id, driver:profiles!driver_id(id, push_token)')
           .eq('id', trip.id)
           .single();
+        const driverId = tripData?.driver_id || (tripData?.driver as any)?.id;
         const pushToken = (tripData?.driver as any)?.push_token;
-        if (pushToken) {
+        if (driverId) {
           const notifTitle = isReservation ? 'Seat Reservation Request' : 'Ride Request Updated';
           const notifBody = isReservation
             ? `${profile.full_name || 'A commuter'} submitted a seat reservation with a GCash receipt!`
@@ -200,7 +201,7 @@ export default function BookRideScreen() {
             notifTitle,
             notifBody,
             { type: 'booking', bookingId: existingBooking.id, tripId: trip.id, is_reservation: isReservation },
-            (tripData?.driver as any)?.id
+            driverId
           );
         }
       } else {
@@ -349,6 +350,21 @@ export default function BookRideScreen() {
             <Ionicons name="time-outline" size={14} /> {formatDepartureTime(trip.departure_time)}
           </Text>
         </View>
+
+        {/* Driver Notes & Preferences */}
+        {trip.description ? (
+          <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+              <Ionicons name="chatbox-ellipses-outline" size={16} color={theme.colors.primary} />
+              <Text style={[styles.cardTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', marginBottom: 0 }]}>
+                Driver's Notes & Preferences
+              </Text>
+            </View>
+            <Text style={{ color: theme.colors.text, fontSize: 13, lineHeight: 19, fontFamily: 'Inter-Regular' }}>
+              {trip.description}
+            </Text>
+          </View>
+        ) : null}
 
         {/* Passenger Live Face Verification Card */}
         <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>

@@ -2,7 +2,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '@/lib/supabase';
-import { AVATAR_BUCKET, DOCUMENTS_BUCKET } from '@/lib/constants';
+import { AVATAR_BUCKET, DOCUMENTS_BUCKET, HUB_POSTS_BUCKET } from '@/lib/constants';
 import { handleServiceError } from '@/utils/errorHelper';
 
 /** Pick an image from the gallery */
@@ -83,3 +83,25 @@ export async function uploadPaymentReceipt(userId: string, base64Data: string, b
   const path = `${userId}/receipt_${bookingId || Date.now()}_${Date.now()}.jpg`;
   return uploadImage(DOCUMENTS_BUCKET, path, base64Data);
 }
+
+/** Upload Community Hub post image */
+export async function uploadHubPostImage(userId: string, base64Data: string): Promise<string | null> {
+  const path = `${userId}/hub_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.jpg`;
+  return uploadImage(HUB_POSTS_BUCKET, path, base64Data);
+}
+
+/** Pick an image for Hub post returning both uri and base64 */
+export async function pickHubImage(): Promise<{ uri: string; base64: string } | null> {
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images'],
+    allowsEditing: true,
+    quality: 0.7,
+    base64: true,
+  });
+  if (result.canceled || !result.assets[0]?.uri || !result.assets[0]?.base64) return null;
+  return {
+    uri: result.assets[0].uri,
+    base64: result.assets[0].base64,
+  };
+}
+

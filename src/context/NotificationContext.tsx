@@ -325,23 +325,25 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     if (!profile?.id) return;
 
-    // 1. Foreground Notification Listener: Trigger custom sliding in-app banner
+    // 1. Foreground Notification Listener: Trigger custom sliding in-app banner for matching recipient
     const foregroundSub = Notifications.addNotificationReceivedListener((notification) => {
       const { title, body, data } = notification.request.content;
       console.log('[PUSH] Received in-app match notification:', title, body, data);
-      
-      // Store in notifications so it persists and appears in Notification Inbox
-      if (profile?.id && title) {
-        createNotification(
-          profile.id,
-          title,
-          body || '',
-          (data as any)?.type ? String((data as any).type) : 'general',
-          data
-        ).then(() => {
-          refreshUnreadCount();
-        }).catch(console.error);
+
+      // Ignore OS system/foreground service notifications
+      if (title === 'Commute Location Visibility Active' || !title) {
+        return;
       }
+
+      // Check recipientId: If this push was targeted to a different user, ignore it completely
+      const targetUserId = (data as any)?.recipientId || (data as any)?.targetUserId;
+      if (targetUserId && targetUserId !== profile.id) {
+        console.log('[PUSH] Suppressed notification meant for different user:', targetUserId, 'current profile:', profile.id);
+        return;
+      }
+
+      // Refresh unread counts from authoritative database records
+      refreshUnreadCount();
 
       const { pushEnabled: push, rideAlerts: ride, chatAlerts: chat } = prefsRef.current;
       if (!push) {
@@ -368,20 +370,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
     // 2. Background Tap Listener: Auto-route to the matching ride page, chatroom, community post, or verification
     const backgroundSub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const { title, body, data } = response.notification.request.content;
+      const { data } = response.notification.request.content;
       console.log('[PUSH] User tapped background notification:', data);
 
-      if (profile?.id && title) {
-        createNotification(
-          profile.id,
-          title,
-          body || '',
-          (data as any)?.type ? String((data as any).type) : 'general',
-          data
-        ).then(() => {
-          refreshUnreadCount();
-        }).catch(console.error);
+      const targetUserId = (data as any)?.recipientId || (data as any)?.targetUserId;
+      if (targetUserId && targetUserId !== profile.id) {
+        console.log('[PUSH] Tapped notification belonged to different user account:', targetUserId);
+        return;
       }
+
+      refreshUnreadCount();
 
       if (data) {
         handleNotificationNavigation(router, data);
@@ -391,49 +389,17 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     // 3. Check if app was opened from a notification while killed
     Notifications.getLastNotificationResponseAsync().then((response) => {
       if (response?.notification?.request?.content) {
-        const { title, body, data } = response.notification.request.content;
-        if (profile?.id && title) {
-          createNotification(
-            profile.id,
-            title,
-            body || '',
-            (data as any)?.type ? String((data as any).type) : 'general',
-            data
-          ).then(() => {
-            refreshUnreadCount();
-          }).catch(console.error);
+        const { data } = response.notification.request.content;
+        const targetUserId = (data as any)?.recipientId || (data as any)?.targetUserId;
+        if (targetUserId && targetUserId !== profile.id) {
+          return;
         }
+        refreshUnreadCount();
       }
     });
 
-    // 4. Ingest any notifications sitting in the OS notification shade
-    const syncPresentedNotifications = async () => {
-      if (!profile?.id) return;
-      try {
-        const presented = await Notifications.getPresentedNotificationsAsync();
-        for (const notif of presented) {
-          const { title, body, data } = notif.request.content;
-          if (title) {
-            await createNotification(
-              profile.id,
-              title,
-              body || '',
-              (data as any)?.type ? String((data as any).type) : 'general',
-              data
-            );
-          }
-        }
-        await refreshUnreadCount();
-      } catch (err) {
-        console.warn('Error syncing presented notifications:', err);
-      }
-    };
-
-    syncPresentedNotifications();
-
     const appStateSub = AppState.addEventListener('change', (nextState: AppStateStatus) => {
       if (nextState === 'active') {
-        syncPresentedNotifications();
         refreshUnreadCount();
       }
     });

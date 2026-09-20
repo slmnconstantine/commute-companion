@@ -39,8 +39,16 @@ import {
   broadcastRouteDisconnect,
   subscribeToRouteLocations,
   subscribeToDriverLocation,
+  fetchActiveRouteMembers,
+  updateRouteLocationDB,
   type RouteLocationPayload,
 } from '@/services/liveTracking';
+import {
+  startBackgroundLocationTracking,
+  stopBackgroundLocationTracking,
+  syncBackgroundLocationSession,
+  getPersistedVisibility,
+} from '@/services/backgroundLocation';
 import { supabase } from '@/lib/supabase';
 import Avatar from '@/components/common/Avatar';
 import RouteLayer from '@/components/common/RouteLayer';
@@ -78,6 +86,23 @@ export default function HomeScreen() {
   const [driverLiveLocation, setDriverLiveLocation] = React.useState<{ latitude: number; longitude: number; timestamp: number } | null>(null);
   const [selectedMemberId, setSelectedMemberId] = React.useState<string | null>(null);
   const [now, setNow] = React.useState(Date.now());
+
+  // Restore persisted route location visibility across app restarts / closes
+  React.useEffect(() => {
+    let isMounted = true;
+    async function restoreVisibility() {
+      if (!profile?.id || !activeRoute?.route_hash) return;
+      const isVisible = await getPersistedVisibility();
+      if (isVisible && isMounted) {
+        setRouteVisible(true);
+        await syncBackgroundLocationSession(profile.id, activeRoute.route_hash);
+      }
+    }
+    restoreVisibility();
+    return () => {
+      isMounted = false;
+    };
+  }, [profile?.id, activeRoute?.route_hash]);
 
   // Pulsing animation for the ongoing trip banner dot
   const bannerPulseAnim = useRef(new Animated.Value(1)).current;
@@ -256,6 +281,18 @@ export default function HomeScreen() {
       return;
     }
 
+    let isMounted = true;
+
+    // Fetch initially active members from the database so users with app in background appear immediately
+    fetchActiveRouteMembers(activeRoute.route_hash).then((initialMembers) => {
+      if (isMounted && initialMembers) {
+        setRouteMembers((prev) => ({
+          ...initialMembers,
+          ...prev,
+        }));
+      }
+    });
+
     const { channel, unsubscribe } = subscribeToRouteLocations(
       activeRoute.route_hash,
       (payload) => {
@@ -279,6 +316,7 @@ export default function HomeScreen() {
     routeChannelRef.current = channel;
 
     return () => {
+      isMounted = false;
       unsubscribe();
       routeChannelRef.current = null;
     };
@@ -313,6 +351,18 @@ export default function HomeScreen() {
               timestamp: loc.timestamp,
             });
           }
+
+          // Persist to database so other members and background tasks stay synchronized
+          if (activeRoute?.route_hash) {
+            updateRouteLocationDB(
+              driverId,
+              activeRoute.route_hash,
+              loc.coords.latitude,
+              loc.coords.longitude,
+              loc.coords.heading,
+              loc.coords.speed
+            );
+          }
         }
       );
     }
@@ -323,42 +373,66 @@ export default function HomeScreen() {
       if (locationSubscription) {
         locationSubscription.remove();
       }
-      if (routeChannelRef.current && profile?.id) {
-        broadcastRouteDisconnect(routeChannelRef.current, profile.id);
-      }
+      // Note: We intentionally do NOT broadcast disconnect here.
+      // Location visibility persists in the background and across navigation
+      // until the user explicitly turns off the visibility toggle!
     };
   }, [routeVisible, activeRoute?.route_hash, profile?.id]);
 
-  // Periodic heartbeat cleanup for stale route members
+  // Periodic heartbeat cleanup for stale route members (15 minutes threshold for background updates)
   React.useEffect(() => {
     const interval = setInterval(() => {
-      const now = Date.now();
+      const currentTime = Date.now();
       setRouteMembers(prev => {
         const copy = { ...prev };
         let changed = false;
         Object.entries(copy).forEach(([userId, member]: [string, any]) => {
-          // If no update for 35 seconds, treat as disconnected
-          if (now - member.lastUpdated > 35000) {
+          const timestamp = member.lastUpdated || member.timestamp || 0;
+          if (currentTime - timestamp > 15 * 60 * 1000) {
             delete copy[userId];
             changed = true;
           }
         });
         return changed ? copy : prev;
       });
-    }, 10000);
+    }, 30000);
 
     return () => clearInterval(interval);
   }, []);
 
-  const toggleRouteVisibility = () => {
+  const toggleRouteVisibility = async () => {
+    if (!profile?.id || !activeRoute?.route_hash) {
+      Alert.alert('Route Required', 'Please set or join a route before sharing your location.');
+      return;
+    }
+
     const next = !routeVisible;
     setRouteVisible(next);
-    Alert.alert(
-      next ? 'Visibility Enabled' : 'Visibility Disabled',
-      next
-        ? 'Your location is now visible to other members commuting on this route.'
-        : 'Your location is no longer shared with this route community.'
-    );
+
+    if (next) {
+      const started = await startBackgroundLocationTracking(profile.id, activeRoute.route_hash);
+      if (!started) {
+        setRouteVisible(false);
+        Alert.alert(
+          'Permission Required',
+          'Location permissions (including background access) are required to keep your location visible.'
+        );
+        return;
+      }
+      Alert.alert(
+        'Visibility Enabled',
+        'Your location is now visible to other members commuting on this route. This persists even when the app is closed as long as device location is turned on.'
+      );
+    } else {
+      await stopBackgroundLocationTracking(profile.id);
+      if (routeChannelRef.current) {
+        broadcastRouteDisconnect(routeChannelRef.current, profile.id);
+      }
+      Alert.alert(
+        'Visibility Disabled',
+        'Your location is no longer shared with this route community.'
+      );
+    }
   };
 
   React.useEffect(() => {
