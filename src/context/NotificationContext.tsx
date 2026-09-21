@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import * as Notifications from 'expo-notifications';
 import * as Haptics from 'expo-haptics';
-import { Alert, Animated, AppState, AppStateStatus } from 'react-native';
+import { Alert, Animated, AppState, AppStateStatus, View, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import NotificationBanner from '@/components/notifications/NotificationBanner';
 import NotificationPopup from '@/components/notifications/NotificationPopup';
@@ -133,19 +133,18 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   };
 
   // Configure Expo Notification Handler dynamically:
-  // In foreground (when using the app), suppress OS push banners/tray so ONLY in-app banners appear.
-  // When outside the app (background/closed), OS will natively display the push notification.
+  // Allow OS push banners and sounds when enabled, while in-app banners provide rich interactive actions.
   useEffect(() => {
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
-        shouldShowAlert: false,
-        shouldShowBanner: false,
-        shouldShowList: false,
-        shouldPlaySound: false,
+        shouldShowAlert: pushEnabled,
+        shouldShowBanner: pushEnabled,
+        shouldShowList: pushEnabled,
+        shouldPlaySound: soundEnabled,
         shouldSetBadge: pushEnabled,
       }),
     });
-  }, [pushEnabled]);
+  }, [pushEnabled, soundEnabled]);
 
   const showInAppNotification = (title: string, body: string, data?: any) => {
     // Also enforce preferences for programmatically shown alerts
@@ -212,9 +211,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     let anim: Animated.CompositeAnimation | null = null;
     if (activeNotification) {
-      // Slide down with bouncy spring
+      // Slide down with bouncy spring to top position
       anim = Animated.spring(slideAnim, {
-        toValue: 60, // position from top
+        toValue: 0, // In-place position
         useNativeDriver: true,
         tension: 50,
         friction: 7,
@@ -499,16 +498,18 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       }}
     >
       {children}
-      <NotificationBanner 
-        activeNotification={activeNotification}
-        slideAnim={slideAnim}
-        handleDismiss={handleDismiss}
-      />
-      <NotificationPopup 
-        centerPopupNotification={centerPopupNotification}
-        popupScaleAnim={popupScaleAnim}
-        handleDismissPopup={handleDismissPopup}
-      />
+      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+        <NotificationBanner 
+          activeNotification={activeNotification}
+          slideAnim={slideAnim}
+          handleDismiss={handleDismiss}
+        />
+        <NotificationPopup 
+          centerPopupNotification={centerPopupNotification}
+          popupScaleAnim={popupScaleAnim}
+          handleDismissPopup={handleDismissPopup}
+        />
+      </View>
     </NotificationContext.Provider>
   );
 }

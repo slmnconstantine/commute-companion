@@ -8,9 +8,11 @@ import { createPost, deleteAllUserPosts } from '@/services/hub';
 import { getTripBookings, updateBookingStatus } from '@/services/bookings';
 import { getTripById } from '@/services/trips';
 import { resolveStatusTag } from '@/utils/statusTag';
+import { useRoute } from '@/context/RouteContext';
 
 export function useCommandExecutor() {
   const router = useRouter();
+  const { activeRoute } = useRoute();
 
   const handleNavigate = (cmd: AssistantCommand) => {
     const screen = (cmd.params.screen || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
@@ -144,25 +146,28 @@ export function useCommandExecutor() {
   };
 
   const handleDraftCommunityPost = async (cmd: AssistantCommand, currentContext: any, profile: any) => {
-    const route = currentContext?.activeRoute;
+    const route = currentContext?.activeRoute || activeRoute;
     if (route && profile?.id) {
       const statusTag = resolveStatusTag(cmd.params.status_tag || cmd.params.tag, cmd.params.message);
+      const originLabel = (route.origin_label || 'Current Location').split(',')[0];
       await createPost(
         profile.id,
         route.route_hash,
         statusTag,
         cmd.params.message,
-        route.origin_lat,
-        route.origin_lng,
-        route.origin_label.split(',')[0]
+        route.origin_lat || 0,
+        route.origin_lng || 0,
+        originLabel
       );
       DeviceEventEmitter.emit('refresh_data');
       router.push('/(main)/(tabs)/community');
+    } else {
+      console.warn('Could not post to community: missing route or profile', { hasRoute: !!route, hasProfile: !!profile?.id });
     }
   };
 
   const handleDeletePosts = async (currentContext: any, profile: any) => {
-    const route = currentContext?.activeRoute;
+    const route = currentContext?.activeRoute || activeRoute;
     if (profile?.id) {
       await deleteAllUserPosts(profile.id, route?.route_hash);
       DeviceEventEmitter.emit('refresh_data');

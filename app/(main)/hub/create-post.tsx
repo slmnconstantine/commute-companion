@@ -1,22 +1,13 @@
 import React, { useState, useRef } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  Alert,
-  Animated,
-  KeyboardAvoidingView,
-  Platform,
-  Image,
+  View, Text, TextInput, StyleSheet, ScrollView, Pressable, Alert, Animated, Platform, Image, KeyboardAvoidingView, DeviceEventEmitter,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
+import { useRoute } from '@/context/RouteContext';
 import { useLocation } from '@/hooks/useLocation';
 import { createPost } from '@/services/hub';
 import { uploadHubPostImage, pickHubImage } from '@/services/storage';
@@ -32,6 +23,7 @@ export default function CreatePostScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { profile } = useAuth();
+  const { activeRoute } = useRoute();
   const { location, address } = useLocation();
 
   const [message, setMessage] = useState(initialMessage || '');
@@ -70,7 +62,7 @@ export default function CreatePostScreen() {
         }
       }
 
-      const targetRouteHash = paramRouteHash || (location ? `${location.latitude.toFixed(2)}_${location.longitude.toFixed(2)}` : 'default_route');
+      const targetRouteHash = paramRouteHash || activeRoute?.route_hash || (location ? `${location.latitude.toFixed(2)}_${location.longitude.toFixed(2)}` : 'default_route');
 
       await createPost(
         profile.id,
@@ -83,6 +75,8 @@ export default function CreatePostScreen() {
         uploadedUrls.length > 0 ? uploadedUrls : undefined,
         tripId || undefined
       );
+
+      DeviceEventEmitter.emit('refresh_data');
 
       Alert.alert('Posted!', 'Your update has been shared with the community.', [
         { text: 'OK', onPress: () => router.back() },

@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 
 import { handleNotificationNavigation } from '@/utils/notificationRouter';
@@ -22,6 +23,7 @@ interface NotificationBannerProps {
 export default function NotificationBanner({ activeNotification, slideAnim, handleDismiss }: NotificationBannerProps) {
   const { theme, mode } = useTheme();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const iconPulse = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -134,6 +136,7 @@ export default function NotificationBanner({ activeNotification, slideAnim, hand
       style={[
         styles.bannerContainer,
         {
+          top: Math.max(insets.top, 16) + 8,
           transform: [{ translateY: slideAnim }],
           opacity: fadeAnim,
           shadowColor: iconConfig.color,

@@ -7,10 +7,10 @@ import { handleServiceError } from '@/utils/errorHelper';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: false,
-    shouldShowBanner: false,
-    shouldShowList: false, // Suppress OS notification shade/list while app is in foreground
-    shouldPlaySound: false, // Suppress OS sound while app is in foreground
+    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
     shouldSetBadge: true,
   }),
 });
