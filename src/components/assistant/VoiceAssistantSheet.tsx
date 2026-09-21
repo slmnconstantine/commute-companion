@@ -119,7 +119,7 @@ const STATE_CONFIG: Record<string, { label: string; icon: string; color?: string
 
 export default function VoiceAssistantSheet() {
   const { theme, mode } = useTheme();
-  const { state, conversation, stopRecording, cancel, confirmAction, processTextInput, startRecording } = useVoiceAssistant();
+  const { state, conversation, command, stopRecording, cancel, cancelAction, confirmAction, processTextInput, startRecording } = useVoiceAssistant();
 
   const [inputValue, setInputValue] = useState('');
   const slideAnim = useSharedValue(650);
@@ -361,13 +361,52 @@ export default function VoiceAssistantSheet() {
               </View>
             )}
 
-            {/* Confirming state */}
-            {state === 'confirming' && (
+            {/* Confirming state or Pending Confirmation Action */}
+            {(state === 'confirming' || (command && command.requiresConfirmation && state !== 'executing')) && (
               <View style={styles.confirmContainer}>
+                {command && (
+                  <View style={[
+                    styles.actionPreviewCard,
+                    {
+                      backgroundColor: theme.colors.surface,
+                      borderColor: `${theme.colors.primary}30`
+                    }
+                  ]}>
+                    <View style={styles.actionPreviewHeader}>
+                      <View style={[styles.actionBadge, { backgroundColor: `${theme.colors.primary}18` }]}>
+                        <Ionicons
+                          name={command.type === 'DELETE_POSTS' ? 'trash-outline' : command.type === 'DRAFT_MESSAGE' ? 'mail-outline' : command.type === 'PREPARE_BOOKING' ? 'car-outline' : 'chatbubbles-outline'}
+                          size={12}
+                          color={theme.colors.primary}
+                        />
+                        <Text style={[styles.actionBadgeText, { color: theme.colors.primary, fontFamily: 'Inter-Bold' }]}>
+                          {command.type === 'DRAFT_COMMUNITY_POST'
+                            ? `COMMUNITY POST • ${(command.params.status_tag || 'update').toUpperCase()}`
+                            : command.type === 'DELETE_POSTS'
+                            ? 'DELETE POSTS'
+                            : command.type === 'DRAFT_MESSAGE'
+                            ? 'SEND MESSAGE'
+                            : 'ACTION REQUIRED'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {command.params?.message ? (
+                      <Text style={[styles.actionPreviewBody, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]}>
+                        "{command.params.message}"
+                      </Text>
+                    ) : command.type === 'DELETE_POSTS' ? (
+                      <Text style={[styles.actionPreviewBody, { color: theme.colors.text, fontFamily: 'Inter-Medium' }]}>
+                        Delete your community posts on this route
+                      </Text>
+                    ) : null}
+                  </View>
+                )}
+
                 <View style={[styles.confirmHintPill, { backgroundColor: `${theme.colors.primary}12` }]}>
-                  <Ionicons name="mic" size={14} color={theme.colors.primary} />
+                  <Ionicons name="sparkles" size={14} color={theme.colors.primary} />
                   <Text style={[styles.confirmHintText, { color: theme.colors.primary, fontFamily: 'Inter-Medium' }]}>
-                    Listening for "yes" or "no"…
+                    Tap Confirm or reply "yes"
                   </Text>
                 </View>
                 <View style={styles.confirmRow}>
@@ -377,7 +416,7 @@ export default function VoiceAssistantSheet() {
                       styles.cancelBtn,
                       { borderColor: theme.colors.border, opacity: pressed ? 0.7 : 1 },
                     ]}
-                    onPress={() => handleSpringClose()}
+                    onPress={cancelAction}
                   >
                     <Ionicons name="close-circle-outline" size={18} color={theme.colors.textMuted} />
                     <Text style={[styles.confirmBtnText, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>Cancel</Text>
@@ -405,11 +444,11 @@ export default function VoiceAssistantSheet() {
           </ScrollView>
 
           {/* Text input fallback and mic button */}
-          {isVisible && state !== 'recording' && state !== 'confirming' && (
+          {isVisible && state !== 'recording' && (
             <View style={[styles.inputContainer, { borderTopColor: `${theme.colors.border}` }]}>
               <View style={styles.inputActionRow}>
                 <Pressable
-                  onPress={() => startRecording({}, true)}
+                  onPress={() => startRecording(undefined, true)}
                   style={({ pressed }) => [
                     styles.miniMicBtn,
                     { backgroundColor: `${theme.colors.primary}15`, opacity: pressed ? 0.7 : 1 }
@@ -597,8 +636,36 @@ const styles = StyleSheet.create({
   confirmContainer: {
     alignItems: 'center',
     width: '100%',
-    gap: 14,
-    paddingVertical: 10,
+    gap: 12,
+    paddingVertical: 8,
+  },
+  actionPreviewCard: {
+    width: '100%',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    gap: 8,
+  },
+  actionPreviewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  actionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  actionBadgeText: {
+    fontSize: 11,
+    letterSpacing: 0.5,
+  },
+  actionPreviewBody: {
+    fontSize: 14,
+    lineHeight: 20,
   },
   confirmHintPill: {
     flexDirection: 'row',

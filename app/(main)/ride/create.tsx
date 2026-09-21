@@ -9,6 +9,7 @@ import { Map, Camera, RasterSource, Layer, GeoJSONSource, Marker, type CameraRef
 import { safeCamera } from '@/utils/safeCamera';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
+import { useRoute } from '@/context/RouteContext';
 import { useLocation } from '@/hooks/useLocation';
 import { DEFAULT_DELTA, MAP_STYLE_LIGHT, MAP_STYLE_DARK } from '@/lib/constants';
 import { getRoute } from '@/services/routing';
@@ -47,6 +48,7 @@ export default function CreateRideScreen() {
   const insets = useSafeAreaInsets();
   const { theme, mode } = useTheme();
   const { profile } = useAuth();
+  const { activeRoute } = useRoute();
   const { location, loading: locationLoading } = useLocation();
 
   const [step, setStep] = useState(1); // 1: route, 2: details, 3: confirm
@@ -452,12 +454,13 @@ export default function CreateRideScreen() {
             text: 'Share to Hub',
             onPress: () => {
               const defaultMsg = `🚗 I'm driving from ${origin.label.split(',')[0]} to ${destination.label.split(',')[0]}! ${availableSeats} seat${availableSeats === 1 ? '' : 's'} available (${finalFarePerSeat === 0 ? 'Free' : formatCurrency(finalFarePerSeat)}/seat). Click below to join my ride!`;
-              const routeHash = generateRouteHash(origin.lat, origin.lng, destination.lat, destination.lng);
+              const tripRouteHash = generateRouteHash(origin.lat, origin.lng, destination.lat, destination.lng);
+              const targetRouteHash = activeRoute?.route_hash || tripRouteHash;
               router.replace({
                 pathname: '/(main)/hub/create-post',
                 params: {
                   tripId: data?.id,
-                  routeHash,
+                  routeHash: targetRouteHash,
                   initialMessage: defaultMsg,
                 },
               });

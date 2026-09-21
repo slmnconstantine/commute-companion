@@ -39,6 +39,7 @@ import ETAOverlay from '@/components/ride/ETAOverlay';
 import SOSButton from '@/components/ride/SOSButton';
 import { recordCancellation, getCancellationWarning } from '@/utils/cancellationTracker';
 import { useLocation } from '@/hooks/useLocation';
+import { useRoute } from '@/context/RouteContext';
 
 // Haversine formula to calculate distance in km
 const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -61,6 +62,7 @@ export default function TripDetailScreen() {
   const { theme, mode } = useTheme();
   const { profile } = useAuth();
   const { location } = useLocation();
+  const { activeRoute } = useRoute();
 
   const [trip, setTrip] = useState<TripWithDriver | null>(null);
   const [loading, setLoading] = useState(true);
@@ -723,7 +725,8 @@ export default function TripDetailScreen() {
     if (!trip || !profile?.id) return;
 
     const defaultMsg = `🚗 I'm driving from ${trip.origin_label.split(',')[0]} to ${trip.destination_label.split(',')[0]}! ${trip.available_seats} seat${trip.available_seats === 1 ? '' : 's'} available (${trip.fare_per_seat === 0 ? 'Free' : formatCurrency(trip.fare_per_seat)}/seat). Click below to join my ride!`;
-    const routeHash = generateRouteHash(trip.origin_lat, trip.origin_lng, trip.destination_lat, trip.destination_lng);
+    const tripRouteHash = generateRouteHash(trip.origin_lat, trip.origin_lng, trip.destination_lat, trip.destination_lng);
+    const targetRouteHash = activeRoute?.route_hash || tripRouteHash;
 
     Alert.alert(
       'Share Ride to Community',
@@ -737,7 +740,7 @@ export default function TripDetailScreen() {
               pathname: '/(main)/hub/create-post',
               params: {
                 tripId: trip.id,
-                routeHash,
+                routeHash: targetRouteHash,
                 initialMessage: defaultMsg,
               },
             });
@@ -749,7 +752,7 @@ export default function TripDetailScreen() {
             try {
               await createPost(
                 profile.id,
-                routeHash,
+                targetRouteHash,
                 'ride',
                 defaultMsg,
                 trip.origin_lat,
@@ -758,6 +761,7 @@ export default function TripDetailScreen() {
                 undefined,
                 trip.id
               );
+              DeviceEventEmitter.emit('refresh_data');
               Alert.alert(
                 'Ride Shared!',
                 'Your ride has been posted to the Route Community Hub. Commuters can now see and join it!',

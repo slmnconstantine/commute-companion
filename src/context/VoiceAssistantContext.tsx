@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode, useCallback, useRef, useEffect } from 'react';
 import * as Speech from 'expo-speech';
 import { useAuth } from './AuthContext';
+import { useRoute } from './RouteContext';
 import { AssistantState, AssistantCommand, VoiceMessage } from '@/types/voice';
 import { useVoiceRecorder } from '@/hooks/voice/useVoiceRecorder';
 import { useCommandParser } from '@/hooks/voice/useCommandParser';
@@ -12,9 +13,10 @@ interface VoiceAssistantContextValue {
   spokenReply: string;
   conversation: VoiceMessage[];
   command: AssistantCommand | null;
-  startRecording: (contextData: any, preserveCommand?: boolean, isConfirming?: boolean) => Promise<void>;
+  startRecording: (contextData?: any, preserveCommand?: boolean, isConfirming?: boolean) => Promise<void>;
   stopRecording: () => Promise<void>;
   cancel: () => void;
+  cancelAction: () => void;
   confirmAction: () => Promise<void>;
   clearConversation: () => void;
   processTextInput: (text: string, contextData?: any) => Promise<void>;
@@ -31,6 +33,7 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
   const [currentContext, setCurrentContext] = useState<any>(null);
 
   const { profile } = useAuth();
+  const { activeRoute } = useRoute();
   
   // Custom Hooks
   const { startAudioRecording, stopAudioAndTranscribe, cancelRecording } = useVoiceRecorder();
@@ -46,16 +49,22 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
   useEffect(() => { commandRef.current = command; }, [command]);
   useEffect(() => { currentContextRef.current = currentContext; }, [currentContext]);
 
-  const startRecording = useCallback(async (contextData: any, preserveCommand: boolean = false, isConfirming: boolean = false) => {
+  const startRecording = useCallback(async (contextData?: any, preserveCommand: boolean = false, isConfirming: boolean = false) => {
     try {
-      Speech.stop();
+      try { Speech.stop(); } catch {}
       if (!preserveCommand) {
         setCommand(null);
         setConversation([]);
       }
       setTranscript('');
       setSpokenReply('');
-      setCurrentContext(contextData);
+      
+      const mergedContext = {
+        ...(currentContextRef.current || {}),
+        activeRoute: currentContextRef.current?.activeRoute || activeRoute,
+        ...(contextData || {})
+      };
+      setCurrentContext(mergedContext);
 
       await startAudioRecording();
       setState(isConfirming ? 'confirming' : 'recording');
@@ -65,25 +74,67 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
       setSpokenReply(e.message || 'Could not start microphone');
       setTimeout(() => {
         setState('idle');
-        setConversation([]);
+        if (!preserveCommand) setConversation([]);
       }, 3000);
     }
-  }, [startAudioRecording]);
+  }, [startAudioRecording, activeRoute]);
 
   const stopRecordingRef = useRef<(() => Promise<void>) | null>(null);
 
-  const startConfirmationLoop: (cmd: AssistantCommand, contextData: any) => Promise<void> = useCallback(async (cmd, contextData) => {
+  const handleExecution = useCallback(async (cmd: AssistantCommand) => {
+    setState('executing');
+    try {
+      const execContext = {
+        ...(currentContextRef.current || {}),
+        activeRoute: currentContextRef.current?.activeRoute || activeRoute,
+      };
+      await executeCommand(cmd, execContext, profile);
+      setTimeout(() => {
+        setState('idle');
+        setCommand(null);
+      }, 1000);
+    } catch (e) {
+      console.error('Execution Error:', e);
+      setState('error');
+      setTimeout(() => {
+        setState('idle');
+      }, 2000);
+    }
+  }, [executeCommand, profile, activeRoute]);
+
+  const cancelAction = useCallback(() => {
+    cancelRecording();
+    try { Speech.stop(); } catch {}
+    setCommand(null);
+    setState('idle');
+    setSpokenReply('Action cancelled.');
+    setConversation(prev => [
+      ...prev,
+      { id: Date.now().toString(), role: 'assistant', text: 'Action cancelled.' }
+    ]);
+  }, [cancelRecording]);
+
+  const confirmAction = useCallback(async () => {
+    const activeCmd = commandRef.current;
+    if (!activeCmd) return;
+    cancelRecording();
+    try { Speech.stop(); } catch {}
+    setSpokenReply('Executing now…');
+    await handleExecution(activeCmd);
+  }, [cancelRecording, handleExecution]);
+
+  const startConfirmationLoop = useCallback(async (cmd: AssistantCommand, contextData: any) => {
     setState('confirming');
     
     try {
-      // Small delay to let TTS audio fully release focus before mic starts
-      await new Promise(resolve => setTimeout(resolve, 600));
+      // Small delay to let initial TTS start before listening
+      await new Promise(resolve => setTimeout(resolve, 800));
       if (stateRef.current !== 'confirming') return;
       
       await startRecording(contextData, true, true);
       
-      // Keep recording open for a short window
-      await new Promise(resolve => setTimeout(resolve, 3500));
+      // Listen for voice response
+      await new Promise(resolve => setTimeout(resolve, 4000));
       
       if (stateRef.current === 'confirming') {
         if (stopRecordingRef.current) {
@@ -91,10 +142,46 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
         }
       }
     } catch (err) {
-      console.error('Error starting auto-confirmation recording:', err);
-      setState('idle');
+      console.warn('Confirmation audio listening error (fallback to UI buttons):', err);
+      // Keep state as confirming so user can tap Confirm/Cancel button
+      if (commandRef.current?.requiresConfirmation) {
+        setState('confirming');
+      }
     }
   }, [startRecording]);
+
+  const handleParsedCommand = useCallback((result: AssistantCommand, text: string, context: any, fromVoice: boolean = false) => {
+    const replyText = result.spokenReply || "I'm here to help with your commute.";
+    setSpokenReply(replyText);
+    setCommand(result);
+    setConversation(prev => [
+      ...prev,
+      { id: Date.now().toString(), role: 'user', text },
+      { id: (Date.now() + 1).toString(), role: 'assistant', text: replyText }
+    ]);
+
+    // Speak response non-blockingly (never hang state on Android TTS onDone)
+    try {
+      Speech.speak(replyText, {
+        onError: (err) => console.warn('Speech TTS error:', err)
+      });
+    } catch (speechErr) {
+      console.warn('Failed to invoke Speech.speak:', speechErr);
+    }
+
+    if (result.requiresConfirmation) {
+      // Immediately set state to confirming so confirmation card & buttons show up right away
+      setState('confirming');
+      if (fromVoice) {
+        startConfirmationLoop(result, context);
+      }
+    } else if (result.type !== 'NOOP' && result.type !== 'CLARIFY') {
+      // Non-confirming actions execute immediately without blocking on TTS
+      handleExecution(result);
+    } else {
+      setState('idle');
+    }
+  }, [startConfirmationLoop, handleExecution]);
 
   const stopRecording: () => Promise<void> = useCallback(async () => {
     const currentState = stateRef.current;
@@ -107,9 +194,9 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
       console.log('Voice Assistant Transcribed text:', textTranscript);
 
       // If we were in the confirmation loop
-      if (currentState === 'confirming' && commandRef.current) {
+      if ((currentState === 'confirming' || stateRef.current === 'confirming') && commandRef.current) {
         const t = textTranscript.toLowerCase().trim();
-        const isYes = /\b(yes|yeah|yep|sure|ok|proceed|confirm|do it)\b/i.test(t);
+        const isYes = /\b(yes|yeah|yep|sure|ok|okay|proceed|confirm|do it|post it|send it|delete it|accept)\b/i.test(t);
         const isNo = /\b(no|cancel|stop|nevermind|dont|don't)\b/i.test(t);
         const activeCommand = commandRef.current;
 
@@ -120,7 +207,8 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
             { id: Date.now().toString(), role: 'user', text: textTranscript }, 
             { id: (Date.now() + 1).toString(), role: 'assistant', text: 'Okay, executing now.' }
           ]);
-          Speech.speak('Okay, executing now.', { onDone: () => { handleExecution(activeCommand); } });
+          try { Speech.speak('Okay, executing now.'); } catch {}
+          await handleExecution(activeCommand);
         } else if (isNo) {
           setSpokenReply('Action cancelled.');
           setConversation(prev => [
@@ -128,16 +216,20 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
             { id: Date.now().toString(), role: 'user', text: textTranscript }, 
             { id: (Date.now() + 1).toString(), role: 'assistant', text: 'Action cancelled.' }
           ]);
-          Speech.speak('Action cancelled.', { onDone: () => { cancel(); } });
-        } else {
-          setSpokenReply("I didn't catch a clear yes or no. You can tap confirm or cancel.");
+          try { Speech.speak('Action cancelled.'); } catch {}
+          cancelAction();
+        } else if (textTranscript.trim().length > 0) {
+          setSpokenReply("I didn't catch a clear yes or no. You can tap Confirm or Cancel.");
           setConversation(prev => [
             ...prev, 
             { id: Date.now().toString(), role: 'user', text: textTranscript }, 
-            { id: (Date.now() + 1).toString(), role: 'assistant', text: "I didn't catch a clear yes or no. You can tap confirm or cancel." }
+            { id: (Date.now() + 1).toString(), role: 'assistant', text: "I didn't catch a clear yes or no. You can tap Confirm or Cancel." }
           ]);
           setState('confirming');
-          Speech.speak("I didn't catch a clear yes or no. You can tap confirm or cancel.");
+          try { Speech.speak("I didn't catch a clear yes or no. You can tap Confirm or Cancel."); } catch {}
+        } else {
+          // Empty audio / silence: remain in confirming so user can tap buttons or type
+          setState('confirming');
         }
         return;
       }
@@ -145,107 +237,88 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
       setTranscript(textTranscript);
       
       const result = await parseCommand(textTranscript, currentContextRef.current, profile);
-      handleParsedCommand(result, textTranscript, currentContextRef.current);
+      handleParsedCommand(result, textTranscript, currentContextRef.current, true);
     } catch (e: any) {
       console.error('Voice Assistant Error:', e);
       setState('error');
       setSpokenReply('Sorry, there was an error processing your command.');
       setConversation(prev => [...prev, { id: Date.now().toString(), role: 'assistant', text: 'Sorry, there was an error processing your command.' }]);
-      Speech.speak('Sorry, there was an error processing your command.', {
-        onDone: () => {
-          setState('idle');
-          setConversation([]);
-        }
-      });
+      try {
+        Speech.speak('Sorry, there was an error processing your command.');
+      } catch {}
+      setTimeout(() => {
+        setState('idle');
+        setConversation([]);
+      }, 3000);
     }
-  }, [stopAudioAndTranscribe, parseCommand, profile]);
+  }, [stopAudioAndTranscribe, parseCommand, profile, handleParsedCommand, handleExecution, cancelAction]);
 
   useEffect(() => {
     stopRecordingRef.current = stopRecording;
   }, [stopRecording]);
 
   const processTextInput = useCallback(async (text: string, contextData?: any) => {
-    const activeContext = contextData || currentContextRef.current;
-    try {
-      Speech.stop();
-      setCommand(null);
-      setTranscript(text);
-      setSpokenReply('');
-      if (contextData) {
-        setCurrentContext(contextData);
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    const activeContext = {
+      ...(currentContextRef.current || {}),
+      activeRoute: currentContextRef.current?.activeRoute || activeRoute,
+      ...(contextData || {})
+    };
+
+    // Check if there is an active command awaiting confirmation
+    if (commandRef.current && (stateRef.current === 'confirming' || commandRef.current.requiresConfirmation)) {
+      const isAffirmative = /^(yes|yeah|yep|sure|ok|okay|proceed|confirm|do it|post it|send it|delete it|accept)\b/i.test(trimmed);
+      const isNegative = /^(no|cancel|stop|nevermind|dont|don't)\b/i.test(trimmed);
+
+      if (isAffirmative) {
+        try { Speech.stop(); } catch {}
+        setConversation(prev => [
+          ...prev,
+          { id: Date.now().toString(), role: 'user', text: trimmed },
+          { id: (Date.now() + 1).toString(), role: 'assistant', text: 'Confirmed. Executing now…' }
+        ]);
+        await confirmAction();
+        return;
+      } else if (isNegative) {
+        try { Speech.stop(); } catch {}
+        setConversation(prev => [
+          ...prev,
+          { id: Date.now().toString(), role: 'user', text: trimmed }
+        ]);
+        cancelAction();
+        return;
       }
+    }
+
+    try {
+      try { Speech.stop(); } catch {}
+      setCommand(null);
+      setTranscript(trimmed);
+      setSpokenReply('');
+      setCurrentContext(activeContext);
       setState('thinking');
 
-      const result = await parseCommand(text, activeContext, profile);
-      handleParsedCommand(result, text, activeContext);
+      const result = await parseCommand(trimmed, activeContext, profile);
+      handleParsedCommand(result, trimmed, activeContext, false);
 
     } catch (e: any) {
       console.error('Text Command Input Error:', e);
       setState('error');
-      setSpokenReply('Sorry, I couldn\'t process that command.');
-      Speech.speak('Sorry, I couldn\'t process that command.', {
-        onDone: () => {
-          setState('idle');
-        }
-      });
-    }
-  }, [parseCommand, profile, startConfirmationLoop]);
-
-  const handleParsedCommand = (result: AssistantCommand, text: string, context: any) => {
-    const replyText = result.spokenReply || "I'm here to help with your commute.";
-    setSpokenReply(replyText);
-    setCommand(result);
-    setConversation(prev => [
-      ...prev,
-      { id: Date.now().toString(), role: 'user', text },
-      { id: (Date.now() + 1).toString(), role: 'assistant', text: replyText }
-    ]);
-
-    const onSpeechFinished = () => {
-      if (result.requiresConfirmation) {
-        startConfirmationLoop(result, context);
-      } else if (result.type !== 'NOOP' && result.type !== 'CLARIFY') {
-        handleExecution(result);
-      } else {
-        setState('idle');
-      }
-    };
-
-    setState('speaking');
-    try {
-      Speech.speak(replyText, {
-        onDone: onSpeechFinished,
-        onError: (err) => {
-          console.warn('Speech TTS error:', err);
-          onSpeechFinished();
-        }
-      });
-    } catch (speechErr) {
-      console.warn('Failed to invoke Speech.speak:', speechErr);
-      onSpeechFinished();
-    }
-  };
-
-  const handleExecution = async (cmd: AssistantCommand) => {
-    setState('executing');
-    try {
-      await executeCommand(cmd, currentContextRef.current, profile);
-      setTimeout(() => {
-        setState('idle');
-        setCommand(null);
-      }, 1000);
-    } catch (e) {
-      console.error('Execution Error:', e);
-      setState('error');
+      setSpokenReply("Sorry, I couldn't process that command.");
+      try {
+        Speech.speak("Sorry, I couldn't process that command.");
+      } catch {}
       setTimeout(() => {
         setState('idle');
       }, 2000);
     }
-  };
+  }, [parseCommand, profile, activeRoute, handleParsedCommand, confirmAction, cancelAction]);
 
   const cancel = useCallback(() => {
     cancelRecording();
-    Speech.stop();
+    try { Speech.stop(); } catch {}
     setState('idle');
     setCommand(null);
     setTranscript('');
@@ -257,12 +330,6 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
     setConversation([]);
   }, []);
 
-  const confirmAction = useCallback(async () => {
-    if (stateRef.current !== 'confirming' || !commandRef.current) return;
-    cancelRecording();
-    handleExecution(commandRef.current);
-  }, [cancelRecording]);
-
   return (
     <VoiceAssistantContext.Provider value={{
       state,
@@ -273,6 +340,7 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
       startRecording,
       stopRecording,
       cancel,
+      cancelAction,
       confirmAction,
       clearConversation,
       processTextInput

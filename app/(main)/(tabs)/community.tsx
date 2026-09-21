@@ -47,46 +47,52 @@ import {
   subscribeToComments,
 } from '@/services/hub';
 import { uploadHubPostImage, pickHubImage } from '@/services/storage';
-import { HubPostWithAuthor, PostCommentWithAuthor } from '@/types/database';
+import { HubPostWithAuthor, PostCommentWithAuthor, Route } from '@/types/database';
 import HubPostCard, { STATUS_CONFIG } from '@/components/community/HubPostCard';
 import ProfileCardModal from '@/components/common/ProfileCardModal';
 import ImageViewerModal from '@/components/community/ImageViewerModal';
 import ReportPostModal from '@/components/community/ReportPostModal';
 import { HubReactionType } from '@/lib/constants';
 import { supabase } from '@/lib/supabase';
+import { isJsonLabel } from '@/utils/routeHash';
 
 // ── Route Banner ──────────────────────────────────────────────────────────────
 
-function RouteBanner({ theme, activeRoute }: { theme: any; activeRoute: any }) {
+function RouteBanner({ theme, activeRoute, onPress, hasMultipleRoutes }: { theme: any; activeRoute: any; onPress?: () => void; hasMultipleRoutes?: boolean }) {
   return (
-    <LinearGradient
-      colors={[`${theme.colors.primary}25`, `${theme.colors.primary}05`]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={[styles.routeBanner, { borderColor: `${theme.colors.primary}30` }]}
-    >
-      <View style={styles.routeBannerRoute}>
-        <View style={styles.routeBannerDots}>
-          <View style={[styles.routeBannerDotGreen, { backgroundColor: theme.colors.success }]} />
-          <View style={[styles.routeBannerLine, { backgroundColor: theme.colors.primarySubtle }]} />
-          <View style={[styles.routeBannerDotRed, { backgroundColor: theme.colors.error }]} />
+    <Pressable onPress={onPress} disabled={!onPress} style={({ pressed }) => [{ width: '100%', opacity: pressed && onPress ? 0.85 : 1 }]}>
+      <LinearGradient
+        colors={[`${theme.colors.primary}25`, `${theme.colors.primary}05`]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.routeBanner, { borderColor: `${theme.colors.primary}30` }]}
+      >
+        <View style={styles.routeBannerRoute}>
+          <View style={styles.routeBannerDots}>
+            <View style={[styles.routeBannerDotGreen, { backgroundColor: theme.colors.success }]} />
+            <View style={[styles.routeBannerLine, { backgroundColor: theme.colors.primarySubtle }]} />
+            <View style={[styles.routeBannerDotRed, { backgroundColor: theme.colors.error }]} />
+          </View>
+          <View style={styles.routeBannerLabels}>
+            <Text style={[theme.typography.caption, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]} numberOfLines={1}>
+              {activeRoute.origin_label.split(',')[0]}
+            </Text>
+            <Text style={[theme.typography.caption, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]} numberOfLines={1}>
+              {activeRoute.destination_label.split(',')[0]}
+            </Text>
+          </View>
         </View>
-        <View style={styles.routeBannerLabels}>
-          <Text style={[theme.typography.caption, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]} numberOfLines={1}>
-            {activeRoute.origin_label.split(',')[0]}
+        <View style={styles.routeBannerMeta}>
+          <Ionicons name="people" size={16} color={theme.colors.primary} />
+          <Text style={[theme.typography.small, { color: theme.colors.primary, fontFamily: 'Inter-SemiBold', marginLeft: 6 }]}>
+            Route Community
           </Text>
-          <Text style={[theme.typography.caption, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]} numberOfLines={1}>
-            {activeRoute.destination_label.split(',')[0]}
-          </Text>
+          {hasMultipleRoutes && (
+            <Ionicons name="swap-horizontal" size={14} color={theme.colors.primary} style={{ marginLeft: 6 }} />
+          )}
         </View>
-      </View>
-      <View style={styles.routeBannerMeta}>
-        <Ionicons name="people" size={16} color={theme.colors.primary} />
-        <Text style={[theme.typography.small, { color: theme.colors.primary, fontFamily: 'Inter-SemiBold', marginLeft: 6 }]}>
-          Route Community
-        </Text>
-      </View>
-    </LinearGradient>
+      </LinearGradient>
+    </Pressable>
   );
 }
 
@@ -116,12 +122,13 @@ function formatCommentTime(dateStr: string) {
 
 export default function CommunityScreen() {
   const { theme } = useTheme();
-  const { activeRoute } = useRoute();
+  const { activeRoute, recentRoutes, setActiveRoute } = useRoute();
   const { profile } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { mention, postId } = useLocalSearchParams<{ mention?: string; postId?: string }>();
 
+  const [routeModalVisible, setRouteModalVisible] = useState(false);
   const [posts, setPosts] = useState<HubPostWithAuthor[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -258,6 +265,16 @@ export default function CommunityScreen() {
   useEffect(() => {
     loadPosts(true);
   }, [selectedFilterTag, activeRoute?.route_hash]);
+
+  // Listen for cross-screen updates (e.g. sharing ride, creating post from other screens)
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('refresh_data', () => {
+      loadPosts(true);
+    });
+    return () => {
+      sub.remove();
+    };
+  }, [loadPosts]);
 
   // Refetch when tab is brought to foreground / focused
   useFocusEffect(
@@ -731,7 +748,12 @@ export default function CommunityScreen() {
         </View>
       ) : (
         <>
-          <RouteBanner theme={theme} activeRoute={activeRoute} />
+          <RouteBanner
+            theme={theme}
+            activeRoute={activeRoute}
+            onPress={() => setRouteModalVisible(true)}
+            hasMultipleRoutes={recentRoutes.length > 1}
+          />
 
           {/* Category Filter Chips */}
           <View style={styles.filterChipsRow}>
@@ -1244,6 +1266,91 @@ export default function CommunityScreen() {
         currentUserId={profile?.id || null}
         onClose={() => setReportModalVisible(false)}
       />
+
+      {/* Route Switcher Modal */}
+      <Modal
+        visible={routeModalVisible}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setRouteModalVisible(false)}
+      >
+        <Pressable
+          style={styles.routeModalOverlay}
+          onPress={() => setRouteModalVisible(false)}
+        >
+          <View
+            style={[styles.routeModalCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+            onStartShouldSetResponder={() => true}
+          >
+            <View style={styles.routeModalHeader}>
+              <View>
+                <Text style={[theme.typography.subtitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 16 }]}>
+                  Commute Route
+                </Text>
+                <Text style={[theme.typography.caption, { color: theme.colors.textMuted, marginTop: 2 }]}>
+                  Switch community feed to another route
+                </Text>
+              </View>
+              <Pressable onPress={() => setRouteModalVisible(false)} hitSlop={8}>
+                <Ionicons name="close" size={22} color={theme.colors.textMuted} />
+              </Pressable>
+            </View>
+
+            <ScrollView style={{ maxHeight: 300 }} showsVerticalScrollIndicator={false}>
+              {recentRoutes
+                .filter((r) => !isJsonLabel(r.label))
+                .map((item) => {
+                  const isCurrent = item.route_hash === activeRoute?.route_hash;
+                  return (
+                    <Pressable
+                      key={item.id}
+                      style={[
+                        styles.routeOptionItem,
+                        {
+                          borderColor: isCurrent ? theme.colors.primary : theme.colors.border,
+                          backgroundColor: isCurrent ? `${theme.colors.primary}12` : 'transparent',
+                        },
+                      ]}
+                      onPress={async () => {
+                        await setActiveRoute(item);
+                        setRouteModalVisible(false);
+                      }}
+                    >
+                      <View style={{ flex: 1, paddingRight: 10 }}>
+                        <Text style={[theme.typography.body, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 14 }]} numberOfLines={1}>
+                          {item.origin_label.split(',')[0]} → {item.destination_label.split(',')[0]}
+                        </Text>
+                        {item.label && (
+                          <Text style={[theme.typography.caption, { color: theme.colors.textMuted, marginTop: 2 }]}>
+                            {item.label}
+                          </Text>
+                        )}
+                      </View>
+                      {isCurrent ? (
+                        <Ionicons name="checkmark-circle" size={20} color={theme.colors.primary} />
+                      ) : (
+                        <Ionicons name="ellipse-outline" size={20} color={theme.colors.textMuted} />
+                      )}
+                    </Pressable>
+                  );
+                })}
+            </ScrollView>
+
+            <Pressable
+              style={[styles.manageRouteBtn, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+              onPress={() => {
+                setRouteModalVisible(false);
+                router.push('/(main)/ride/set-route' as any);
+              }}
+            >
+              <Ionicons name="add-circle-outline" size={18} color={theme.colors.primary} />
+              <Text style={[theme.typography.small, { color: theme.colors.primary, fontFamily: 'Inter-SemiBold', marginLeft: 6 }]}>
+                Add or Change Route
+              </Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1419,4 +1526,50 @@ const styles = StyleSheet.create({
   commentInput: { flex: 1, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, marginRight: 8, fontSize: 14 },
   sendCircleBtn: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
   emptyCommentsContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 40, paddingHorizontal: 20 },
+
+  // Route Modal Styles
+  routeModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  routeModalCard: {
+    width: '100%',
+    maxWidth: 400,
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  routeModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  routeOptionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  manageRouteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 10,
+  },
 });
