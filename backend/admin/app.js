@@ -193,10 +193,29 @@ async function refreshData() {
     });
 
     // Associate author info and active reports with hub posts
+    const autoPurgePostIds = [];
     hubPostsData.forEach(p => {
       p.author = userMap.get(p.author_id) || null;
       p.reports = reportsData.filter(r => r.post_id === p.id && r.status !== 'dismissed' && r.status !== 'resolved');
+      const uniqueUsers = new Set(p.reports.map(r => r.reporter_id).filter(Boolean));
+      p.uniqueReportCount = uniqueUsers.size;
+      if (p.uniqueReportCount > 20) {
+        autoPurgePostIds.push(p.id);
+      }
     });
+
+    if (autoPurgePostIds.length > 0) {
+      console.warn(`[Auto-Moderation] Auto-purging ${autoPurgePostIds.length} post(s) exceeding 20 unique user reports:`, autoPurgePostIds);
+      autoPurgePostIds.forEach(postId => {
+        supabaseClient.from('post_comments').delete().eq('post_id', postId).then(() => {});
+        supabaseClient.from('post_likes').delete().eq('post_id', postId).then(() => {});
+        supabaseClient.from('reports').delete().eq('post_id', postId).then(() => {});
+        supabaseClient.from('hub_posts').delete().eq('id', postId).then(() => {});
+      });
+      hubPostsData = hubPostsData.filter(p => !autoPurgePostIds.includes(p.id));
+      reportsData = reportsData.filter(r => !autoPurgePostIds.includes(r.post_id));
+      showToast(`Auto-Moderation: ${autoPurgePostIds.length} post(s) reported by >20 unique users were automatically removed.`, 'warning');
+    }
 
     updateUI();
   } catch (err) {
@@ -695,6 +714,21 @@ function renderVerificationInbox() {
         </div>
       </div>
 
+      ${selectedUser.police_clearance_url ? `
+        <div class="document-view-container" style="margin-top: 16px;">
+          <div class="document-title" style="display: flex; align-items: center; gap: 6px; color: var(--accent-secondary, #0D9488);">
+            <i data-lucide="shield-check" style="width: 16px; height: 16px;"></i> National Police Clearance (NPC)
+          </div>
+          <div class="document-image-frame" onclick="openLightbox('${selectedUser.police_clearance_url}', '${escapeHTML(selectedUser.full_name)}\\'s Police Clearance')">
+            <img src="${selectedUser.police_clearance_url}" alt="Police Clearance" onerror="handleImageLoadError(this)">
+            <div class="image-zoom-overlay">
+              <i data-lucide="maximize-2"></i>
+              Click to expand and inspect
+            </div>
+          </div>
+        </div>
+      ` : ''}
+
       <div class="viewer-actions-row">
         <button class="btn btn-danger" onclick="rejectVerification('${selectedUser.id}')">
           <i data-lucide="x-circle"></i>
@@ -1176,7 +1210,7 @@ function renderHubModeration() {
         <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
           <div style="display: flex; align-items: center; gap: 6px; color: #DC2626; font-size: 12px; font-weight: 600;">
             <i data-lucide="flag" style="width: 14px; height: 14px;"></i>
-            <span>Reported (${post.reports.length}): ${post.reports.map(r => escapeHTML(r.reason)).join('; ')}</span>
+            <span>Reported by ${post.uniqueReportCount || new Set(post.reports.map(r => r.reporter_id)).size} user(s) (${post.reports.length} report${post.reports.length === 1 ? '' : 's'}): ${post.reports.map(r => escapeHTML(r.reason)).join('; ')}</span>
           </div>
           <button class="btn btn-secondary btn-small" onclick="adminDismissReports('${post.id}')" title="Dismiss reports and mark as reviewed" style="font-size: 11px; padding: 4px 8px; flex-shrink: 0;">
             <i data-lucide="check-check" style="width: 12px; height: 12px;"></i> Dismiss

@@ -124,3 +124,71 @@ The app uses `expo-router` with two main navigation groups: `(auth)` for authent
 | `/assistant-demo` | `app/(main)/assistant-demo.tsx` | **Voice Assistant Interactive Playground:** Demo and testing page for hands-free voice commands, TTS output, route querying via voice, and assistant customization. | Connects to `VoiceAssistantContext`, `expo-speech`, and `expo-audio`. |
 | **Global Overlay** | `src/components/assistant/VoiceAssistantFab.tsx` | **Global Voice Action Button:** Floating button visible across all main screens for quick hands-free activation. | Opens `VoiceAssistantSheet` modal. |
 | **Global Overlay** | `src/components/assistant/VoiceAssistantSheet.tsx` | **Voice Assistant Bottom Sheet:** Sheet UI rendering live speech wave animations, transcription, intent execution results, and quick action chips. | Driven by `VoiceAssistantContext`. |
+
+---
+
+## 10. Project Directory & Codebase Architecture (Frontend vs. Backend)
+
+```
+commute-companion/
+│
+├── 📱 frontend/ (React Native / Expo Client)
+│   ├── app/                              # Expo Router file-based route screens
+│   │   ├── (auth)/                       # Unauthenticated flows (welcome, sign-in, sign-up)
+│   │   └── (main)/                       # Core authenticated app & tabs
+│   │
+│   ├── src/                              # Client business logic & design system
+│   │   ├── components/                   # UI components grouped by feature domain
+│   │   │   ├── common/                   # Shared UI primitives (Avatar, Badge, GlassCard, Skeleton)
+│   │   │   ├── ride/                     # TripCard, FareBreakdown, SOSButton, RouteLayer
+│   │   │   ├── community/                # PostCard, CommentItem, ReportPostModal
+│   │   │   ├── verification/             # LiveFaceCaptureModal, DocumentCaptureModal
+│   │   │   ├── profile/                  # ProfileHeader, VerificationBanner
+│   │   │   └── assistant/                # VoiceAssistantFab, VoiceAssistantSheet
+│   │   │
+│   │   ├── services/                     # Business logic grouped by business domain
+│   │   │   ├── ride/                     # trips, bookings, vehicles, rideRequests, rideReminders
+│   │   │   ├── location/                 # liveTracking, backgroundLocation, routing, geocoding
+│   │   │   ├── verification/             # liveFaceVerification, biometricVerification, documentQuality
+│   │   │   ├── communication/            # chatRooms, messages, notifications, pushNotifications
+│   │   │   ├── community/                # hub, hubPosts, reports, reviews
+│   │   │   ├── payments/                 # paymongo
+│   │   │   ├── core/                     # auth, profiles, storage, admin, jobs
+│   │   │   └── index.ts                  # Central barrel export unifying all services
+│   │   │
+│   │   ├── hooks/                        # Custom React hooks
+│   │   ├── context/                      # Global state providers (Auth, Theme, Route, Voice, Notification)
+│   │   ├── types/                        # Supabase & app-wide TypeScript models
+│   │   ├── utils/                        # Pure utility functions (fareCalculator, routeHash, dateFormatter)
+│   │   └── lib/                          # Client singletons (supabase.ts, constants.ts)
+│   │
+│   └── assets/                           # App icons, splash screens, fonts, animations
+│
+├── ⚙️ backend/
+│   ├── admin/                            # Standalone Web Admin Dashboard (Node / Express / Vanilla JS)
+│   │   ├── index.html                    # Admin SPA markup
+│   │   ├── app.js                        # Controller, real-time listeners & moderation logic
+│   │   ├── style.css                     # Admin styling & design tokens
+│   │   └── server.js                     # Local HTTP & API server
+│   │
+│   └── supabase/                         # Single source of truth for Supabase platform
+│       ├── config.toml                   # Supabase environment configuration
+│       ├── migrations/                   # SQL migration files & schema history
+│       └── functions/                    # Serverless Deno Edge Functions
+│           ├── _shared/                  # Shared Edge Function modules (CORS, client)
+│           ├── paymongo-checkout/        # Payment checkout session creation
+│           ├── paymongo-webhook/         # Webhook handler for payment confirmation
+│           └── voice-command/            # Gemini AI intent parsing function
+│
+└── 🛠️ scripts/                           # Asset generation & documentation scripts
+```
+
+### Path Aliases (`tsconfig.json`)
+The following aliases are configured for clean, decoupled imports:
+- `@/*` -> `src/*`
+- `@components/*` -> `src/components/*`
+- `@services/*` -> `src/services/*`
+- `@hooks/*` -> `src/hooks/*`
+- `@types/*` -> `src/types/*`
+- `@utils/*` -> `src/utils/*`
+- `@assets/*` -> `assets/*`

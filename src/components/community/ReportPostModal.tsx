@@ -47,7 +47,7 @@ export default function ReportPostModal({
     if (!postId || !currentUserId) return;
 
     setSubmitting(true);
-    const { error } = await reportHubPost(
+    const { error, autoRemoved, alreadyReported } = await reportHubPost(
       currentUserId,
       postId,
       selectedReason,
@@ -57,6 +57,25 @@ export default function ReportPostModal({
 
     if (error) {
       Alert.alert('Error', 'Unable to submit report. Please try again.');
+    } else if (alreadyReported) {
+      Alert.alert(
+        'Already Reported',
+        'You have already submitted a report for this post. Our moderation team is reviewing it.',
+        [{ text: 'OK', onPress: () => {
+          setDetails('');
+          onClose();
+        }}]
+      );
+    } else if (autoRemoved) {
+      Alert.alert(
+        'Post Removed',
+        'This post has received more than 20 reports from the community and has been automatically removed.',
+        [{ text: 'OK', onPress: () => {
+          setDetails('');
+          onClose();
+          if (onReported) onReported();
+        }}]
+      );
     } else {
       Alert.alert(
         'Report Submitted',

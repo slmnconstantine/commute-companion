@@ -19,6 +19,7 @@ export interface Profile {
   is_verified: boolean;
   verified_badge: boolean;
   government_id_url: string | null;
+  police_clearance_url?: string | null;
   avatar_url: string | null;
   rating_avg: number | null;
   total_ratings: number;

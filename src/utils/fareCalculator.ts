@@ -1,17 +1,17 @@
 /**
  * Fare calculation utility for Commutable Companion
  *
- * Produces a full breakdown: base fare + distance + time, split across
+ * Produces a full breakdown: base fare + distance, split across
  * passengers. Passengers do not pay a platform fee. Only drivers who created
  * a ride that collects fare are charged a 10% platform fee from earnings.
  */
 
-import { BASE_FARE, COST_PER_KM, COST_PER_MIN, PLATFORM_FEE_RATE } from '@/lib/constants';
+import { BASE_FARE, COST_PER_KM, PLATFORM_FEE_RATE } from '@/lib/constants';
 
 export interface FareBreakdown {
   baseFare: number;
   distanceCost: number;
-  timeCost: number;
+  timeCost?: number;
   subtotal: number;
   costPerSeat: number;
   platformFee: number;
@@ -19,25 +19,24 @@ export interface FareBreakdown {
 }
 
 /**
- * Calculate a fare breakdown for a given distance, duration and passenger count.
+ * Calculate a fare breakdown for a given distance and passenger count.
  *
  * @param distanceKm  - Total trip distance in kilometres
- * @param durationMin - Estimated trip duration in minutes
+ * @param durationMin - Estimated trip duration in minutes (optional / unused for fare)
  * @param passengers  - Number of passengers sharing the fare (≥ 1)
  * @returns A full {@link FareBreakdown} object
  */
 export function calculateFare(
   distanceKm: number,
-  durationMin: number,
+  durationMin: number = 0,
   passengers: number = 1,
 ): FareBreakdown {
   const baseFare = BASE_FARE;
   // Fare only increases if distance exceeds 5 kilometers
   const excessDistance = Math.max(0, distanceKm - 5);
   const distanceCost = Math.round(excessDistance * COST_PER_KM * 100) / 100;
-  // Calculate time cost based on durationMin * COST_PER_MIN
-  const timeCost = Math.round(durationMin * COST_PER_MIN * 100) / 100;
-  const subtotal = baseFare + distanceCost + timeCost;
+  const timeCost = 0;
+  const subtotal = baseFare + distanceCost;
   const costPerSeat = Math.ceil(subtotal / Math.max(1, passengers));
   // Passengers pay no platform fee
   const platformFee = 0;

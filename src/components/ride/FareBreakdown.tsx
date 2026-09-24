@@ -102,12 +102,6 @@ export default function FareBreakdown({ fareBreakdown, passengers = 1 }: FareBre
           color={theme.colors.text}
           mutedColor={theme.colors.textMuted}
         />
-        <FareRow
-          label="Time cost"
-          amount={formatCurrency(fareBreakdown.timeCost)}
-          color={theme.colors.text}
-          mutedColor={theme.colors.textMuted}
-        />
 
         {/* Subtotal divider */}
         <View style={[styles.thinDivider, { backgroundColor: theme.colors.border }]} />

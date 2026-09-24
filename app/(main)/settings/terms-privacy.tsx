@@ -98,7 +98,7 @@ export default function TermsPrivacyScreen() {
                 <Text style={[styles.sectionHeading, { color: theme.colors.text }]}>4. Fares & Platform Fees</Text>
               </View>
               <Text style={[styles.bodyText, { color: theme.colors.text }]}>
-                • Fares are calculated transparently based on distance, estimated travel time, and fuel cost sharing.{'\n'}
+                • Fares are calculated transparently based on distance and fuel cost sharing.{'\n'}
                 • A nominal platform commission is deducted to maintain real-time infrastructure, emergency SOS features, and mapping services.{'\n'}
                 • Drivers are responsible for timely settlement of accumulated platform fee balances.
               </Text>

@@ -905,7 +905,6 @@ export default function CreateRideScreen() {
                 <View style={[styles.fareCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, opacity: isFree ? 0.6 : 1 }]}>
                   <FareLine label="Base fare" amount={isFree ? 0 : fareBreakdown.baseFare} theme={theme} />
                   <FareLine label={`Distance (${routeInfo?.distanceKm} km)`} amount={isFree ? 0 : fareBreakdown.distanceCost} theme={theme} />
-                  <FareLine label={`Duration (${routeInfo?.durationMin} min)`} amount={isFree ? 0 : fareBreakdown.timeCost} theme={theme} />
                   <View style={[styles.fareDivider, { backgroundColor: theme.colors.border }]} />
                   <View style={styles.fareRow}>
                     <Text style={[styles.fareTotalLabel, { color: theme.colors.text, fontFamily: 'Inter-Bold' }]}>Total per seat</Text>
