@@ -23,7 +23,7 @@ export interface DocumentCaptureModalProps {
   onClose: () => void;
   onCaptureSuccess: (base64: string, uri: string) => void;
   documentTitle?: string;
-  documentType?: 'id' | 'license' | 'vehicle' | 'or_cr';
+  documentType?: 'id' | 'license' | 'vehicle' | 'or_cr' | 'police_clearance';
 }
 
 export default function DocumentCaptureModal({

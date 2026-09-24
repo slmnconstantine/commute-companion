@@ -86,6 +86,12 @@ export default function BecomeDriverScreen() {
       if (docUrls.license) {
         updates.government_id_url = docUrls.license;
       }
+      if (docUrls.police_clearance) {
+        updates.police_clearance_url = docUrls.police_clearance;
+        if (!updates.government_id_url) {
+          updates.government_id_url = docUrls.police_clearance;
+        }
+      }
       const { error } = await updateProfile(updates);
 
       if (error) {
@@ -344,6 +350,15 @@ export default function BecomeDriverScreen() {
           userId={profile?.id}
           onUploadSuccess={(url) => setDocUrls(prev => ({ ...prev, license: url }))}
         />
+        <UploadCard
+          icon="shield-checkmark-outline"
+          title="National Police Clearance (NPC)"
+          description="Upload your valid National Police Clearance document"
+          theme={theme}
+          docType="police_clearance"
+          userId={profile?.id}
+          onUploadSuccess={(url) => setDocUrls(prev => ({ ...prev, police_clearance: url }))}
+        />
 
         {/* Submit Button */}
         <Animated.View style={[styles.submitContainer, { transform: [{ scale: buttonScale }] }]}>
@@ -397,10 +412,11 @@ function UploadCard({
   const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
   const [showCaptureModal, setShowCaptureModal] = useState(false);
 
-  const getDocTypeCategory = (): 'license' | 'vehicle' | 'or_cr' | 'id' => {
+  const getDocTypeCategory = (): 'license' | 'vehicle' | 'or_cr' | 'id' | 'police_clearance' => {
     if (docType.includes('license')) return 'license';
     if (docType.includes('vehicle')) return 'vehicle';
     if (docType.includes('or_cr')) return 'or_cr';
+    if (docType.includes('clearance') || docType.includes('police')) return 'police_clearance';
     return 'id';
   };
 

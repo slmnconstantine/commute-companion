@@ -18,6 +18,7 @@ import { formatCurrency } from '@/utils/fareCalculator';
 import Avatar from '@/components/common/Avatar';
 import Badge from '@/components/common/Badge';
 import Skeleton from '@/components/common/Skeleton';
+import SOSButton from '@/components/ride/SOSButton';
 
 interface TripCardProps {
   trip?: TripWithDriver;
@@ -267,6 +268,34 @@ function TripCard({ trip, onPress, loading = false, isJoined, userBookingStatus 
         </View>
       )}
 
+      {/* Ongoing Trip SOS Action Strip */}
+      {effectiveTripStatus === 'ongoing' && (
+        <View
+          style={[
+            styles.ongoingSosBanner,
+            {
+              backgroundColor: `${theme.colors.error}10`,
+              borderColor: `${theme.colors.error}35`,
+            },
+          ]}
+        >
+          <View style={styles.ongoingStatusLeft}>
+            <View style={[styles.pulseDot, { backgroundColor: theme.colors.error }]} />
+            <Text style={[styles.ongoingStatusText, { color: theme.colors.error, fontFamily: 'Inter-SemiBold' }]}>
+              Trip in Progress
+            </Text>
+          </View>
+          <SOSButton
+            theme={theme}
+            tripId={trip.id}
+            driverName={trip.driver?.full_name || 'Driver'}
+            originLabel={trip.origin_label || ''}
+            destinationLabel={trip.destination_label || ''}
+            variant="card"
+          />
+        </View>
+      )}
+
       {/* Info Row */}
       <View style={[styles.infoRow, { borderTopColor: theme.colors.border }]}>
         <View style={styles.tripMetaContainer}>
@@ -442,6 +471,29 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     fontFamily: 'Inter-Medium',
+  },
+  ongoingSosBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  ongoingStatusLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pulseDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  ongoingStatusText: {
+    fontSize: 12,
   },
 });
 
