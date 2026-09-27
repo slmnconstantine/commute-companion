@@ -176,6 +176,8 @@ export async function scanAndPurgeArchivedCaptures(): Promise<void> {
   }
 }
 
+export const purgeArchivedLiveCaptures = scanAndPurgeArchivedCaptures;
+
 /**
  * Retrieves the driver's live face capture for a specific trip
  */

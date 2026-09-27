@@ -27,7 +27,7 @@ interface ImageMetadata {
  */
 export async function analyzeDocumentQuality(
   image: ImageMetadata,
-  documentType: 'id' | 'license' | 'vehicle' | 'or_cr' = 'id'
+  documentType: 'id' | 'license' | 'vehicle' | 'or_cr' | 'police_clearance' = 'id'
 ): Promise<DocumentQualityResult> {
   const isVehicle = documentType === 'vehicle';
   const issues: string[] = [];

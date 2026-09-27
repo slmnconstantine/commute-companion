@@ -408,10 +408,10 @@ export default function ActivityScreen() {
     if (!profile?.id) return;
     setLoading(true);
     try {
-      await cancelExpiredTrips().catch((err) => {
+      await cancelExpiredTrips().catch((err: any) => {
         console.warn('cancelExpiredTrips error in activity loadData:', err);
       });
-      purgeArchivedLiveCaptures().catch((err) => {
+      purgeArchivedLiveCaptures().catch((err: any) => {
         console.warn('purgeArchivedLiveCaptures error in activity loadData:', err);
       });
       const data = await getCommuterBookings(profile.id);
