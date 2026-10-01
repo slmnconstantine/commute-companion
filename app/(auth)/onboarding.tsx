@@ -1,5 +1,13 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Dimensions, FlatList } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  FlatList,
+  useWindowDimensions,
+  Platform,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -7,8 +15,6 @@ import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, withSequence, Easing } from 'react-native-reanimated';
-
-const { width } = Dimensions.get('window');
 
 const SLIDES = [
   {
@@ -359,21 +365,47 @@ import BouncyPressable from '@/components/common/BouncyPressable';
 export default function OnboardingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
 
   const handleNext = async () => {
     if (currentIndex < SLIDES.length - 1) {
-      flatListRef.current?.scrollToIndex({ index: currentIndex + 1 });
+      const nextIndex = currentIndex + 1;
+      setCurrentIndex(nextIndex);
+      if (flatListRef.current) {
+        try {
+          flatListRef.current.scrollToOffset({
+            offset: nextIndex * width,
+            animated: true,
+          });
+        } catch {
+          flatListRef.current.scrollToIndex({ index: nextIndex, animated: true });
+        }
+      }
     } else {
-      await AsyncStorage.setItem('@onboarding_complete', 'true');
-      await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
+      try {
+        await AsyncStorage.setItem('@onboarding_complete', 'true');
+        await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
+      } catch (err) {
+        console.warn('Failed saving onboarding state:', err);
+      }
       router.replace('/(auth)/welcome');
     }
   };
 
+  const handleSkip = async () => {
+    try {
+      await AsyncStorage.setItem('@onboarding_complete', 'true');
+      await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
+    } catch (err) {
+      console.warn('Failed saving onboarding state:', err);
+    }
+    router.replace('/(auth)/welcome');
+  };
+
   const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
-    if (viewableItems[0]) {
+    if (viewableItems?.[0]?.index !== undefined && viewableItems[0].index !== null) {
       setCurrentIndex(viewableItems[0].index);
     }
   }).current;
@@ -412,6 +444,20 @@ export default function OnboardingScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: '#F8F7F4' }]}>
+      {/* Top Header / Skip Button */}
+      <View style={[styles.header, { top: Math.max(insets.top, 16) + 12 }]}>
+        <Pressable
+          onPress={handleSkip}
+          style={({ pressed }) => [
+            styles.skipBtn,
+            pressed && { opacity: 0.7 },
+            Platform.OS === 'web' && ({ cursor: 'pointer' } as any),
+          ]}
+        >
+          <Text style={styles.skipBtnText}>Skip</Text>
+        </Pressable>
+      </View>
+
       <FlatList
         ref={flatListRef}
         data={SLIDES}
@@ -421,6 +467,25 @@ export default function OnboardingScreen() {
         pagingEnabled
         bounces={false}
         keyExtractor={(item) => item.id}
+        getItemLayout={(_, index) => ({
+          length: width,
+          offset: width * index,
+          index,
+        })}
+        onScrollToIndexFailed={(info) => {
+          flatListRef.current?.scrollToOffset({
+            offset: info.index * width,
+            animated: true,
+          });
+        }}
+        onScroll={(e) => {
+          const offsetX = e.nativeEvent.contentOffset.x;
+          const index = Math.round(offsetX / width);
+          if (index >= 0 && index < SLIDES.length && index !== currentIndex) {
+            setCurrentIndex(index);
+          }
+        }}
+        scrollEventThrottle={16}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
         style={{ flex: 1 }}
@@ -429,19 +494,31 @@ export default function OnboardingScreen() {
       <View style={styles.bottomContainer}>
         <View style={styles.paginationRow}>
           {SLIDES.map((_, index) => (
-            <View
+            <Pressable
               key={index.toString()}
-              style={[
-                styles.dot,
-                { backgroundColor: index === currentIndex ? '#0057FF' : '#E8E6DF' },
-                index === currentIndex && { width: 24 }
-              ]}
-            />
+              onPress={() => {
+                setCurrentIndex(index);
+                flatListRef.current?.scrollToOffset({
+                  offset: index * width,
+                  animated: true,
+                });
+              }}
+              style={Platform.OS === 'web' ? ({ cursor: 'pointer', padding: 4 } as any) : { padding: 4 }}
+            >
+              <View
+                style={[
+                  styles.dot,
+                  { backgroundColor: index === currentIndex ? '#0057FF' : '#E8E6DF' },
+                  index === currentIndex && { width: 24 },
+                ]}
+              />
+            </Pressable>
           ))}
         </View>
 
         <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 20) + 24 }]}>
           <BouncyPressable
+            containerStyle={{ width: '100%', maxWidth: 480 }}
             style={[styles.nextBtn, { backgroundColor: '#0057FF' }]}
             hapticType="medium"
             onPress={handleNext}
@@ -459,6 +536,27 @@ export default function OnboardingScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  header: {
+    position: 'absolute',
+    right: 24,
+    zIndex: 30,
+  },
+  skipBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  skipBtnText: {
+    color: '#64748B',
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+  },
   imageContainer: {
     height: '55%',
     alignItems: 'center',
@@ -490,8 +588,9 @@ const styles = StyleSheet.create({
   },
   paginationRow: {
     flexDirection: 'row',
-    marginBottom: 40,
-    gap: 8,
+    marginBottom: 36,
+    gap: 4,
+    alignItems: 'center',
   },
   dot: {
     width: 8,
@@ -500,10 +599,13 @@ const styles = StyleSheet.create({
   },
   footer: {
     width: '100%',
+    maxWidth: 520,
     paddingHorizontal: 24,
+    alignItems: 'center',
   },
   nextBtn: {
     flexDirection: 'row',
+    width: '100%',
     height: 56,
     borderRadius: 28,
     alignItems: 'center',

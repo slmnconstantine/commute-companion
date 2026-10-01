@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 
 /**
@@ -10,6 +11,7 @@ export async function scheduleRideReminder(
   driverName: string,
   originLabel: string
 ): Promise<void> {
+  if (Platform.OS === 'web') return;
   const departure = new Date(departureTime).getTime();
   const now = Date.now();
 
@@ -45,6 +47,7 @@ export async function scheduleRideReminder(
  * Cancel all scheduled reminders for a specific trip.
  */
 export async function cancelRideReminder(tripId: string): Promise<void> {
+  if (Platform.OS === 'web') return;
   const identifiers = [
     `reminder-${tripId}-30`,
     `reminder-${tripId}-5`,

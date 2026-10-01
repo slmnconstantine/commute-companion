@@ -1,5 +1,11 @@
 import React from 'react';
-import { Pressable, PressableProps } from 'react-native';
+import {
+  Pressable,
+  PressableProps,
+  Platform,
+  StyleProp,
+  ViewStyle,
+} from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -11,6 +17,7 @@ export interface BouncyPressableProps extends PressableProps {
   children: React.ReactNode | ((state: { pressed: boolean }) => React.ReactNode);
   scaleTo?: number;
   hapticType?: 'light' | 'medium' | 'heavy' | 'success' | 'warning' | 'error' | 'selection' | 'none';
+  containerStyle?: StyleProp<ViewStyle>;
 }
 
 export default function BouncyPressable({
@@ -18,6 +25,7 @@ export default function BouncyPressable({
   style,
   scaleTo = 0.96,
   hapticType = 'light',
+  containerStyle,
   onPress,
   onPressIn,
   onPressOut,
@@ -50,9 +58,12 @@ export default function BouncyPressable({
   };
 
   return (
-    <Animated.View style={animatedStyle}>
+    <Animated.View style={[animatedStyle, containerStyle]}>
       <Pressable
-        style={style}
+        style={(state) => [
+          Platform.OS === 'web' && ({ cursor: disabled ? 'not-allowed' : 'pointer', userSelect: 'none' } as any),
+          typeof style === 'function' ? style(state) : style,
+        ]}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         onPress={onPress}

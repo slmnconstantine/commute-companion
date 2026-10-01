@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import * as Notifications from 'expo-notifications';
 import * as Haptics from 'expo-haptics';
-import { Alert, Animated, AppState, AppStateStatus, View, StyleSheet } from 'react-native';
+import { Alert, Animated, AppState, AppStateStatus, View, StyleSheet, Platform } from 'react-native';
 import { router } from 'expo-router';
 import NotificationBanner from '@/components/notifications/NotificationBanner';
 import NotificationPopup from '@/components/notifications/NotificationPopup';
@@ -135,6 +135,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   // Configure Expo Notification Handler dynamically:
   // Allow OS push banners and sounds when enabled, while in-app banners provide rich interactive actions.
   useEffect(() => {
+    if (Platform.OS === 'web') return;
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
         shouldShowAlert: pushEnabled,
@@ -370,9 +371,21 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     };
   }, [profile?.id, refreshUnreadCount]);
 
-  // Push notifications foreground/background click handling
+  // Push notifications foreground/background click handling (Native Mobile Only)
   useEffect(() => {
     if (!profile?.id) return;
+
+    const appStateSub = AppState.addEventListener('change', (nextState: AppStateStatus) => {
+      if (nextState === 'active') {
+        refreshUnreadCount();
+      }
+    });
+
+    if (Platform.OS === 'web') {
+      return () => {
+        appStateSub.remove();
+      };
+    }
 
     // 1. Foreground Notification Listener: Trigger custom sliding in-app banner for matching recipient
     const foregroundSub = Notifications.addNotificationReceivedListener((notification) => {
@@ -446,22 +459,18 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     });
 
     // 3. Check if app was opened from a notification while killed
-    Notifications.getLastNotificationResponseAsync().then((response) => {
-      if (response?.notification?.request?.content) {
-        const { data } = response.notification.request.content;
-        const targetUserId = (data as any)?.recipientId || (data as any)?.targetUserId;
-        if (targetUserId && targetUserId !== profile.id) {
-          return;
+    if (typeof Notifications.getLastNotificationResponseAsync === 'function') {
+      Notifications.getLastNotificationResponseAsync().then((response) => {
+        if (response?.notification?.request?.content) {
+          const { data } = response.notification.request.content;
+          const targetUserId = (data as any)?.recipientId || (data as any)?.targetUserId;
+          if (targetUserId && targetUserId !== profile.id) {
+            return;
+          }
+          refreshUnreadCount();
         }
-        refreshUnreadCount();
-      }
-    });
-
-    const appStateSub = AppState.addEventListener('change', (nextState: AppStateStatus) => {
-      if (nextState === 'active') {
-        refreshUnreadCount();
-      }
-    });
+      }).catch(() => {});
+    }
 
     return () => {
       foregroundSub.remove();
