@@ -5,17 +5,22 @@ import Constants from 'expo-constants';
 import { createNotification } from '@/services/notifications';
 import { handleServiceError } from '@/utils/errorHelper';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: false,
-    shouldShowBanner: false,
-    shouldShowList: false, // Suppress OS notification shade/list while app is in foreground
-    shouldPlaySound: false, // Suppress OS sound while app is in foreground
-    shouldSetBadge: true,
-  }),
-});
+if (Platform.OS !== 'web') {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: false,
+      shouldShowBanner: false,
+      shouldShowList: false, // Suppress OS notification shade/list while app is in foreground
+      shouldPlaySound: false, // Suppress OS sound while app is in foreground
+      shouldSetBadge: true,
+    }),
+  });
+}
 
 export async function registerForPushNotificationsAsync() {
+  if (Platform.OS === 'web') {
+    return null;
+  }
   if (!Device.isDevice) {
     console.log('[PUSH] Bypassing push token registration: running on an emulator/simulator.');
     return null;
