@@ -48,32 +48,178 @@ let currentLightboxAction = null;
 window.addEventListener('DOMContentLoaded', async () => {
   if (window.lucide) lucide.createIcons();
   
-  // 1. Load configuration from Node server API
-  await loadServerConfig();
-  
-  // 2. Load localStorage overrides if any
-  loadLocalSettings();
-  
-  // 3. Initialize Supabase Client
-  initSupabase();
-  
-  // 4. Initial fetch across all platform tables
-  await refreshData();
+  // 1. Check for active session in sessionStorage
+  const activeSession = getSavedSession();
+  if (activeSession && activeSession.supabaseUrl && activeSession.supabaseServiceRoleKey) {
+    dbConfig = { ...activeSession };
+    hideAuthOverlay();
+    loadLocalSettings();
+    initSupabase();
+    await refreshData();
+    setupAdminRealtime();
+    return;
+  }
 
-  // 5. Initialize Realtime Subscriptions for reports and hub updates
-  setupAdminRealtime();
+  // 2. Check for manual local settings override in localStorage
+  loadLocalSettings();
+  if (dbConfig.supabaseUrl && dbConfig.supabaseServiceRoleKey) {
+    hideAuthOverlay();
+    initSupabase();
+    await refreshData();
+    setupAdminRealtime();
+    return;
+  }
+
+  // 3. Otherwise, display login screen gate
+  showAuthOverlay();
 });
 
-// Load DB Configuration from Node server API
-async function loadServerConfig() {
+// Get session from sessionStorage
+function getSavedSession() {
   try {
-    const res = await fetch('/api/config');
+    const raw = sessionStorage.getItem('coco_admin_session');
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Show the Authentication Gate
+function showAuthOverlay() {
+  const overlay = document.getElementById('admin-auth-overlay');
+  if (overlay) {
+    overlay.style.display = 'flex';
+    requestAnimationFrame(() => {
+      overlay.classList.add('visible');
+      const input = document.getElementById('admin-password-input');
+      if (input) {
+        input.value = '';
+        input.focus();
+      }
+    });
+  }
+}
+
+// Hide the Authentication Gate
+function hideAuthOverlay() {
+  const overlay = document.getElementById('admin-auth-overlay');
+  if (overlay) {
+    overlay.classList.remove('visible');
+    setTimeout(() => {
+      overlay.style.display = 'none';
+    }, 300);
+  }
+}
+
+// Display error in Authentication Gate
+function showAuthError(message) {
+  const banner = document.getElementById('auth-error-banner');
+  const text = document.getElementById('auth-error-text');
+  if (banner && text) {
+    text.textContent = message;
+    banner.style.display = 'flex';
+    if (window.lucide) lucide.createIcons();
+  }
+}
+
+// Toggle password input visibility
+function togglePasswordVisibility(inputId, iconId) {
+  const input = document.getElementById(inputId);
+  const icon = document.getElementById(iconId);
+  if (!input) return;
+  if (input.type === 'password') {
+    input.type = 'text';
+    if (icon) icon.setAttribute('data-lucide', 'eye-off');
+  } else {
+    input.type = 'password';
+    if (icon) icon.setAttribute('data-lucide', 'eye');
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+// Handle Admin Login submission
+async function handleAdminLogin(event) {
+  if (event) event.preventDefault();
+
+  const passwordInput = document.getElementById('admin-password-input');
+  const errorBanner = document.getElementById('auth-error-banner');
+  const btn = document.getElementById('btn-admin-login');
+  const btnText = document.getElementById('btn-login-text');
+  const btnSpinner = document.getElementById('btn-login-spinner');
+  const btnIcon = document.getElementById('btn-login-icon');
+  const card = document.querySelector('.auth-gate-card');
+
+  const password = passwordInput ? passwordInput.value.trim() : '';
+  if (!password) {
+    showAuthError('Please enter the administrator passcode.');
+    return;
+  }
+
+  // Reset error state & set loading
+  if (errorBanner) errorBanner.style.display = 'none';
+  if (btn) btn.disabled = true;
+  if (btnText) btnText.textContent = 'Verifying...';
+  if (btnSpinner) btnSpinner.style.display = 'inline-block';
+  if (btnIcon) btnIcon.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password })
+    });
+
     const data = await res.json();
-    if (data.supabaseUrl) dbConfig.supabaseUrl = data.supabaseUrl;
-    if (data.supabaseAnonKey) dbConfig.supabaseAnonKey = data.supabaseAnonKey;
-    if (data.supabaseServiceRoleKey) dbConfig.supabaseServiceRoleKey = data.supabaseServiceRoleKey;
+
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || 'Invalid administrator password');
+    }
+
+    if (data.config) {
+      dbConfig = {
+        supabaseUrl: data.config.supabaseUrl,
+        supabaseAnonKey: data.config.supabaseAnonKey,
+        supabaseServiceRoleKey: data.config.supabaseServiceRoleKey
+      };
+      sessionStorage.setItem('coco_admin_session', JSON.stringify(dbConfig));
+    }
+
+    hideAuthOverlay();
+    showToast('Administrator session authenticated.', 'success');
+
+    // Initialize Supabase & load platform data
+    initSupabase();
+    await refreshData();
+    setupAdminRealtime();
   } catch (err) {
-    console.error('Failed to load server config:', err);
+    console.error('[Admin Login] Failed:', err);
+    showAuthError(err.message || 'Authentication failed. Please check credentials.');
+    if (card) {
+      card.classList.add('shake');
+      setTimeout(() => card.classList.remove('shake'), 600);
+    }
+    if (passwordInput) passwordInput.select();
+  } finally {
+    if (btn) btn.disabled = false;
+    if (btnText) btnText.textContent = 'Authenticate & Unlock';
+    if (btnSpinner) btnSpinner.style.display = 'none';
+    if (btnIcon) btnIcon.style.display = 'inline-block';
+    if (window.lucide) lucide.createIcons();
+  }
+}
+
+// Handle Admin Logout / Lock
+function handleAdminLogout() {
+  if (confirm('Lock the Admin Portal and sign out of this session?')) {
+    sessionStorage.removeItem('coco_admin_session');
+    dbConfig = {
+      supabaseUrl: '',
+      supabaseAnonKey: '',
+      supabaseServiceRoleKey: ''
+    };
+    supabaseClient = null;
+    showAuthOverlay();
+    showToast('Admin session locked.', 'info');
   }
 }
 

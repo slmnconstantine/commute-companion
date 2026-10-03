@@ -31,6 +31,60 @@
   <!-- Toast Notification System -->
   <div id="toast-container" class="toast-container"></div>
 
+  <!-- ═══ ADMIN AUTHENTICATION GATE / LOGIN OVERLAY ═══ -->
+  <div id="admin-auth-overlay" class="auth-gate-overlay">
+    <div class="auth-gate-card animate-zoom-in">
+      <div class="auth-gate-header">
+        <div class="auth-logo-badge">
+          <img src="logo.png" alt="Commute Companion" class="auth-logo-img">
+        </div>
+        <h2 class="auth-gate-title">Commute Companion</h2>
+        <span class="auth-gate-subtitle">Administrative Control Portal</span>
+        <div class="auth-gate-badge">
+          <i data-lucide="shield-check"></i>
+          <span>Protected Area</span>
+        </div>
+      </div>
+
+      <form id="admin-login-form" class="auth-gate-form" onsubmit="handleAdminLogin(event)">
+        <div class="auth-form-group">
+          <label for="admin-password-input">Administrator Passcode</label>
+          <div class="auth-input-wrapper">
+            <i data-lucide="lock" class="input-icon"></i>
+            <input 
+              type="password" 
+              id="admin-password-input" 
+              placeholder="Enter admin password..." 
+              required 
+              autocomplete="current-password"
+            >
+            <button type="button" class="btn-toggle-pwd" onclick="togglePasswordVisibility('admin-password-input', 'pwd-toggle-icon')" title="Show / Hide password">
+              <i data-lucide="eye" id="pwd-toggle-icon"></i>
+            </button>
+          </div>
+        </div>
+
+        <div id="auth-error-banner" class="auth-error-banner" style="display: none;">
+          <i data-lucide="alert-triangle"></i>
+          <span id="auth-error-text">Invalid administrator password</span>
+        </div>
+
+        <button type="submit" id="btn-admin-login" class="btn-auth-submit">
+          <span id="btn-login-text">Authenticate & Unlock</span>
+          <i data-lucide="arrow-right" id="btn-login-icon"></i>
+          <span id="btn-login-spinner" class="spinner" style="display: none;"></span>
+        </button>
+      </form>
+
+      <div class="auth-gate-footer">
+        <div class="auth-hint">
+          <i data-lucide="info"></i>
+          <span>Verified against ADMIN_PASSWORD on server</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Main Grid Layout -->
   <div class="app-layout">
 
@@ -84,6 +138,10 @@
         <button id="btn-open-settings" class="nav-item settings-trigger" onclick="openSettingsModal()">
           <i data-lucide="settings"></i>
           <span>Connection Settings</span>
+        </button>
+        <button id="btn-logout" class="nav-item logout-trigger" onclick="handleAdminLogout()" title="Lock dashboard and sign out">
+          <i data-lucide="log-out"></i>
+          <span>Lock / Sign Out</span>
         </button>
         <div class="connection-status-pill unconfigured" id="db-status-pill">
           <span class="status-dot"></span>
