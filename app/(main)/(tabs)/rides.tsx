@@ -741,7 +741,7 @@ export default function RidesScreen() {
                 />
                 {searchQuery.length > 0 && (
                   <Pressable onPress={() => setSearchQuery('')}>
-                    <Ionicons name="close-circle" size={20} color={theme.colors.textMuted} />
+                    <Ionicons name="close-circle" size={20} color={'theme.colors.textMuted'} />
                   </Pressable>
                 )}
                 <Pressable
@@ -917,7 +917,7 @@ export default function RidesScreen() {
                     }}
                     hitSlop={12}
                   >
-                    <Text style={{ color: theme.colors.primary, fontFamily: 'Inter-SemiBold', fontSize: 13 }}>Reset Filters</Text>
+                    <Text style={{ color: 'theme.colors.primary', fontFamily: 'Inter-SemiBold', fontSize: 13 }}>Reset Filters</Text>
                   </Pressable>
                 )}
               </View>
