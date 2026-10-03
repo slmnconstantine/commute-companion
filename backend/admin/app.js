@@ -44,8 +44,31 @@ let hubFilterStatus = 'all';
 // Lightbox Action Callback
 let currentLightboxAction = null;
 
+// Sync, Theme, Sound & Pagination States
+let lastSyncedAt = Date.now();
+let syncTickerTimer = null;
+let soundAlertsEnabled = localStorage.getItem('coco_sound_enabled') !== 'false';
+let currentTheme = localStorage.getItem('coco_theme_mode') || 'light';
+
+// Selection State for Bulk Actions
+let selectedUserIds = new Set();
+
+// Pagination State
+let paginationState = {
+  users: { page: 1, limit: 12 },
+  trips: { page: 1, limit: 10 },
+  bookings: { page: 1, limit: 10 },
+  hub: { page: 1, limit: 10 }
+};
+
 // Initialize on Load
 window.addEventListener('DOMContentLoaded', async () => {
+  // Apply theme & controls
+  applyInitialTheme();
+  updateSoundIcon();
+  setupKeyboardShortcuts();
+  startSyncTicker();
+
   if (window.lucide) lucide.createIcons();
   
   // 1. Check for active session in sessionStorage
@@ -53,24 +76,13 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (activeSession && activeSession.supabaseUrl && activeSession.supabaseServiceRoleKey) {
     dbConfig = { ...activeSession };
     hideAuthOverlay();
-    loadLocalSettings();
     initSupabase();
     await refreshData();
     setupAdminRealtime();
     return;
   }
 
-  // 2. Check for manual local settings override in localStorage
-  loadLocalSettings();
-  if (dbConfig.supabaseUrl && dbConfig.supabaseServiceRoleKey) {
-    hideAuthOverlay();
-    initSupabase();
-    await refreshData();
-    setupAdminRealtime();
-    return;
-  }
-
-  // 3. Otherwise, display login screen gate
+  // 2. Otherwise, display login screen gate
   showAuthOverlay();
 });
 
@@ -223,24 +235,6 @@ function handleAdminLogout() {
   }
 }
 
-// Load settings from localStorage
-function loadLocalSettings() {
-  const savedUrl = localStorage.getItem('admin_supabase_url');
-  const savedAnon = localStorage.getItem('admin_supabase_anon_key');
-  const savedService = localStorage.getItem('admin_supabase_service_role_key');
-
-  if (savedUrl) dbConfig.supabaseUrl = savedUrl;
-  if (savedAnon) dbConfig.supabaseAnonKey = savedAnon;
-  if (savedService) dbConfig.supabaseServiceRoleKey = savedService;
-
-  // Pre-fill inputs in settings modal
-  const urlInput = document.getElementById('settings-supabase-url');
-  const anonInput = document.getElementById('settings-supabase-anon-key');
-  const serviceInput = document.getElementById('settings-supabase-service-role');
-  if (urlInput) urlInput.value = dbConfig.supabaseUrl;
-  if (anonInput) anonInput.value = dbConfig.supabaseAnonKey;
-  if (serviceInput) serviceInput.value = dbConfig.supabaseServiceRoleKey;
-}
 
 // Initialize Supabase Client
 function initSupabase() {
@@ -364,6 +358,8 @@ async function refreshData() {
     }
 
     updateUI();
+    lastSyncedAt = Date.now();
+    updateSyncTimeTicker();
   } catch (err) {
     console.error('Live database fetch failed:', err);
     showToast(`Failed to load data from live database: ${err.message || 'Error'}`, 'error');
@@ -380,37 +376,126 @@ async function manualRefresh() {
   setTimeout(() => {
     if (btn) btn.classList.remove('spinning');
     showToast('Platform records up to date.', 'success');
-  }, 500);
+  }, 400);
 }
 
 // Update UI Layout with values
 function updateUI() {
-  // Navigation badges
-  document.getElementById('badge-total-users').innerText = usersData.length;
+  // Navigation badges: Unread notifications & new additions
+  const now = Date.now();
+  const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+  // 1. User Directory: Unverified accounts awaiting review or new signups this week
+  const badgeUsers = document.getElementById('badge-total-users');
+  if (badgeUsers) {
+    const unverifiedCount = usersData.filter(u => !u.is_verified).length;
+    const newUsersCount = usersData.filter(u => u.created_at && (now - new Date(u.created_at).getTime()) < ONE_WEEK_MS).length;
+    
+    if (unverifiedCount > 0) {
+      badgeUsers.innerText = `${unverifiedCount}`;
+      badgeUsers.className = 'nav-badge badge-pending';
+      badgeUsers.title = `${unverifiedCount} unverified account(s) awaiting review`;
+      badgeUsers.style.display = 'inline-block';
+    } else if (newUsersCount > 0) {
+      badgeUsers.innerText = `+${newUsersCount}`;
+      badgeUsers.className = 'nav-badge badge-new';
+      badgeUsers.title = `${newUsersCount} new user(s) joined this week`;
+      badgeUsers.style.display = 'inline-block';
+    } else {
+      badgeUsers.style.display = 'none';
+    }
+  }
   
+  // 2. Verification Inbox: Pending driver document submissions
   const pendingCount = usersData.filter(u => u.government_id_url && !u.is_verified).length;
   const pendingBadge = document.getElementById('badge-pending-verifications');
-  pendingBadge.innerText = pendingCount;
-  pendingBadge.style.display = pendingCount > 0 ? 'inline-block' : 'none';
+  if (pendingBadge) {
+    pendingBadge.innerText = pendingCount;
+    pendingBadge.title = `${pendingCount} pending document review(s)`;
+    pendingBadge.style.display = pendingCount > 0 ? 'inline-block' : 'none';
+  }
 
+  // Dynamic Browser Tab Title with Pending Count
+  if (pendingCount > 0) {
+    document.title = `(${pendingCount}) Commute Companion - Admin`;
+  } else {
+    document.title = 'Commute Companion - Admin Control Portal';
+  }
+
+  // 3. Trips & Rides: Active / live rides needing monitoring or new trips this week
   const badgeTrips = document.getElementById('badge-total-trips');
-  if (badgeTrips) badgeTrips.innerText = tripsData.length;
+  if (badgeTrips) {
+    const activeTripsCount = tripsData.filter(t => t.status === 'open' || t.status === 'ongoing').length;
+    const newTripsCount = tripsData.filter(t => t.created_at && (now - new Date(t.created_at).getTime()) < ONE_WEEK_MS).length;
+    
+    if (activeTripsCount > 0) {
+      badgeTrips.innerText = `${activeTripsCount}`;
+      badgeTrips.className = 'nav-badge badge-pending';
+      badgeTrips.title = `${activeTripsCount} active/ongoing ride(s) live`;
+      badgeTrips.style.display = 'inline-block';
+    } else if (newTripsCount > 0) {
+      badgeTrips.innerText = `+${newTripsCount}`;
+      badgeTrips.className = 'nav-badge badge-new';
+      badgeTrips.title = `${newTripsCount} new trip(s) this week`;
+      badgeTrips.style.display = 'inline-block';
+    } else {
+      badgeTrips.style.display = 'none';
+    }
+  }
 
+  // 4. Bookings & GCash: Submitted payment receipts needing verification or new reservations
   const badgeBookings = document.getElementById('badge-total-bookings');
-  if (badgeBookings) badgeBookings.innerText = bookingsData.length;
+  if (badgeBookings) {
+    const pendingReceiptsCount = bookingsData.filter(b => b.payment_status === 'submitted' || (b.payment_status === 'pending' && b.payment_proof_url)).length;
+    const pendingReservationsCount = bookingsData.filter(b => b.status === 'pending').length;
+    const newBookingsCount = bookingsData.filter(b => b.created_at && (now - new Date(b.created_at).getTime()) < ONE_WEEK_MS).length;
 
+    if (pendingReceiptsCount > 0) {
+      badgeBookings.innerText = `${pendingReceiptsCount}`;
+      badgeBookings.className = 'nav-badge badge-pending';
+      badgeBookings.title = `${pendingReceiptsCount} submitted payment receipt(s) awaiting verification`;
+      badgeBookings.style.display = 'inline-block';
+    } else if (pendingReservationsCount > 0) {
+      badgeBookings.innerText = `${pendingReservationsCount}`;
+      badgeBookings.className = 'nav-badge badge-pending';
+      badgeBookings.title = `${pendingReservationsCount} pending reservation(s)`;
+      badgeBookings.style.display = 'inline-block';
+    } else if (newBookingsCount > 0) {
+      badgeBookings.innerText = `+${newBookingsCount}`;
+      badgeBookings.className = 'nav-badge badge-new';
+      badgeBookings.title = `${newBookingsCount} new booking(s) this week`;
+      badgeBookings.style.display = 'inline-block';
+    } else {
+      badgeBookings.style.display = 'none';
+    }
+  }
+
+  // 5. Community Hub: Reported posts needing moderation or new discussions
   const badgeHub = document.getElementById('badge-total-posts');
-  if (badgeHub) badgeHub.innerText = hubPostsData.length;
-
-  // Reported posts badge
-  const reportedCount = hubPostsData.filter(p => p.reports && p.reports.length > 0).length;
   const badgeReported = document.getElementById('badge-reported-posts');
+  const reportedCount = hubPostsData.filter(p => p.reports && p.reports.length > 0).length;
+  const newPostsCount = hubPostsData.filter(p => p.created_at && (now - new Date(p.created_at).getTime()) < ONE_WEEK_MS).length;
+
   if (badgeReported) {
     if (reportedCount > 0) {
       badgeReported.innerText = `${reportedCount} reported`;
+      badgeReported.title = `${reportedCount} post(s) flagged by users`;
       badgeReported.style.display = 'inline-block';
     } else {
       badgeReported.style.display = 'none';
+    }
+  }
+
+  if (badgeHub) {
+    if (reportedCount > 0) {
+      badgeHub.style.display = 'none'; // Avoid duplicate badge when reported badge is showing
+    } else if (newPostsCount > 0) {
+      badgeHub.innerText = `+${newPostsCount}`;
+      badgeHub.className = 'nav-badge badge-new';
+      badgeHub.title = `${newPostsCount} new community post(s) this week`;
+      badgeHub.style.display = 'inline-block';
+    } else {
+      badgeHub.style.display = 'none';
     }
   }
 
@@ -451,7 +536,82 @@ function switchTab(tabId) {
   const targetView = document.getElementById(`view-${tabId}`);
   if (targetView) targetView.classList.add('active');
 
+  // Dynamic Breadcrumb
+  const breadcrumbLabels = {
+    dashboard: 'Dashboard',
+    users: 'User Directory',
+    verification: 'Verification Inbox',
+    trips: 'Trips & Rides',
+    bookings: 'Bookings & GCash',
+    hub: 'Community Hub'
+  };
+  const bc = document.getElementById('bc-current-tab');
+  if (bc) bc.textContent = breadcrumbLabels[tabId] || 'Portal';
+
+  // Auto-close mobile drawer if opened
+  toggleSidebarDrawer(false);
+
   updateUI();
+}
+
+// Animated Metric Counter (Count-up effect)
+function animateMetricCounter(elementId, targetValue, duration = 600, isCurrency = false) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+
+  const startValue = parseFloat(el.getAttribute('data-current-val') || '0') || 0;
+  el.setAttribute('data-current-val', targetValue);
+
+  if (startValue === targetValue) {
+    el.innerText = isCurrency ? formatCurrency(targetValue) : targetValue;
+    return;
+  }
+
+  const startTime = performance.now();
+
+  function updateCount(currentTime) {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    const easeOut = 1 - Math.pow(1 - progress, 3);
+    const currentVal = Math.round(startValue + (targetValue - startValue) * easeOut);
+
+    el.innerText = isCurrency ? formatCurrency(currentVal) : currentVal;
+
+    if (progress < 1) {
+      requestAnimationFrame(updateCount);
+    } else {
+      el.innerText = isCurrency ? formatCurrency(targetValue) : targetValue;
+    }
+  }
+
+  requestAnimationFrame(updateCount);
+}
+
+// Start & Update Last Synced Indicator
+function startSyncTicker() {
+  if (syncTickerTimer) clearInterval(syncTickerTimer);
+  updateSyncTimeTicker();
+  syncTickerTimer = setInterval(updateSyncTimeTicker, 5000);
+}
+
+function updateSyncTimeTicker() {
+  const indicator = document.getElementById('sync-time-indicator');
+  if (!indicator) return;
+
+  const seconds = Math.floor((Date.now() - lastSyncedAt) / 1000);
+  if (seconds < 10) {
+    indicator.textContent = 'Live • Synced just now';
+  } else if (seconds < 60) {
+    indicator.textContent = `Live • Synced ${seconds}s ago`;
+  } else {
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) {
+      indicator.textContent = `Live • Synced ${minutes}m ago`;
+    } else {
+      const hours = Math.floor(minutes / 60);
+      indicator.textContent = `Live • Synced ${hours}h ago`;
+    }
+  }
 }
 
 // Calculate Dashboard KPI Analytics
@@ -472,19 +632,19 @@ function calculateStats() {
     .filter(b => b.status === 'accepted' || b.status === 'completed')
     .reduce((sum, b) => sum + (b.platform_fee || (b.fare_paid ? b.fare_paid * 0.1 : 0)), 0);
 
-  // Set metric text
-  document.getElementById('stat-total-users').innerText = total;
-  document.getElementById('stat-drivers').innerText = drivers;
-  document.getElementById('stat-commuters').innerText = commuters;
-  document.getElementById('stat-total-trips').innerText = tripsData.length;
-  document.getElementById('stat-active-trips').innerText = activeTrips;
-  document.getElementById('stat-total-bookings').innerText = bookingsData.length;
-  document.getElementById('stat-reservation-count').innerText = reservations;
-  document.getElementById('stat-platform-fees').innerText = formatCurrency(totalPlatformFees);
+  // Animate metric counters smoothly
+  animateMetricCounter('stat-total-users', total);
+  animateMetricCounter('stat-drivers', drivers);
+  animateMetricCounter('stat-commuters', commuters);
+  animateMetricCounter('stat-total-trips', tripsData.length);
+  animateMetricCounter('stat-active-trips', activeTrips);
+  animateMetricCounter('stat-total-bookings', bookingsData.length);
+  animateMetricCounter('stat-reservation-count', reservations);
+  animateMetricCounter('stat-platform-fees', totalPlatformFees, 600, true);
 
-  document.getElementById('stat-verified-count').innerText = verified;
-  document.getElementById('stat-pending-count').innerText = pending;
-  document.getElementById('stat-unverified-count').innerText = unverified;
+  animateMetricCounter('stat-verified-count', verified);
+  animateMetricCounter('stat-pending-count', pending);
+  animateMetricCounter('stat-unverified-count', unverified);
 
   // Percentage bars
   const driversPct = total > 0 ? Math.round((drivers / total) * 100) : 0;
@@ -631,6 +791,7 @@ function goToSubmission(userId) {
 // ═════ 2. USER DIRECTORY RENDERER ═════
 function setRoleFilter(role) {
   filterRole = role;
+  paginationState.users.page = 1;
   document.querySelectorAll('#filter-role-all, #filter-role-drivers, #filter-role-commuters').forEach(btn => {
     btn.classList.remove('active');
   });
@@ -642,6 +803,7 @@ function setRoleFilter(role) {
 
 function setVerifyFilter(status) {
   filterVerify = status;
+  paginationState.users.page = 1;
   document.querySelectorAll('#filter-verify-all, #filter-verify-verified, #filter-verify-pending, #filter-verify-unverified').forEach(btn => {
     btn.classList.remove('active');
   });
@@ -654,11 +816,16 @@ function setVerifyFilter(status) {
 
 function setSorting(value) {
   sortBy = value;
+  paginationState.users.page = 1;
   renderUserDirectory();
 }
 
 function handleGlobalSearch(val) {
   searchText = val.trim().toLowerCase();
+  paginationState.users.page = 1;
+  paginationState.trips.page = 1;
+  paginationState.bookings.page = 1;
+  paginationState.hub.page = 1;
   if (activeTab === 'users') renderUserDirectory();
   else if (activeTab === 'trips') renderTripsManagement();
   else if (activeTab === 'bookings') renderBookingsManagement();
@@ -695,17 +862,23 @@ function renderUserDirectory() {
   });
 
   if (filtered.length === 0) {
-    grid.innerHTML = `
-      <div class="empty-state" style="grid-column: 1 / -1;">
-        <i data-lucide="users" class="empty-icon"></i>
-        <p>No user accounts matched the current filter criteria.</p>
-      </div>
-    `;
+    grid.innerHTML = renderEmptyStateCard({
+      icon: 'users',
+      title: 'No user accounts found',
+      description: 'We couldn’t find any users matching your current role, verification, or search filters.',
+      actionText: 'Reset Filters',
+      actionFn: 'resetUserFilters()'
+    });
+    renderPaginationBar('users', 0, 'users-pagination');
     if (window.lucide) lucide.createIcons();
     return;
   }
 
-  grid.innerHTML = filtered.map((user, idx) => {
+  // Slice according to pagination
+  const { page, limit } = paginationState.users;
+  const pagedUsers = filtered.slice((page - 1) * limit, page * limit);
+
+  grid.innerHTML = pagedUsers.map((user, idx) => {
     const isUserVerified = user.is_verified || user.verified_badge;
     const isUserPending = user.government_id_url && !user.is_verified && !user.verified_badge;
     
@@ -723,6 +896,13 @@ function renderUserDirectory() {
 
     return `
       <div class="user-card animate-slide-up" style="animation-delay: ${Math.min(idx * 0.03, 0.3)}s;">
+        <!-- Card selection checkbox for bulk action -->
+        <label class="custom-checkbox-wrapper" style="position: absolute; top: 16px; right: 16px; z-index: 2;" title="Select user for bulk action">
+          <input type="checkbox" class="user-select-chk" data-user-id="${user.id}"
+            onchange="toggleUserSelection('${user.id}', this.checked)"
+            ${selectedUserIds.has(user.id) ? 'checked' : ''}>
+        </label>
+
         <div class="card-header-meta">
           <div class="user-avatar" style="${user.avatar_url ? `background-image: url(${user.avatar_url})` : ''}">
             ${!user.avatar_url ? initials : ''}
@@ -765,6 +945,10 @@ function renderUserDirectory() {
     `;
   }).join('');
 
+  // Render pagination bar
+  renderPaginationBar('users', filtered.length, 'users-pagination');
+  updateBulkActionBar();
+
   if (window.lucide) lucide.createIcons();
 }
 
@@ -781,12 +965,11 @@ function renderVerificationInbox() {
   }
 
   if (pendingUsers.length === 0) {
-    submissionsContainer.innerHTML = `
-      <div class="empty-state">
-        <i data-lucide="check-circle" class="empty-icon text-green"></i>
-        <p>No pending verification submissions!</p>
-      </div>
-    `;
+    submissionsContainer.innerHTML = renderEmptyStateCard({
+      icon: 'check-circle-2',
+      title: 'Inbox Zero',
+      description: 'All driver applications and ID documents have been reviewed!'
+    });
     viewerContainer.innerHTML = `
       <div class="empty-viewer-state">
         <i data-lucide="eye" class="empty-viewer-icon"></i>
@@ -954,6 +1137,7 @@ async function rejectVerification(userId) {
 // ═════ 4. TRIPS & RIDES RENDERER ═════
 function setTripFilter(status) {
   filterTrip = status;
+  paginationState.trips.page = 1;
   document.querySelectorAll('#filter-trip-all, #filter-trip-open, #filter-trip-ongoing, #filter-trip-completed, #filter-trip-cancelled').forEach(btn => {
     btn.classList.remove('active');
   });
@@ -964,6 +1148,7 @@ function setTripFilter(status) {
 
 function handleTripSearch(val) {
   tripSearchText = val.trim().toLowerCase();
+  paginationState.trips.page = 1;
   renderTripsManagement();
 }
 
@@ -983,17 +1168,23 @@ function renderTripsManagement() {
   });
 
   if (filtered.length === 0) {
-    grid.innerHTML = `
-      <div class="empty-state" style="grid-column: 1 / -1;">
-        <i data-lucide="map-pin-off" class="empty-icon"></i>
-        <p>No trips found matching the selected filters.</p>
-      </div>
-    `;
+    grid.innerHTML = renderEmptyStateCard({
+      icon: 'map-pin-off',
+      title: 'No carpool trips found',
+      description: 'No trips match the selected status filter or origin/destination search query.',
+      actionText: 'Reset Filters',
+      actionFn: 'resetTripFilters()'
+    });
+    renderPaginationBar('trips', 0, 'trips-pagination');
     if (window.lucide) lucide.createIcons();
     return;
   }
 
-  grid.innerHTML = filtered.map(trip => {
+  // Slice according to pagination
+  const { page, limit } = paginationState.trips;
+  const pagedTrips = filtered.slice((page - 1) * limit, page * limit);
+
+  grid.innerHTML = pagedTrips.map(trip => {
     const depDate = new Date(trip.departure_time);
     const timeString = depDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const dateString = depDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
@@ -1059,6 +1250,7 @@ function renderTripsManagement() {
     `;
   }).join('');
 
+  renderPaginationBar('trips', filtered.length, 'trips-pagination');
   if (window.lucide) lucide.createIcons();
 }
 
@@ -1152,6 +1344,7 @@ function closeTripDetailModal() {
 // ═════ 5. BOOKINGS & GCASH RENDERER ═════
 function setBookingFilter(type) {
   filterBooking = type;
+  paginationState.bookings.page = 1;
   document.querySelectorAll('#filter-booking-all, #filter-booking-reservations, #filter-booking-standard').forEach(btn => btn.classList.remove('active'));
   if (type === 'all') document.getElementById('filter-booking-all').classList.add('active');
   if (type === 'reservation') document.getElementById('filter-booking-reservations').classList.add('active');
@@ -1161,6 +1354,7 @@ function setBookingFilter(type) {
 
 function setPaymentFilter(status) {
   filterPayment = status;
+  paginationState.bookings.page = 1;
   document.querySelectorAll('#filter-pay-all, #filter-pay-submitted, #filter-pay-verified, #filter-pay-unpaid').forEach(btn => btn.classList.remove('active'));
   const btn = document.getElementById(`filter-pay-${status}`);
   if (btn) btn.classList.add('active');
@@ -1183,17 +1377,23 @@ function renderBookingsManagement() {
   });
 
   if (filtered.length === 0) {
-    grid.innerHTML = `
-      <div class="empty-state" style="grid-column: 1 / -1;">
-        <i data-lucide="wallet" class="empty-icon"></i>
-        <p>No bookings or GCash reservations found for this filter.</p>
-      </div>
-    `;
+    grid.innerHTML = renderEmptyStateCard({
+      icon: 'wallet',
+      title: 'No bookings found',
+      description: 'No passenger bookings or GCash seat reservations match your current filter criteria.',
+      actionText: 'Reset Filters',
+      actionFn: 'resetBookingFilters()'
+    });
+    renderPaginationBar('bookings', 0, 'bookings-pagination');
     if (window.lucide) lucide.createIcons();
     return;
   }
 
-  grid.innerHTML = filtered.map(booking => {
+  // Slice according to pagination
+  const { page, limit } = paginationState.bookings;
+  const pagedBookings = filtered.slice((page - 1) * limit, page * limit);
+
+  grid.innerHTML = pagedBookings.map(booking => {
     const isReservation = booking.is_reservation;
     const paymentStatus = booking.payment_status || 'unpaid';
 
@@ -1271,6 +1471,7 @@ function renderBookingsManagement() {
     `;
   }).join('');
 
+  renderPaginationBar('bookings', filtered.length, 'bookings-pagination');
   if (window.lucide) lucide.createIcons();
 }
 
@@ -1304,11 +1505,13 @@ async function adminVerifyPayment(bookingId, newStatus) {
 // ═════ 6. COMMUNITY HUB MODERATION ═════
 function handleHubSearch(val) {
   hubSearchText = val.trim().toLowerCase();
+  paginationState.hub.page = 1;
   renderHubModeration();
 }
 
 function handleHubFilterStatus(val) {
   hubFilterStatus = val;
+  paginationState.hub.page = 1;
   renderHubModeration();
 }
 
@@ -1335,17 +1538,23 @@ function renderHubModeration() {
   });
 
   if (filtered.length === 0) {
-    container.innerHTML = `
-      <div class="empty-state">
-        <i data-lucide="message-square-off" class="empty-icon"></i>
-        <p>${hubFilterStatus === 'reported' ? 'No reported posts pending review!' : 'No community hub posts found.'}</p>
-      </div>
-    `;
+    container.innerHTML = renderEmptyStateCard({
+      icon: 'message-square-off',
+      title: hubFilterStatus === 'reported' ? 'No reported posts pending review!' : 'No community posts found',
+      description: hubFilterStatus === 'reported' ? 'All user flags have been resolved or dismissed.' : 'No discussions match your filter or search query.',
+      actionText: 'Reset Filters',
+      actionFn: 'resetHubFilters()'
+    });
+    renderPaginationBar('hub', 0, 'hub-pagination');
     if (window.lucide) lucide.createIcons();
     return;
   }
 
-  container.innerHTML = filtered.map(post => {
+  // Slice according to pagination
+  const { page, limit } = paginationState.hub;
+  const pagedPosts = filtered.slice((page - 1) * limit, page * limit);
+
+  container.innerHTML = pagedPosts.map(post => {
     const isReported = post.reports && post.reports.length > 0;
     const bodyText = post.message || post.content || '';
     const images = post.image_urls || [];
@@ -1410,6 +1619,7 @@ function renderHubModeration() {
     `;
   }).join('');
 
+  renderPaginationBar('hub', filtered.length, 'hub-pagination');
   if (window.lucide) lucide.createIcons();
 }
 
@@ -1713,68 +1923,6 @@ async function deleteUserProfile() {
   }
 }
 
-// ═════ SETTINGS & CONNECTION MODAL ═════
-function openSettingsModal() {
-  document.getElementById('settings-modal').classList.add('active');
-  testSettingsConnection();
-}
-
-function closeSettingsModal() {
-  document.getElementById('settings-modal').classList.remove('active');
-}
-
-async function testSettingsConnection() {
-  const url = document.getElementById('settings-supabase-url').value.trim();
-  const anon = document.getElementById('settings-supabase-anon-key').value.trim();
-  const service = document.getElementById('settings-supabase-service-role').value.trim();
-  const box = document.getElementById('settings-status-box');
-
-  if (!url || !anon) {
-    box.className = 'modal-status-box';
-    box.innerHTML = `<i data-lucide="alert-circle" class="status-icon"></i> <span>Credentials missing. Provide URL and Anon Key.</span>`;
-    if (window.lucide) lucide.createIcons();
-    return;
-  }
-
-  box.className = 'modal-status-box';
-  box.innerHTML = `<span>Checking connection to Supabase...</span>`;
-
-  try {
-    const keyToUse = service || anon;
-    const testClient = createClient(url, keyToUse);
-    const { data, error } = await testClient.from('profiles').select('id').limit(1);
-
-    if (error) throw error;
-    
-    box.className = 'modal-status-box success';
-    box.innerHTML = `<i data-lucide="check-circle" class="status-icon"></i> <span>Connected! Live connection verified.</span>`;
-  } catch (err) {
-    box.className = 'modal-status-box error';
-    box.innerHTML = `<i data-lucide="x-circle" class="status-icon"></i> <span>Connection failed: ${err.message || 'Check URL and Key'}</span>`;
-  }
-  if (window.lucide) lucide.createIcons();
-}
-
-function saveSettings() {
-  const url = document.getElementById('settings-supabase-url').value.trim();
-  const anon = document.getElementById('settings-supabase-anon-key').value.trim();
-  const service = document.getElementById('settings-supabase-service-role').value.trim();
-
-  localStorage.setItem('admin_supabase_url', url);
-  localStorage.setItem('admin_supabase_anon_key', anon);
-  localStorage.setItem('admin_supabase_service_role_key', service);
-
-  dbConfig.supabaseUrl = url;
-  dbConfig.supabaseAnonKey = anon;
-  dbConfig.supabaseServiceRoleKey = service;
-
-  initSupabase();
-  closeSettingsModal();
-  
-  showToast('Settings saved. Refreshing database data...', 'success');
-  refreshData();
-  setupAdminRealtime();
-}
 
 // ═════ LIGHTBOX MODAL ═════
 function openLightbox(url, caption, bookingId = null) {
@@ -1949,6 +2097,7 @@ function setupAdminRealtime() {
 }
 
 function playNotificationSound() {
+  if (!soundAlertsEnabled) return;
   try {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     if (!AudioContext) return;
@@ -1982,4 +2131,518 @@ function flashDocumentTitle(alertText) {
       document.title = originalTitle;
     }
   }, 1000);
+}
+
+// ════════════════════════════════════════════════════════════════
+// NEW UX/UI HELPERS: EMPTY STATES, PAGINATION, BULK, EXPORT, SHORTCUTS
+// ════════════════════════════════════════════════════════════════
+
+// Rich Empty State Card Generator
+function renderEmptyStateCard({ icon = 'search', title = 'No results found', description = 'Try adjusting your filters.', actionText, actionFn }) {
+  return `
+    <div class="empty-state-card animate-fade-in">
+      <div class="empty-icon-wrap">
+        <i data-lucide="${icon}"></i>
+      </div>
+      <h4>${escapeHTML(title)}</h4>
+      <p>${escapeHTML(description)}</p>
+      ${actionText && actionFn ? `
+        <button class="btn btn-secondary btn-small" onclick="${actionFn}" style="margin-top: 6px;">
+          <i data-lucide="rotate-ccw"></i>
+          <span>${escapeHTML(actionText)}</span>
+        </button>
+      ` : ''}
+    </div>
+  `;
+}
+
+// Pagination Bar Component
+function renderPaginationBar(tabKey, totalCount, containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  const state = paginationState[tabKey];
+  if (!state) return;
+
+  const totalPages = Math.ceil(totalCount / state.limit) || 1;
+  if (state.page > totalPages) state.page = totalPages;
+  if (state.page < 1) state.page = 1;
+
+  if (totalCount === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const startRecord = (state.page - 1) * state.limit + 1;
+  const endRecord = Math.min(state.page * state.limit, totalCount);
+
+  let pageButtonsHtml = '';
+  const maxButtons = 5;
+  let startPage = Math.max(1, state.page - Math.floor(maxButtons / 2));
+  let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+  if (endPage - startPage < maxButtons - 1) {
+    startPage = Math.max(1, endPage - maxButtons + 1);
+  }
+
+  if (startPage > 1) {
+    pageButtonsHtml += `<button class="pagination-btn" onclick="changePage('${tabKey}', 1)">1</button>`;
+    if (startPage > 2) pageButtonsHtml += `<span style="padding: 0 4px; color: var(--text-dark);">...</span>`;
+  }
+
+  for (let p = startPage; p <= endPage; p++) {
+    pageButtonsHtml += `
+      <button class="pagination-btn ${p === state.page ? 'active' : ''}" onclick="changePage('${tabKey}', ${p})">
+        ${p}
+      </button>
+    `;
+  }
+
+  if (endPage < totalPages) {
+    if (endPage < totalPages - 1) pageButtonsHtml += `<span style="padding: 0 4px; color: var(--text-dark);">...</span>`;
+    pageButtonsHtml += `<button class="pagination-btn" onclick="changePage('${tabKey}', ${totalPages})">${totalPages}</button>`;
+  }
+
+  container.innerHTML = `
+    <div class="pagination-info">
+      Showing <strong>${startRecord}–${endRecord}</strong> of <strong>${totalCount}</strong> records
+    </div>
+    <div class="pagination-controls">
+      <button class="pagination-btn" onclick="changePage('${tabKey}', ${state.page - 1})" ${state.page <= 1 ? 'disabled' : ''} title="Previous Page">
+        <i data-lucide="chevron-left" style="width: 14px; height: 14px;"></i>
+      </button>
+      ${pageButtonsHtml}
+      <button class="pagination-btn" onclick="changePage('${tabKey}', ${state.page + 1})" ${state.page >= totalPages ? 'disabled' : ''} title="Next Page">
+        <i data-lucide="chevron-right" style="width: 14px; height: 14px;"></i>
+      </button>
+    </div>
+  `;
+
+  if (window.lucide) lucide.createIcons();
+}
+
+function changePage(tabKey, newPage) {
+  if (paginationState[tabKey]) {
+    paginationState[tabKey].page = newPage;
+    if (tabKey === 'users') renderUserDirectory();
+    else if (tabKey === 'trips') renderTripsManagement();
+    else if (tabKey === 'bookings') renderBookingsManagement();
+    else if (tabKey === 'hub') renderHubModeration();
+
+    const mainView = document.querySelector('.content-view');
+    if (mainView) mainView.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}
+
+// Bulk Actions for Users
+function toggleUserSelection(userId, isChecked) {
+  if (isChecked) {
+    selectedUserIds.add(userId);
+  } else {
+    selectedUserIds.delete(userId);
+  }
+  updateBulkActionBar();
+}
+
+function handleSelectAllUsers(isChecked) {
+  const checkboxes = document.querySelectorAll('.user-select-chk');
+  checkboxes.forEach(chk => {
+    chk.checked = isChecked;
+    const uid = chk.getAttribute('data-user-id');
+    if (uid) {
+      if (isChecked) selectedUserIds.add(uid);
+      else selectedUserIds.delete(uid);
+    }
+  });
+  updateBulkActionBar();
+}
+
+function updateBulkActionBar() {
+  const bar = document.getElementById('user-bulk-bar');
+  const countSpan = document.getElementById('bulk-selected-count');
+  if (!bar) return;
+
+  const count = selectedUserIds.size;
+  if (countSpan) countSpan.textContent = count;
+
+  if (count > 0) {
+    bar.style.display = 'flex';
+  } else {
+    bar.style.display = 'none';
+    const selectAllChk = document.getElementById('user-select-all');
+    if (selectAllChk) selectAllChk.checked = false;
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+function clearUserSelection() {
+  selectedUserIds.clear();
+  document.querySelectorAll('.user-select-chk').forEach(c => c.checked = false);
+  const selectAllChk = document.getElementById('user-select-all');
+  if (selectAllChk) selectAllChk.checked = false;
+  updateBulkActionBar();
+}
+
+async function bulkVerifySelectedUsers() {
+  if (selectedUserIds.size === 0) return;
+  const count = selectedUserIds.size;
+
+  openConfirmModal(
+    'Bulk Verify Users',
+    `Are you sure you want to verify all ${count} selected user account(s)? This will grant them verified badges and driver credentials.`,
+    async () => {
+      showToast(`Verifying ${count} users...`, 'info');
+      try {
+        const userIdsArray = Array.from(selectedUserIds);
+        const { error } = await supabaseClient
+          .from('profiles')
+          .update({ is_verified: true, verified_badge: true })
+          .in('id', userIdsArray);
+
+        if (error) throw error;
+
+        showToast(`Successfully verified ${count} user(s)!`, 'success');
+        clearUserSelection();
+        await refreshData();
+      } catch (err) {
+        console.error('Bulk verify failed:', err);
+        showToast(`Bulk verify failed: ${err.message || 'Error'}`, 'error');
+      }
+    }
+  );
+}
+
+function bulkExportSelectedUsers() {
+  if (selectedUserIds.size === 0) return;
+  const selectedProfiles = usersData.filter(u => selectedUserIds.has(u.id));
+  const headers = ['User ID', 'Full Name', 'Username', 'Role', 'Status', 'GCash Number', 'Vehicle Model', 'Plate Number', 'Date Joined'];
+  const rows = selectedProfiles.map(u => [
+    u.id,
+    u.full_name || '',
+    u.username || '',
+    u.role || '',
+    (u.is_verified || u.verified_badge) ? 'Verified' : (u.government_id_url ? 'Pending' : 'Unverified'),
+    u.gcash_number || '',
+    u.vehicle?.model || '',
+    u.vehicle?.plate_number || '',
+    u.created_at || ''
+  ]);
+  exportToCSV('coco_selected_users', headers, rows);
+}
+
+// CSV Export Helpers
+function exportToCSV(filename, headers, rows) {
+  const escapeCell = (val) => {
+    if (val === null || val === undefined) return '""';
+    const str = String(val).replace(/"/g, '""');
+    return `"${str}"`;
+  };
+
+  const csvContent = [
+    headers.map(escapeCell).join(','),
+    ...rows.map(row => row.map(escapeCell).join(','))
+  ].join('\r\n');
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', `${filename}_${new Date().toISOString().slice(0, 10)}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  showToast(`Exported ${rows.length} record(s) to CSV!`, 'success');
+}
+
+function exportUsersCSV() {
+  const headers = ['User ID', 'Full Name', 'Username', 'Role', 'Status', 'GCash Number', 'Vehicle Model', 'Plate Number', 'Date Joined'];
+  const rows = usersData.map(u => [
+    u.id,
+    u.full_name || '',
+    u.username || '',
+    u.role || '',
+    (u.is_verified || u.verified_badge) ? 'Verified' : (u.government_id_url ? 'Pending' : 'Unverified'),
+    u.gcash_number || '',
+    u.vehicle?.model || '',
+    u.vehicle?.plate_number || '',
+    u.created_at || ''
+  ]);
+  exportToCSV('coco_users_directory', headers, rows);
+}
+
+function exportTripsCSV() {
+  const headers = ['Trip ID', 'Driver Name', 'Origin', 'Destination', 'Seats Available', 'Fare (PHP)', 'Status', 'Departure Time', 'Created At'];
+  const rows = tripsData.map(t => [
+    t.id,
+    t.driver?.full_name || '',
+    t.origin_label || '',
+    t.destination_label || '',
+    t.available_seats ?? '',
+    t.fare_per_seat ?? '',
+    t.status || '',
+    t.departure_time || '',
+    t.created_at || ''
+  ]);
+  exportToCSV('coco_trips_rides', headers, rows);
+}
+
+function exportBookingsCSV() {
+  const headers = ['Booking ID', 'Trip ID', 'Commuter Name', 'Seats Booked', 'Type', 'Reservation Fee', 'Fare Paid', 'Payment Status', 'Booking Status', 'Created At'];
+  const rows = bookingsData.map(b => [
+    b.id,
+    b.trip_id || '',
+    b.commuter?.full_name || '',
+    b.seats_booked || 1,
+    b.is_reservation ? 'GCash Reservation' : 'Standard Cash',
+    b.reservation_fee || 0,
+    b.fare_paid || 0,
+    b.payment_status || 'unpaid',
+    b.status || '',
+    b.created_at || ''
+  ]);
+  exportToCSV('coco_bookings_reservations', headers, rows);
+}
+
+// Filter Reset Handlers
+function resetUserFilters() {
+  searchText = '';
+  filterRole = 'all';
+  filterVerify = 'all';
+  sortBy = 'created_at-desc';
+  paginationState.users.page = 1;
+
+  const searchInput = document.getElementById('global-search');
+  if (searchInput) searchInput.value = '';
+
+  const sortSelect = document.getElementById('select-sort');
+  if (sortSelect) sortSelect.value = 'created_at-desc';
+
+  ['all', 'drivers', 'commuters'].forEach(r => {
+    const el = document.getElementById(`filter-role-${r}`);
+    if (el) el.classList.toggle('active', r === 'all');
+  });
+
+  ['all', 'verified', 'pending', 'unverified'].forEach(v => {
+    const el = document.getElementById(`filter-verify-${v}`);
+    if (el) el.classList.toggle('active', v === 'all');
+  });
+
+  renderUserDirectory();
+  showToast('User filters reset.', 'info');
+}
+
+function resetTripFilters() {
+  tripSearchText = '';
+  filterTrip = 'all';
+  paginationState.trips.page = 1;
+
+  const tripInput = document.getElementById('trips-search');
+  if (tripInput) tripInput.value = '';
+
+  ['all', 'open', 'ongoing', 'completed', 'cancelled'].forEach(s => {
+    const el = document.getElementById(`filter-trip-${s}`);
+    if (el) el.classList.toggle('active', s === 'all');
+  });
+
+  renderTripsManagement();
+  showToast('Trip filters reset.', 'info');
+}
+
+function resetBookingFilters() {
+  filterBooking = 'all';
+  filterPayment = 'all';
+  paginationState.bookings.page = 1;
+
+  ['all', 'reservations', 'standard'].forEach(b => {
+    const el = document.getElementById(`filter-booking-${b}`);
+    if (el) el.classList.toggle('active', b === 'all');
+  });
+
+  ['all', 'submitted', 'verified', 'unpaid'].forEach(p => {
+    const el = document.getElementById(`filter-pay-${p}`);
+    if (el) el.classList.toggle('active', p === 'all');
+  });
+
+  renderBookingsManagement();
+  showToast('Booking filters reset.', 'info');
+}
+
+function resetHubFilters() {
+  hubSearchText = '';
+  hubFilterStatus = 'all';
+  paginationState.hub.page = 1;
+
+  const hubInput = document.getElementById('hub-search');
+  if (hubInput) hubInput.value = '';
+
+  const hubSelect = document.getElementById('hub-filter-status');
+  if (hubSelect) hubSelect.value = 'all';
+
+  renderHubModeration();
+  showToast('Hub filters reset.', 'info');
+}
+
+// Theme & Audio & Responsive Drawer Handlers
+function applyInitialTheme() {
+  if (currentTheme === 'dark') {
+    document.body.classList.add('dark-mode');
+  } else {
+    document.body.classList.remove('dark-mode');
+  }
+  updateThemeIcon();
+}
+
+function toggleTheme() {
+  const isDark = document.body.classList.toggle('dark-mode');
+  currentTheme = isDark ? 'dark' : 'light';
+  localStorage.setItem('coco_theme_mode', currentTheme);
+  updateThemeIcon();
+  showToast(`Switched to ${isDark ? 'Dark' : 'Light'} theme`, 'info');
+}
+
+function updateThemeIcon() {
+  const icon = document.getElementById('theme-toggle-icon');
+  if (!icon) return;
+  const isDark = document.body.classList.contains('dark-mode');
+  icon.setAttribute('data-lucide', isDark ? 'sun' : 'moon');
+  if (window.lucide) lucide.createIcons();
+}
+
+function toggleAudioAlerts() {
+  soundAlertsEnabled = !soundAlertsEnabled;
+  localStorage.setItem('coco_sound_enabled', String(soundAlertsEnabled));
+  updateSoundIcon();
+  if (soundAlertsEnabled) {
+    playNotificationSound();
+    showToast('Sound alerts enabled', 'info');
+  } else {
+    showToast('Sound alerts muted', 'warning');
+  }
+}
+
+function updateSoundIcon() {
+  const icon = document.getElementById('sound-toggle-icon');
+  const btn = document.getElementById('btn-sound-toggle');
+  if (icon) {
+    icon.setAttribute('data-lucide', soundAlertsEnabled ? 'volume-2' : 'volume-x');
+  }
+  if (btn) {
+    btn.classList.toggle('active', soundAlertsEnabled);
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+function toggleSidebarDrawer(forceState) {
+  const sidebar = document.getElementById('app-sidebar');
+  const backdrop = document.getElementById('sidebar-backdrop');
+  if (!sidebar) return;
+
+  const isOpen = forceState !== undefined ? forceState : !sidebar.classList.contains('drawer-open');
+  if (isOpen) {
+    sidebar.classList.add('drawer-open');
+    if (backdrop) backdrop.classList.add('active');
+  } else {
+    sidebar.classList.remove('drawer-open');
+    if (backdrop) backdrop.classList.remove('active');
+  }
+}
+
+function openShortcutsModal() {
+  const modal = document.getElementById('shortcuts-modal');
+  if (modal) modal.classList.add('active');
+  if (window.lucide) lucide.createIcons();
+}
+
+function closeShortcutsModal() {
+  const modal = document.getElementById('shortcuts-modal');
+  if (modal) modal.classList.remove('active');
+}
+
+// Global Keyboard Shortcuts
+function setupKeyboardShortcuts() {
+  window.addEventListener('keydown', (e) => {
+    // 1. Ctrl+K or Cmd+K: Focus Global Search
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+      e.preventDefault();
+      const searchInput = document.getElementById('global-search');
+      if (searchInput) {
+        searchInput.focus();
+        searchInput.select();
+      }
+      return;
+    }
+
+    // 2. Escape: Close open modals, clear selection, or blur search
+    if (e.key === 'Escape') {
+      const confirmModal = document.getElementById('confirm-dialog-modal');
+      const shortcutsModal = document.getElementById('shortcuts-modal');
+      const lightboxModal = document.getElementById('lightbox-modal');
+      const userModal = document.getElementById('user-edit-modal');
+      const tripModal = document.getElementById('trip-detail-modal');
+
+      if (confirmModal && confirmModal.classList.contains('active')) {
+        closeConfirmModal();
+        return;
+      }
+      if (shortcutsModal && shortcutsModal.classList.contains('active')) {
+        closeShortcutsModal();
+        return;
+      }
+      if (lightboxModal && lightboxModal.classList.contains('active')) {
+        closeLightbox();
+        return;
+      }
+      if (userModal && userModal.classList.contains('active')) {
+        closeUserEditModal();
+        return;
+      }
+      if (tripModal && tripModal.classList.contains('active')) {
+        closeTripDetailModal();
+        return;
+      }
+
+      const activeEl = document.activeElement;
+      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+        activeEl.blur();
+        return;
+      }
+
+      if (selectedUserIds.size > 0) {
+        clearUserSelection();
+        return;
+      }
+
+      toggleSidebarDrawer(false);
+      return;
+    }
+
+    // If typing in input, textarea, select -> ignore single-key shortcuts
+    const targetTag = (e.target && e.target.tagName) || '';
+    if (targetTag === 'INPUT' || targetTag === 'TEXTAREA' || targetTag === 'SELECT' || e.target.isContentEditable) {
+      return;
+    }
+
+    // 3. Tab switching keys 1 to 6
+    if (e.key === '1') switchTab('dashboard');
+    else if (e.key === '2') switchTab('users');
+    else if (e.key === '3') switchTab('verification');
+    else if (e.key === '4') switchTab('trips');
+    else if (e.key === '5') switchTab('bookings');
+    else if (e.key === '6') switchTab('hub');
+    // 4. Quick Actions
+    else if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+      const modal = document.getElementById('shortcuts-modal');
+      if (modal && modal.classList.contains('active')) closeShortcutsModal();
+      else openShortcutsModal();
+    }
+    else if (e.key === 't' || e.key === 'T') {
+      toggleTheme();
+    }
+    else if (e.key === 'r' || e.key === 'R') {
+      manualRefresh();
+    }
+    else if (e.key === 'm' || e.key === 'M') {
+      toggleAudioAlerts();
+    }
+  });
 }

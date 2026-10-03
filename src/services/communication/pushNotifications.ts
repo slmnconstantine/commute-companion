@@ -5,17 +5,8 @@ import Constants from 'expo-constants';
 import { createNotification } from '@/services/notifications';
 import { handleServiceError } from '@/utils/errorHelper';
 
-if (Platform.OS !== 'web') {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: false,
-      shouldShowBanner: false,
-      shouldShowList: false, // Suppress OS notification shade/list while app is in foreground
-      shouldPlaySound: false, // Suppress OS sound while app is in foreground
-      shouldSetBadge: true,
-    }),
-  });
-}
+// Note: Foreground notification display handler is dynamically configured in NotificationContext
+// to respect user preferences (pushEnabled, soundEnabled).
 
 export async function registerForPushNotificationsAsync() {
   if (Platform.OS === 'web') {
@@ -78,6 +69,11 @@ export async function sendPushNotification(
   data: any = {},
   userId?: string
 ) {
+  // Suppress sending notification if the sender is the intended recipient
+  if (data?.senderId && userId && data.senderId === userId) {
+    return;
+  }
+
   const payloadData = {
     ...data,
     ...(userId ? { recipientId: userId } : {}),
