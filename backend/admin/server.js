@@ -58,13 +58,46 @@ const MIME_TYPES = {
 const server = http.createServer((req, res) => {
   console.log(`[Admin Server] ${req.method} ${req.url}`);
 
-  // Endpoint to supply Supabase configuration to frontend
+  // Endpoint to handle admin login and release Supabase credentials
+  if (req.url === '/api/login' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const parsed = JSON.parse(body || '{}');
+        const submitted = (parsed.password || '').trim();
+        const expected = (env.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || 'admin123').trim();
+
+        if (submitted && submitted === expected) {
+          res.writeHead(200, {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store, no-cache, must-revalidate'
+          });
+          const config = {
+            supabaseUrl: env.EXPO_PUBLIC_SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || '',
+            supabaseAnonKey: env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
+            supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY || env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+          };
+          res.end(JSON.stringify({ success: true, config }));
+        } else {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, message: 'Invalid administrator password' }));
+        }
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, message: 'Invalid request body' }));
+      }
+    });
+    return;
+  }
+
+  // Endpoint to supply public Supabase configuration to frontend
   if (req.url === '/api/config') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     const config = {
-      supabaseUrl: env.EXPO_PUBLIC_SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL,
-      supabaseAnonKey: env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
-      supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY || env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+      authRequired: true,
+      supabaseUrl: env.EXPO_PUBLIC_SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || '',
+      supabaseAnonKey: env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || ''
     };
     res.end(JSON.stringify(config));
     return;
