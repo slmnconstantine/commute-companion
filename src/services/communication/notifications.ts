@@ -77,8 +77,23 @@ export async function getUserNotifications(userId: string): Promise<AppNotificat
 /** Get total unread notifications count for badge */
 export async function getUnreadNotificationsCount(userId: string): Promise<number> {
   try {
-    const notifs = await getUserNotifications(userId);
-    return notifs.filter((n) => !n.read).length;
+    const { count, error } = await supabase
+      .from('notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('read', false);
+
+    if (!error && typeof count === 'number') {
+      return count;
+    }
+  } catch (e) {
+    console.warn('Failed to query unread count from database, falling back to local cache:', e);
+  }
+
+  // Fallback to local cache count if offline or DB query fails
+  try {
+    const local = await getLocalNotifications(userId);
+    return local.filter((n) => !n.read).length;
   } catch (e) {
     return 0;
   }
@@ -176,6 +191,11 @@ export async function createNotification(
     data: data || {},
     created_at: new Date().toISOString(),
   };
+
+  // Prevent creating notification if sender is the recipient
+  if (data?.senderId && data.senderId === userId) {
+    return localNotif;
+  }
 
   let isSelf = false;
   try {

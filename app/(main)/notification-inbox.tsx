@@ -11,7 +11,6 @@ import NotificationSkeleton from '@/components/common/NotificationSkeleton';
 import BouncyPressable from '@/components/common/BouncyPressable';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { getUserNotifications, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification, deleteAllNotifications, AppNotification } from '@/services/notifications';
-import { supabase } from '@/lib/supabase';
 
 import { handleNotificationNavigation } from '@/utils/notificationRouter';
 
@@ -20,7 +19,7 @@ export default function NotificationInboxScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { profile } = useAuth();
-  const { refreshUnreadCount } = useNotifications();
+  const { refreshUnreadCount, lastNotificationAt } = useNotifications();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -44,32 +43,10 @@ export default function NotificationInboxScreen() {
     }, [loadNotifications])
   );
 
+  // Sync with real-time notifications received via NotificationContext
   useEffect(() => {
-    if (!profile?.id) return;
-    const channelName = `user_notifications_${profile.id}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${profile.id}`,
-        },
-        () => {
-          loadNotifications();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-      try {
-        (supabase.realtime as any)._remove?.(channel);
-      } catch {}
-    };
-  }, [profile?.id, loadNotifications]);
+    loadNotifications();
+  }, [lastNotificationAt, loadNotifications]);
 
   const onRefresh = async () => {
     setRefreshing(true);

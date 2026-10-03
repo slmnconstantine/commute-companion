@@ -15,6 +15,7 @@ interface NotificationContextType {
   driverPendingCount: number;
   commuterUpcomingCount: number;
   unreadCount: number;
+  lastNotificationAt: number;
   refreshCounts: () => Promise<void>;
   refreshUnreadCount: () => Promise<void>;
   showInAppNotification: (title: string, body: string, data?: any) => void;
@@ -39,6 +40,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const [driverPendingCount, setDriverPendingCount] = useState(0);
   const [commuterUpcomingCount, setCommuterUpcomingCount] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [lastNotificationAt, setLastNotificationAt] = useState<number>(Date.now());
 
   const refreshUnreadCount = useCallback(async () => {
     if (!profile?.id) return;
@@ -275,8 +277,14 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     if (!profile?.id) return;
 
     let subscription: any = null;
+    let tripsSubscription: any = null;
 
     const setupSubscription = async () => {
+      if (subscription) {
+        supabase.removeChannel(subscription);
+        subscription = null;
+      }
+
       let filterString = '';
 
       if (profile.role === 'commuter') {
@@ -317,9 +325,34 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
     setupSubscription();
 
+    // If driver, also listen to trips table changes so when trips are created, updated, or completed,
+    // bookings subscription refreshes its filter dynamically
+    if (profile.role === 'driver') {
+      const tripsChannelName = `driver_trips_sync_${profile.id}_${Date.now()}`;
+      tripsSubscription = supabase
+        .channel(tripsChannelName)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'trips',
+            filter: `driver_id=eq.${profile.id}`,
+          },
+          () => {
+            refreshCounts();
+            setupSubscription();
+          }
+        )
+        .subscribe();
+    }
+
     return () => {
       if (subscription) {
         supabase.removeChannel(subscription);
+      }
+      if (tripsSubscription) {
+        supabase.removeChannel(tripsSubscription);
       }
     };
   }, [profile?.id, profile?.role]);
@@ -342,6 +375,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         },
         (payload) => {
           refreshUnreadCount();
+          setLastNotificationAt(Date.now());
 
           if (payload.eventType === 'INSERT') {
             const newNotif = payload.new as any;
@@ -468,6 +502,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
             return;
           }
           refreshUnreadCount();
+          if (data) {
+            handleNotificationNavigation(router, data);
+          }
         }
       }).catch(() => {});
     }
@@ -491,6 +528,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         driverPendingCount,
         commuterUpcomingCount,
         unreadCount,
+        lastNotificationAt,
         refreshCounts,
         refreshUnreadCount,
         showInAppNotification,

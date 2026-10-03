@@ -17,7 +17,7 @@
     rel="stylesheet">
 
   <!-- CSS Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=2.3">
+  <link rel="stylesheet" href="style.css?v=2.5">
 
   <!-- Supabase JS Client CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -51,14 +51,11 @@
           <label for="admin-password-input">Administrator Passcode</label>
           <div class="auth-input-wrapper">
             <i data-lucide="lock" class="input-icon"></i>
-            <input 
-              type="password" 
-              id="admin-password-input" 
-              placeholder="Enter admin password..." 
-              required 
-              autocomplete="current-password"
-            >
-            <button type="button" class="btn-toggle-pwd" onclick="togglePasswordVisibility('admin-password-input', 'pwd-toggle-icon')" title="Show / Hide password">
+            <input type="password" id="admin-password-input" placeholder="Enter admin password..." required
+              autocomplete="current-password">
+            <button type="button" class="btn-toggle-pwd"
+              onclick="togglePasswordVisibility('admin-password-input', 'pwd-toggle-icon')"
+              title="Show / Hide password">
               <i data-lucide="eye" id="pwd-toggle-icon"></i>
             </button>
           </div>
@@ -75,21 +72,17 @@
           <span id="btn-login-spinner" class="spinner" style="display: none;"></span>
         </button>
       </form>
-
-      <div class="auth-gate-footer">
-        <div class="auth-hint">
-          <i data-lucide="info"></i>
-          <span>Verified against ADMIN_PASSWORD on server</span>
-        </div>
-      </div>
     </div>
   </div>
 
   <!-- Main Grid Layout -->
   <div class="app-layout">
 
+    <!-- Sidebar Backdrop for Mobile -->
+    <div id="sidebar-backdrop" class="sidebar-backdrop" onclick="toggleSidebarDrawer(false)"></div>
+
     <!-- Sidebar Navigation -->
-    <aside class="sidebar">
+    <aside class="sidebar" id="app-sidebar">
       <div class="sidebar-brand">
         <div class="brand-logo">
           <img src="logo.png" alt="Commute Companion Logo" class="brand-logo-img">
@@ -98,6 +91,9 @@
           <h2>CoCo</h2>
           <span>Admin Portal</span>
         </div>
+        <button class="sidebar-close-btn" onclick="toggleSidebarDrawer(false)" title="Close menu">
+          <i data-lucide="x"></i>
+        </button>
       </div>
 
       <nav class="sidebar-nav">
@@ -108,38 +104,35 @@
         <button id="btn-tab-users" class="nav-item" onclick="switchTab('users')">
           <i data-lucide="users"></i>
           <span>User Directory</span>
-          <span id="badge-total-users" class="nav-badge">0</span>
+          <span id="badge-total-users" class="nav-badge" style="display: none;">0</span>
         </button>
         <button id="btn-tab-verification" class="nav-item" onclick="switchTab('verification')">
           <i data-lucide="id-card"></i>
           <span>Verification Inbox</span>
-          <span id="badge-pending-verifications" class="nav-badge badge-pending">0</span>
+          <span id="badge-pending-verifications" class="nav-badge badge-pending" style="display: none;">0</span>
         </button>
         <button id="btn-tab-trips" class="nav-item" onclick="switchTab('trips')">
           <i data-lucide="map-pin"></i>
           <span>Trips & Rides</span>
-          <span id="badge-total-trips" class="nav-badge">0</span>
+          <span id="badge-total-trips" class="nav-badge" style="display: none;">0</span>
         </button>
         <button id="btn-tab-bookings" class="nav-item" onclick="switchTab('bookings')">
           <i data-lucide="wallet"></i>
           <span>Bookings & GCash</span>
-          <span id="badge-total-bookings" class="nav-badge">0</span>
+          <span id="badge-total-bookings" class="nav-badge" style="display: none;">0</span>
         </button>
         <button id="btn-tab-hub" class="nav-item" onclick="switchTab('hub')">
           <i data-lucide="message-square"></i>
           <span>Community Hub</span>
-          <span id="badge-total-posts" class="nav-badge">0</span>
+          <span id="badge-total-posts" class="nav-badge" style="display: none;">0</span>
           <span id="badge-reported-posts" class="nav-badge badge-danger"
             style="display: none; margin-left: 4px;">0</span>
         </button>
       </nav>
 
       <div class="sidebar-footer">
-        <button id="btn-open-settings" class="nav-item settings-trigger" onclick="openSettingsModal()">
-          <i data-lucide="settings"></i>
-          <span>Connection Settings</span>
-        </button>
-        <button id="btn-logout" class="nav-item logout-trigger" onclick="handleAdminLogout()" title="Lock dashboard and sign out">
+        <button id="btn-logout" class="nav-item logout-trigger" onclick="handleAdminLogout()"
+          title="Lock dashboard and sign out">
           <i data-lucide="log-out"></i>
           <span>Lock / Sign Out</span>
         </button>
@@ -155,19 +148,39 @@
 
       <!-- Top Navigation/Header -->
       <header class="header">
+        <div class="header-left-cluster">
+          <button id="btn-sidebar-toggle" class="sidebar-toggle-btn" onclick="toggleSidebarDrawer()" title="Toggle navigation menu">
+            <i data-lucide="menu"></i>
+          </button>
+          <div class="header-breadcrumb" id="header-breadcrumb">
+            <span class="bc-root">Admin</span>
+            <span class="bc-sep">/</span>
+            <span class="bc-current" id="bc-current-tab">Dashboard</span>
+          </div>
+        </div>
         <div class="header-search">
           <i data-lucide="search" class="search-icon"></i>
           <input type="text" id="global-search" placeholder="Search users, trips, bookings, routes..."
             oninput="handleGlobalSearch(this.value)">
+          <kbd class="kbd-search-hint" onclick="document.getElementById('global-search').focus()">Ctrl K</kbd>
         </div>
         <div class="header-actions">
-          <button id="btn-refresh-data" class="btn-refresh" onclick="manualRefresh()" title="Refresh database records">
+          <button id="btn-sound-toggle" class="btn-icon-header" onclick="toggleAudioAlerts()" title="Toggle notification sounds">
+            <i data-lucide="volume-2" id="sound-toggle-icon"></i>
+          </button>
+          <button id="btn-theme-toggle" class="btn-icon-header" onclick="toggleTheme()" title="Toggle dark / light theme (T)">
+            <i data-lucide="moon" id="theme-toggle-icon"></i>
+          </button>
+          <button id="btn-shortcuts-help" class="btn-icon-header" onclick="openShortcutsModal()" title="Keyboard shortcuts (?)">
+            <i data-lucide="keyboard"></i>
+          </button>
+          <button id="btn-refresh-data" class="btn-refresh" onclick="manualRefresh()" title="Refresh database records (R)">
             <i data-lucide="refresh-cw" id="refresh-icon"></i>
             <span>Sync</span>
           </button>
-          <div class="live-status-badge">
+          <div class="live-status-badge" id="live-sync-badge" onclick="manualRefresh()" title="Click to manually refresh">
             <span class="live-dot"></span>
-            <span>Live Database</span>
+            <span id="sync-time-indicator">Live • Synced just now</span>
           </div>
           <div class="admin-profile">
             <div class="avatar-circle">AD</div>
@@ -361,11 +374,55 @@
                 </select>
               </div>
             </div>
+
+            <!-- Toolbar Subrow: Selection & Actions -->
+            <div class="toolbar-subrow">
+              <label class="custom-checkbox-wrapper" title="Select or deselect all visible users on this page">
+                <input type="checkbox" id="user-select-all" onchange="handleSelectAllUsers(this.checked)">
+                <span class="custom-checkbox-box"></span>
+                <span class="checkbox-text">Select Page</span>
+              </label>
+              <div class="toolbar-right-actions">
+                <button class="btn btn-secondary btn-small" onclick="exportUsersCSV()" title="Export current users as CSV">
+                  <i data-lucide="download"></i>
+                  <span>Export CSV</span>
+                </button>
+                <button class="btn btn-ghost btn-small" onclick="resetUserFilters()" title="Reset search & filters">
+                  <i data-lucide="rotate-ccw"></i>
+                  <span>Reset Filters</span>
+                </button>
+              </div>
+            </div>
           </div>
 
           <!-- Users Directory Grid -->
           <div id="users-grid" class="users-grid">
             <!-- Dynamically rendered user cards -->
+          </div>
+
+          <!-- Users Pagination -->
+          <div id="users-pagination" class="pagination-bar"></div>
+
+          <!-- User Bulk Action Bar -->
+          <div id="user-bulk-bar" class="bulk-action-bar" style="display: none;">
+            <div class="bulk-info">
+              <span class="bulk-badge" id="bulk-selected-count">0</span>
+              <span>users selected</span>
+            </div>
+            <div class="bulk-actions">
+              <button class="btn btn-primary btn-small" onclick="bulkVerifySelectedUsers()">
+                <i data-lucide="shield-check"></i>
+                <span>Bulk Verify</span>
+              </button>
+              <button class="btn btn-secondary btn-small" onclick="bulkExportSelectedUsers()">
+                <i data-lucide="file-spreadsheet"></i>
+                <span>Export Selected</span>
+              </button>
+              <button class="btn btn-ghost btn-small text-danger" onclick="clearUserSelection()">
+                <i data-lucide="x"></i>
+                <span>Deselect All</span>
+              </button>
+            </div>
           </div>
         </section>
 
@@ -422,12 +479,30 @@
                   class="styled-input" style="max-width: 280px;" oninput="handleTripSearch(this.value)">
               </div>
             </div>
+
+            <!-- Toolbar Subrow -->
+            <div class="toolbar-subrow">
+              <div></div>
+              <div class="toolbar-right-actions">
+                <button class="btn btn-secondary btn-small" onclick="exportTripsCSV()" title="Export trips as CSV">
+                  <i data-lucide="download"></i>
+                  <span>Export CSV</span>
+                </button>
+                <button class="btn btn-ghost btn-small" onclick="resetTripFilters()" title="Reset trip filters">
+                  <i data-lucide="rotate-ccw"></i>
+                  <span>Reset Filters</span>
+                </button>
+              </div>
+            </div>
           </div>
 
           <!-- Trips Grid / Table -->
           <div id="trips-grid" class="trips-grid">
             <!-- Dynamically rendered trip cards -->
           </div>
+
+          <!-- Trips Pagination -->
+          <div id="trips-pagination" class="pagination-bar"></div>
         </section>
 
         <!-- ═══ 5. BOOKINGS & GCASH TAB ═══ -->
@@ -465,19 +540,40 @@
                 </div>
               </div>
             </div>
+
+            <!-- Toolbar Subrow -->
+            <div class="toolbar-subrow">
+              <div></div>
+              <div class="toolbar-right-actions">
+                <button class="btn btn-secondary btn-small" onclick="exportBookingsCSV()" title="Export bookings as CSV">
+                  <i data-lucide="download"></i>
+                  <span>Export CSV</span>
+                </button>
+                <button class="btn btn-ghost btn-small" onclick="resetBookingFilters()" title="Reset booking filters">
+                  <i data-lucide="rotate-ccw"></i>
+                  <span>Reset Filters</span>
+                </button>
+              </div>
+            </div>
           </div>
 
           <!-- Bookings Grid -->
           <div id="bookings-grid" class="bookings-grid">
             <!-- Dynamically rendered booking cards -->
           </div>
+
+          <!-- Bookings Pagination -->
+          <div id="bookings-pagination" class="pagination-bar"></div>
         </section>
 
         <!-- ═══ 6. COMMUNITY HUB TAB ═══ -->
         <section id="view-hub" class="tab-view">
           <div class="view-header">
             <h1>Community Hub Content Moderation</h1>
-            <p>Monitor commuter and driver community discussion posts, review reports, and remove inappropriate or spam posts. <span style="display: inline-flex; align-items: center; gap: 4px; background: rgba(16, 185, 129, 0.15); color: #059669; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 9999px; margin-left: 6px;">⚡ Auto-Removal Active (&gt;20 unique reports)</span></p>
+            <p>Monitor commuter and driver community discussion posts, review reports, and remove inappropriate or spam
+              posts. <span
+                style="display: inline-flex; align-items: center; gap: 4px; background: rgba(16, 185, 129, 0.15); color: #059669; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 9999px; margin-left: 6px;">⚡
+                Auto-Removal Active (&gt;20 unique reports)</span></p>
           </div>
 
           <!-- Hub Toolbar -->
@@ -496,12 +592,26 @@
                 </select>
               </div>
             </div>
+
+            <!-- Toolbar Subrow -->
+            <div class="toolbar-subrow">
+              <div></div>
+              <div class="toolbar-right-actions">
+                <button class="btn btn-ghost btn-small" onclick="resetHubFilters()" title="Reset hub filters">
+                  <i data-lucide="rotate-ccw"></i>
+                  <span>Reset Filters</span>
+                </button>
+              </div>
+            </div>
           </div>
 
           <!-- Hub Posts List -->
           <div id="hub-posts-grid" class="hub-posts-grid">
             <!-- Dynamically rendered hub posts -->
           </div>
+
+          <!-- Hub Pagination -->
+          <div id="hub-pagination" class="pagination-bar"></div>
         </section>
 
       </div>
@@ -653,52 +763,6 @@
     </div>
   </div>
 
-  <!-- ═══ MODAL: SETTINGS & SUPABASE CONFIG ═══ -->
-  <div id="settings-modal" class="modal-backdrop">
-    <div class="modal-content animate-zoom-in">
-      <div class="modal-header">
-        <h3>Supabase Database Configuration</h3>
-        <button class="btn-close-modal" onclick="closeSettingsModal()">
-          <i data-lucide="x"></i>
-        </button>
-      </div>
-      <div class="modal-body">
-        <p class="modal-intro-text">This portal communicates directly with your Supabase backend. Credentials configured
-          in your environment are automatically loaded.</p>
-
-        <div class="input-field-group">
-          <label for="settings-supabase-url">Supabase Project URL</label>
-          <input type="text" id="settings-supabase-url" placeholder="https://xxxx.supabase.co" class="styled-input">
-        </div>
-
-        <div class="input-field-group">
-          <label for="settings-supabase-anon-key">Anon Key</label>
-          <input type="password" id="settings-supabase-anon-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6..."
-            class="styled-input">
-        </div>
-
-        <div class="input-field-group border-top">
-          <label for="settings-supabase-service-role">
-            Service Role Key (Admin Bypass Key)
-            <span class="badge-role badge-danger">Optional</span>
-          </label>
-          <input type="password" id="settings-supabase-service-role" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6..."
-            class="styled-input">
-          <span class="field-help-text">Direct RPC functions bypass RLS automatically. Service role key can be provided
-            for additional administrative queries.</span>
-        </div>
-
-        <div class="modal-status-box" id="settings-status-box">
-          <i data-lucide="alert-circle" class="status-icon"></i>
-          <span id="settings-status-message">Connection is unconfigured.</span>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeSettingsModal()">Cancel</button>
-        <button id="btn-save-settings" class="btn btn-primary" onclick="saveSettings()">Save & Reconnect</button>
-      </div>
-    </div>
-  </div>
 
   <!-- ═══ MODAL: CONFIRMATION DIALOG MODAL ═══ -->
   <div id="confirm-dialog-modal" class="modal-backdrop">
@@ -720,8 +784,72 @@
     </div>
   </div>
 
+  <!-- ═══ MODAL: KEYBOARD SHORTCUTS CHEAT SHEET ═══ -->
+  <div id="shortcuts-modal" class="modal-backdrop">
+    <div class="modal-content animate-zoom-in" style="max-width: 480px;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <i data-lucide="keyboard" style="color: var(--accent-primary);"></i>
+          <h3>Keyboard Shortcuts</h3>
+        </div>
+        <button class="btn-close-modal" onclick="closeShortcutsModal()">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="shortcuts-list">
+          <div class="shortcut-item">
+            <span class="shortcut-desc">Global Search</span>
+            <div class="shortcut-key-wrapper">
+              <kbd class="shortcut-key">Ctrl</kbd> + <kbd class="shortcut-key">K</kbd>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <span class="shortcut-desc">Close Active Modal / Lightbox</span>
+            <div class="shortcut-key-wrapper">
+              <kbd class="shortcut-key">Esc</kbd>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <span class="shortcut-desc">Switch Tabs (1: Dash, 2: Users, 3: Inbox, 4: Trips, 5: Bookings, 6: Hub)</span>
+            <div class="shortcut-key-wrapper">
+              <kbd class="shortcut-key">1</kbd>–<kbd class="shortcut-key">6</kbd>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <span class="shortcut-desc">Sync Database Now</span>
+            <div class="shortcut-key-wrapper">
+              <kbd class="shortcut-key">R</kbd>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <span class="shortcut-desc">Toggle Dark / Light Theme</span>
+            <div class="shortcut-key-wrapper">
+              <kbd class="shortcut-key">T</kbd>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <span class="shortcut-desc">Toggle Notification Sound</span>
+            <div class="shortcut-key-wrapper">
+              <kbd class="shortcut-key">M</kbd>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <span class="shortcut-desc">Open / Close Shortcuts Help</span>
+            <div class="shortcut-key-wrapper">
+              <kbd class="shortcut-key">?</kbd>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="closeShortcutsModal()">Got it</button>
+      </div>
+    </div>
+  </div>
+
   <!-- App Script Logic -->
-  <script src="app.js?v=2.2"></script>
+  <script src="app.js?v=2.5"></script>
 </body>
 
 </html>
