@@ -762,7 +762,7 @@ export default function CommunityScreen() {
               showsHorizontalScrollIndicator={false}
               data={filterTags}
               keyExtractor={(item) => item.tag}
-              contentContainerStyle={{ paddingHorizontal: 20, gap: 8 }}
+              contentContainerStyle={{ paddingHorizontal: 5, gap: 8 }}
               renderItem={({ item }) => {
                 const isSelected = selectedFilterTag === item.tag;
                 return (
@@ -812,10 +812,10 @@ export default function CommunityScreen() {
               <View style={styles.expiringBannerLeft}>
                 <Ionicons name="sparkles" size={18} color={theme.colors.warning} />
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.expiringBannerTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>
+                  <Text style={[styles.expiringBannerTitle, { color: 'theme.colors.text', fontFamily: 'Inter-SemiBold' }]}>
                     Clean Up Older Posts ({expiringPosts.length})
                   </Text>
-                  <Text style={[styles.expiringBannerDesc, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
+                  <Text style={[styles.expiringBannerDesc, { color: 'theme.colors.textMuted', fontFamily: 'Inter-Regular' }]}>
                     You have updates past or approaching 1 week. Delete them to keep info fresh?
                   </Text>
                 </View>
@@ -973,7 +973,7 @@ export default function CommunityScreen() {
 
             <View style={styles.modalHeader}>
               <Pressable onPress={closePostModal} style={{ padding: 4 }}>
-                <Text style={{ color: theme.colors.textMuted, fontSize: 15, fontFamily: 'Inter-Medium' }}>Cancel</Text>
+                <Text style={{ color: 'theme.colors.textMuted', fontSize: 15, fontFamily: 'Inter-Medium' }}>Cancel</Text>
               </Pressable>
               <Text style={[theme.typography.subtitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 17 }]}>
                 {editingPostId ? 'Edit Update' : 'New Update'}
