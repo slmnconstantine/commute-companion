@@ -32,6 +32,7 @@ interface CommandInfo {
 // ─── Data ────────────────────────────────────────────────────────────────────
 
 const COMMANDS: CommandInfo[] = [
+  { type: 'WAKE_WORD', icon: 'mic', label: '"Hey Coco" Wake Word', description: 'Activate hands-free voice control', example: '"Hey Coco, find rides"' },
   { type: 'NAVIGATE', icon: 'compass', label: 'Navigate', description: 'Go to any screen in the app', example: '"Go to community hub"' },
   { type: 'SEARCH_RIDES', icon: 'search', label: 'Search Rides', description: 'Find available rides', example: '"Show me rides"' },
   { type: 'SET_ROUTE', icon: 'map', label: 'Set Route', description: 'Set your commute route', example: '"Set route from BGC to Makati"' },
@@ -46,6 +47,21 @@ const COMMANDS: CommandInfo[] = [
 ];
 
 const DEMO_SCENARIOS = [
+  {
+    name: 'Say "Hey Coco"',
+    steps: [
+      { state: 'recording' as DemoState, duration: 1800 },
+      { state: 'transcribing' as DemoState, duration: 1200, addMessage: { role: 'user' as const, text: 'Hey Coco' } },
+      { state: 'thinking' as DemoState, duration: 1200 },
+      { state: 'speaking' as DemoState, duration: 2000, addMessage: { role: 'assistant' as const, text: "I'm listening! How can I help with your commute?" } },
+      { state: 'recording' as DemoState, duration: 2000 },
+      { state: 'transcribing' as DemoState, duration: 1200, addMessage: { role: 'user' as const, text: 'Find rides to Makati' } },
+      { state: 'thinking' as DemoState, duration: 1800 },
+      { state: 'speaking' as DemoState, duration: 2500, addMessage: { role: 'assistant' as const, text: 'Found 3 available rides to Makati. Navigating to Rides now.' } },
+      { state: 'executing' as DemoState, duration: 1500 },
+      { state: 'done' as DemoState, duration: 1000 },
+    ],
+  },
   {
     name: 'Find a Ride',
     steps: [
@@ -496,7 +512,7 @@ export default function AssistantDemoScreen() {
 
           <View style={[styles.howItWorksCard, { backgroundColor: `${theme.colors.text}04` }]}>
             {[
-              { step: '1', title: 'Tap the Mic', desc: 'Press the floating mic button anywhere in the app', icon: 'finger-print' },
+              { step: '1', title: 'Say "Hey Coco" or Tap Mic', desc: 'Activate hands-free with "Hey Coco" or press the floating mic', icon: 'mic' },
               { step: '2', title: 'Speak Naturally', desc: 'Say your command in plain English — no special syntax', icon: 'chatbox-ellipses' },
               { step: '3', title: 'AI Processes', desc: 'Intent parsed locally or via Groq Llama AI', icon: 'sparkles' },
               { step: '4', title: 'Confirm & Execute', desc: 'Review the action, then confirm to proceed', icon: 'checkmark-done' },

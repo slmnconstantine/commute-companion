@@ -762,7 +762,7 @@ export default function CommunityScreen() {
               showsHorizontalScrollIndicator={false}
               data={filterTags}
               keyExtractor={(item) => item.tag}
-              contentContainerStyle={{ paddingHorizontal: 5, gap: 8 }}
+              contentContainerStyle={{ paddingHorizontal: 20, gap: 8 }}
               renderItem={({ item }) => {
                 const isSelected = selectedFilterTag === item.tag;
                 return (

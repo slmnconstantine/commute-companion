@@ -5,15 +5,18 @@ import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { NotificationProvider } from '@/context/NotificationContext';
 
+import AnimatedSplashScreen from '@/components/common/AnimatedSplashScreen';
+
 export default function MainLayout() {
   const { session, isLoading } = useAuth();
   const { theme } = useTheme();
 
   if (isLoading || !session) {
     return (
-      <View style={[styles.loading, { backgroundColor: theme.colors.background }]}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-      </View>
+      <AnimatedSplashScreen
+        isReady={!isLoading && !!session}
+        minDurationMs={800}
+      />
     );
   }
 

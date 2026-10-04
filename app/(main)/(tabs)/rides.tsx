@@ -101,7 +101,8 @@ function generateRouteHash(originLat: number, originLng: number, destLat: number
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
 export default function RidesScreen() {
-  const { theme } = useTheme();
+  const { theme, mode } = useTheme();
+  const isDark = mode === 'dark';
   const { profile } = useAuth();
   const { activeRoute, setActiveRoute } = useRoute();
   const { driverPendingCount, refreshCounts } = useNotifications();
@@ -109,6 +110,8 @@ export default function RidesScreen() {
   const isVerifiedDriver = Boolean(profile?.role === 'driver' && profile?.is_verified && profile?.verified_badge);
   const isDriverPending = Boolean(profile?.role === 'driver' && (!profile?.is_verified || !profile?.verified_badge));
   const isDriver = isVerifiedDriver;
+  const isVerifiedCommuter = Boolean(profile?.is_verified || profile?.verified_badge);
+  const isCommuterPending = Boolean(!isVerifiedCommuter && profile?.government_id_url);
 
   const params = useLocalSearchParams<{
     from_set_route?: string;
@@ -193,13 +196,35 @@ export default function RidesScreen() {
   ]);
 
   const handlePostRequestPress = () => {
-    const isVerified = profile?.is_verified && profile?.verified_badge;
-    if (!isVerified) {
+    if (!isVerifiedCommuter) {
+      if (isCommuterPending) {
+        Alert.alert(
+          'Verification Under Review ⏳',
+          'Your government ID has been submitted and is currently being reviewed by our admin team. You will be able to post ride requests as soon as it is approved!',
+          [
+            { text: 'View Profile', onPress: () => router.push('/(main)/(tabs)/profile') },
+            { text: 'OK', style: 'cancel' }
+          ]
+        );
+      } else {
+        Alert.alert(
+          'Verification Required 🔒',
+          'Only verified commuters can post ride requests to keep our carpool community safe. Verify your government ID to unlock this feature.',
+          [
+            { text: 'Verify ID Now', onPress: () => router.push('/(main)/verification/upload-id' as any) },
+            { text: 'Later', style: 'cancel' }
+          ]
+        );
+      }
+      return;
+    }
+
+    if (!activeRoute && !reqOrigin && !reqDestination) {
       Alert.alert(
-        'Verification Required',
-        'Only verified commuters can post ride requests. Please submit your verification documents in the Profile tab.',
+        'Set Route First',
+        'Please pin your regular commute route or set an origin and destination to post a ride request.',
         [
-          { text: 'Go to Profile', onPress: () => router.push('/(main)/(tabs)/profile') },
+          { text: 'Pin Route on Map', onPress: () => router.push('/(main)/ride/set-route' as any) },
           { text: 'Cancel', style: 'cancel' }
         ]
       );
@@ -224,16 +249,26 @@ export default function RidesScreen() {
   };
 
   const handleRepostRequest = (req: Route) => {
-    const isVerified = profile?.is_verified && profile?.verified_badge;
-    if (!isVerified) {
-      Alert.alert(
-        'Verification Required',
-        'Only verified commuters can post ride requests. Please submit your verification documents in the Profile tab.',
-        [
-          { text: 'Go to Profile', onPress: () => router.push('/(main)/(tabs)/profile') },
-          { text: 'Cancel', style: 'cancel' },
-        ]
-      );
+    if (!isVerifiedCommuter) {
+      if (isCommuterPending) {
+        Alert.alert(
+          'Verification Under Review ⏳',
+          'Your government ID has been submitted and is currently being reviewed. You will be able to re-post ride requests once approved.',
+          [
+            { text: 'View Profile', onPress: () => router.push('/(main)/(tabs)/profile') },
+            { text: 'OK', style: 'cancel' },
+          ]
+        );
+      } else {
+        Alert.alert(
+          'Verification Required 🔒',
+          'Only verified commuters can re-post ride requests. Please submit your government ID to unlock this feature.',
+          [
+            { text: 'Verify ID Now', onPress: () => router.push('/(main)/verification/upload-id' as any) },
+            { text: 'Cancel', style: 'cancel' },
+          ]
+        );
+      }
       return;
     }
 
@@ -792,32 +827,176 @@ export default function RidesScreen() {
                     <Pressable
                       style={[
                         styles.postRequestBtn,
-                        { backgroundColor: theme.colors.primary }
+                        isVerifiedCommuter
+                          ? { backgroundColor: theme.colors.primary }
+                          : [
+                              styles.postRequestBtnDisabled,
+                              {
+                                backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : '#F1F5F9',
+                                borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#CBD5E1',
+                              },
+                            ],
                       ]}
                       onPress={handlePostRequestPress}
                     >
-                      <Ionicons name="megaphone-outline" size={18} color={theme.colors.white} />
-                      <Text style={[styles.postRequestBtnText, { fontFamily: 'Inter-SemiBold' }]}>
-                        {activeRequestRoute ? "Update Ride Request" : "Post 'Looking for a Ride' Request"}
-                      </Text>
+                      <View style={styles.postRequestContent}>
+                        <Ionicons
+                          name={isVerifiedCommuter ? 'megaphone-outline' : 'lock-closed-outline'}
+                          size={18}
+                          color={isVerifiedCommuter ? theme.colors.white : (isDark ? '#94A3B8' : '#64748B')}
+                        />
+                        <Text
+                          style={[
+                            styles.postRequestBtnText,
+                            {
+                              fontFamily: 'Inter-SemiBold',
+                              color: isVerifiedCommuter ? theme.colors.white : (isDark ? '#94A3B8' : '#64748B'),
+                            },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {activeRequestRoute ? "Update Ride Request" : "Post 'Looking for a Ride' Request"}
+                        </Text>
+                      </View>
+                      {!isVerifiedCommuter && (
+                        <View
+                          style={[
+                            styles.unlockBadge,
+                            {
+                              backgroundColor: isCommuterPending
+                                ? 'rgba(245, 158, 11, 0.15)'
+                                : isDark
+                                ? 'rgba(255, 255, 255, 0.1)'
+                                : '#E2E8F0',
+                            },
+                          ]}
+                        >
+                          <Ionicons
+                            name={isCommuterPending ? 'time-outline' : 'lock-closed'}
+                            size={11}
+                            color={
+                              isCommuterPending
+                                ? '#D97706'
+                                : isDark
+                                ? '#CBD5E1'
+                                : '#475569'
+                            }
+                          />
+                          <Text
+                            style={[
+                              styles.unlockBadgeText,
+                              {
+                                color: isCommuterPending
+                                  ? '#D97706'
+                                  : isDark
+                                  ? '#CBD5E1'
+                                  : '#475569',
+                              },
+                            ]}
+                          >
+                            {isCommuterPending ? 'Under Review' : 'Verify ID to unlock'}
+                          </Text>
+                        </View>
+                      )}
                     </Pressable>
                   )}
                 </View>
               ) : (
-                <Pressable
-                  style={[
-                    styles.setRouteCard,
-                    { backgroundColor: `${theme.colors.primary}10`, borderColor: `${theme.colors.primary}30` },
-                  ]}
-                  onPress={() => router.push('/(main)/ride/set-route' as any)}
-                >
-                  <Ionicons name="navigate-circle" size={28} color={theme.colors.primary} />
-                  <View style={styles.setRouteInfo}>
-                    <Text style={[{ color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 14 }]}>Pin Route on Map</Text>
-                    <Text style={[{ color: theme.colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 12 }]}>Pin your commute corridor to match carpools along your way</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={18} color={theme.colors.primary} />
-                </Pressable>
+                <View style={{ marginBottom: 16 }}>
+                  <Pressable
+                    style={[
+                      styles.setRouteCard,
+                      { backgroundColor: `${theme.colors.primary}10`, borderColor: `${theme.colors.primary}30` },
+                    ]}
+                    onPress={() => router.push('/(main)/ride/set-route' as any)}
+                  >
+                    <Ionicons name="navigate-circle" size={28} color={theme.colors.primary} />
+                    <View style={styles.setRouteInfo}>
+                      <Text style={[{ color: theme.colors.text, fontFamily: 'Inter-SemiBold', fontSize: 14 }]}>Pin Route on Map</Text>
+                      <Text style={[{ color: theme.colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 12 }]}>Pin your commute corridor to match carpools along your way</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={theme.colors.primary} />
+                  </Pressable>
+
+                  {!isDriver && (
+                    <Pressable
+                      style={[
+                        styles.postRequestBtn,
+                        isVerifiedCommuter
+                          ? { backgroundColor: theme.colors.primary, marginTop: 4 }
+                          : [
+                              styles.postRequestBtnDisabled,
+                              {
+                                backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : '#F1F5F9',
+                                borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#CBD5E1',
+                                marginTop: 4,
+                              },
+                            ],
+                      ]}
+                      onPress={handlePostRequestPress}
+                    >
+                      <View style={styles.postRequestContent}>
+                        <Ionicons
+                          name={isVerifiedCommuter ? 'megaphone-outline' : 'lock-closed-outline'}
+                          size={18}
+                          color={isVerifiedCommuter ? theme.colors.white : (isDark ? '#94A3B8' : '#64748B')}
+                        />
+                        <Text
+                          style={[
+                            styles.postRequestBtnText,
+                            {
+                              fontFamily: 'Inter-SemiBold',
+                              color: isVerifiedCommuter ? theme.colors.white : (isDark ? '#94A3B8' : '#64748B'),
+                            },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          Post 'Looking for a Ride' Request
+                        </Text>
+                      </View>
+                      {!isVerifiedCommuter && (
+                        <View
+                          style={[
+                            styles.unlockBadge,
+                            {
+                              backgroundColor: isCommuterPending
+                                ? 'rgba(245, 158, 11, 0.15)'
+                                : isDark
+                                ? 'rgba(255, 255, 255, 0.1)'
+                                : '#E2E8F0',
+                            },
+                          ]}
+                        >
+                          <Ionicons
+                            name={isCommuterPending ? 'time-outline' : 'lock-closed'}
+                            size={11}
+                            color={
+                              isCommuterPending
+                                ? '#D97706'
+                                : isDark
+                                ? '#CBD5E1'
+                                : '#475569'
+                            }
+                          />
+                          <Text
+                            style={[
+                              styles.unlockBadgeText,
+                              {
+                                color: isCommuterPending
+                                  ? '#D97706'
+                                  : isDark
+                                  ? '#CBD5E1'
+                                  : '#475569',
+                              },
+                            ]}
+                          >
+                            {isCommuterPending ? 'Under Review' : 'Verify ID to unlock'}
+                          </Text>
+                        </View>
+                      )}
+                    </Pressable>
+                  )}
+                </View>
               )}
 
               {/* Commuter Recent Ride Requests / Re-post */}
@@ -1532,21 +1711,48 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   postRequestBtn: {
-    height: 48,
+    minHeight: 48,
     borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
+  postRequestBtnDisabled: {
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  postRequestContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginRight: 8,
+  },
   postRequestBtnText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 13,
+    flexShrink: 1,
+  },
+  unlockBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  unlockBadgeText: {
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
   },
   requestStatusCard: {
     borderRadius: 14,

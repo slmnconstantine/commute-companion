@@ -119,7 +119,11 @@ const STATE_CONFIG: Record<string, { label: string; icon: string; color?: string
 
 export default function VoiceAssistantSheet() {
   const { theme, mode } = useTheme();
-  const { state, conversation, command, stopRecording, cancel, cancelAction, confirmAction, processTextInput, startRecording } = useVoiceAssistant();
+  const isDark = mode === 'dark';
+  const {
+    state, conversation, command, stopRecording, cancel, cancelAction,
+    confirmAction, processTextInput, startRecording,
+  } = useVoiceAssistant();
 
   const [inputValue, setInputValue] = useState('');
   const slideAnim = useSharedValue(650);
@@ -276,6 +280,22 @@ export default function VoiceAssistantSheet() {
           >
             <Ionicons name="close" size={18} color={theme.colors.textMuted} />
           </Pressable>
+        </View>
+
+        {/* Wake Word Note */}
+        <View style={[
+          styles.wakeWordNote,
+          {
+            backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : `${theme.colors.primary}0D`,
+            borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : `${theme.colors.primary}25`,
+          }
+        ]}>
+          <View style={[styles.wakeWordIconDot, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : `${theme.colors.primary}18` }]}>
+            <Ionicons name="sparkles" size={13} color={theme.colors.primary} />
+          </View>
+          <Text style={[styles.wakeWordNoteText, { color: theme.colors.textMuted, fontFamily: 'Inter-Medium' }]}>
+            Say <Text style={{ color: theme.colors.primary, fontFamily: 'Inter-Bold' }}>"Hey Coco"</Text> anytime to activate the assistant hands-free.
+          </Text>
         </View>
 
         {/* Chat content */}
@@ -745,5 +765,28 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  wakeWordNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 16,
+    marginBottom: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  wakeWordIconDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  wakeWordNoteText: {
+    fontSize: 12,
+    lineHeight: 16,
+    flex: 1,
   },
 });

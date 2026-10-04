@@ -84,15 +84,20 @@ function RootLayoutNav() {
   useEffect(() => {
     if (isLoading || !navigationState?.key || hasCompletedOnboarding === null) return;
 
-    const inAuthGroup = segments[0] === '(auth)';
-    const isVerifyEmail = inAuthGroup && (segments as string[]).length > 1 && (segments as string[])[1] === 'verify-email';
+    const segList = segments as string[];
+    const inAuthGroup = segList[0] === '(auth)';
+    const inMainGroup = segList[0] === '(main)';
+    const isVerifyEmail = inAuthGroup && segList.length > 1 && segList[1] === 'verify-email';
+
+    // If at root entry screen ('/' or 'index'), allow app/index.tsx to present the animated splash screen
+    if (!inAuthGroup && !inMainGroup) return;
 
     if (!session) {
       if (!inAuthGroup) {
         if (hasCompletedOnboarding === false) {
           router.replace('/(auth)/onboarding');
         } else {
-          router.replace('/(auth)/sign-in');
+          router.replace('/(auth)/welcome');
         }
       } else if (isVerifyEmail) {
         router.replace('/(auth)/sign-in');
@@ -109,6 +114,7 @@ function RootLayoutNav() {
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="index" options={{ animation: 'fade' }} />
       <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
       <Stack.Screen name="(main)" options={{ animation: 'fade' }} />
       <Stack.Screen name="+not-found" />
