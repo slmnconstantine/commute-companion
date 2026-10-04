@@ -75,7 +75,14 @@
       "expo-audio",
       "expo-asset",
       "expo-web-browser",
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow Commute Companion to use the microphone for hands-free Coco voice activation.",
+          "speechRecognitionPermission": "Allow Commute Companion to recognize your voice for hands-free Coco commands."
+        }
+      ]
     ],
     "extra": {
       "router": {},
