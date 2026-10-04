@@ -45,6 +45,7 @@ export default function NotificationBanner({ activeNotification, slideAnim, hand
   // Pulsing icon animation
   useEffect(() => {
     if (activeNotification) {
+      fadeAnim.setValue(0);
       // Haptic feedback
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
@@ -246,13 +247,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 12,
     right: 12,
-    zIndex: 9999,
+    zIndex: 999999,
+    elevation: 999999,
     borderRadius: 20,
     overflow: 'hidden',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
     shadowRadius: 16,
-    elevation: 12,
   },
   blurBackground: {
     ...StyleSheet.absoluteFill,

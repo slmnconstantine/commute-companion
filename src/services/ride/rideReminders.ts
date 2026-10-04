@@ -29,7 +29,7 @@ export async function scheduleRideReminder(
         content: {
           title: reminder.title,
           body: reminder.body,
-          sound: 'default',
+          sound: true,
           data: { type: 'ride_reminder', tripId },
         },
         trigger: {

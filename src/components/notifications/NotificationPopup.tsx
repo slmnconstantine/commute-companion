@@ -210,7 +210,8 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 10000,
+    zIndex: 999999,
+    elevation: 999999,
     padding: 24,
   },
   popupCardWrapper: {

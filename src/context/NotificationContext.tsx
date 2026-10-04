@@ -10,6 +10,7 @@ import NotificationPopup from '@/components/notifications/NotificationPopup';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { handleNotificationNavigation } from '@/utils/notificationRouter';
 import { createNotification, getUnreadNotificationsCount } from '@/services/notifications';
+import { setupNotificationChannelsAsync, requestNotificationPermissionsAsync } from '@/services/pushNotifications';
 
 interface NotificationContextType {
   driverPendingCount: number;
@@ -90,6 +91,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   // Deduplication cache for preventing duplicate alerts (e.g., Supabase Realtime vs Expo Push)
   const recentNotifKeysRef = useRef<Set<string>>(new Set());
 
+  // Initialize Android channel and request permissions on mount
+  useEffect(() => {
+    setupNotificationChannelsAsync();
+    requestNotificationPermissionsAsync();
+  }, []);
+
   // Load preferences from AsyncStorage on mount
   useEffect(() => {
     const loadPreferences = async () => {
@@ -162,6 +169,19 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     }
 
+    // Trigger OS-level notification so the system status bar and heads-up alert appear
+    if (Platform.OS !== 'web' && push) {
+      Notifications.scheduleNotificationAsync({
+        content: {
+          title,
+          body,
+          data: data || {},
+          sound: soundEnabled,
+        },
+        trigger: null, // Display immediately
+      }).catch((e) => console.warn('[PUSH] Failed to display OS notification:', e));
+    }
+
     if (data && data.type === 'ride_matched') {
       setCenterPopupNotification({
         title,
@@ -169,6 +189,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         tripId: data.tripId,
       });
     } else {
+      slideAnim.setValue(-200);
       setActiveNotification({ title, body, data });
     }
   };
@@ -214,6 +235,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     let anim: Animated.CompositeAnimation | null = null;
     if (activeNotification) {
+      slideAnim.setValue(-200);
       // Slide down with bouncy spring to top position
       anim = Animated.spring(slideAnim, {
         toValue: 0, // In-place position
@@ -545,7 +567,13 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       }}
     >
       {children}
-      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+      <View 
+        style={[
+          StyleSheet.absoluteFill,
+          { zIndex: 999999, elevation: 999999 }
+        ]} 
+        pointerEvents="box-none"
+      >
         <NotificationBanner 
           activeNotification={activeNotification}
           slideAnim={slideAnim}

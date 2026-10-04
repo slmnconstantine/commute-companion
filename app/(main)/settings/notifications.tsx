@@ -6,6 +6,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useNotifications } from '@/context/NotificationContext';
 
+import { Platform } from 'react-native';
+import * as Notifications from 'expo-notifications';
+
 export default function NotificationsSettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -25,11 +28,34 @@ export default function NotificationsSettingsScreen() {
     setEmailAlerts,
   } = useNotifications();
 
-  const handleTestNotification = () => {
-    // Fire a local test notification to showcase the slide-down banner
+  const handleTestBanner = () => {
     showInAppNotification(
-      'Ride Offer Found!',
-      'Driver "Jane Doe" is heading to Quezon City and matches your route.',
+      'New Ride Request 🚗',
+      'A commuter requested to join your route to Makati Central.',
+      { type: 'booking', bookingId: 'test-booking' }
+    );
+  };
+
+  const handleTestOsNotification = async () => {
+    if (Platform.OS === 'web') return;
+    try {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'Commute Companion Alert 🔔',
+          body: 'This is an OS-level notification appearing in your device status bar.',
+          sound: soundEnabled,
+        },
+        trigger: null,
+      });
+    } catch (e: any) {
+      console.warn('Failed to schedule test OS notification:', e);
+    }
+  };
+
+  const handleTestMatchPopup = () => {
+    showInAppNotification(
+      'Ride Offer Found! 🌟',
+      'Driver "Jane Doe" is heading your way and matches 95% of your route.',
       { type: 'ride_matched', tripId: 'test-trip-id' }
     );
   };
@@ -128,19 +154,54 @@ export default function NotificationsSettingsScreen() {
 
         {/* Section 3: Interactive Demo */}
         <Text style={[styles.sectionTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>TEST NOTIFICATIONS</Text>
-        <Pressable
-          style={({ pressed }) => [
-            styles.testBtn,
-            {
-              backgroundColor: theme.colors.primary,
-              opacity: pressed ? 0.9 : 1,
-            }
-          ]}
-          onPress={handleTestNotification}
-        >
-          <Ionicons name="sparkles" size={20} color="#fff" />
-          <Text style={styles.testBtnText}>Trigger In-App Test Banner</Text>
-        </Pressable>
+        
+        <View style={styles.testBtnGroup}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.testBtn,
+              {
+                backgroundColor: theme.colors.primary,
+                opacity: pressed ? 0.9 : 1,
+              }
+            ]}
+            onPress={handleTestBanner}
+          >
+            <Ionicons name="chatbubble-ellipses" size={18} color="#fff" />
+            <Text style={styles.testBtnText}>Test Sliding Top Banner</Text>
+          </Pressable>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.testBtn,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.primary,
+                borderWidth: 1.5,
+                opacity: pressed ? 0.9 : 1,
+              }
+            ]}
+            onPress={handleTestOsNotification}
+          >
+            <Ionicons name="notifications" size={18} color={theme.colors.primary} />
+            <Text style={[styles.testBtnText, { color: theme.colors.primary }]}>Test OS Status Bar Alert</Text>
+          </Pressable>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.testBtn,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+                borderWidth: 1,
+                opacity: pressed ? 0.9 : 1,
+              }
+            ]}
+            onPress={handleTestMatchPopup}
+          >
+            <Ionicons name="sparkles" size={18} color={theme.colors.text} />
+            <Text style={[styles.testBtnText, { color: theme.colors.text }]}>Test Center Match Modal</Text>
+          </Pressable>
+        </View>
       </ScrollView>
     </View>
   );
@@ -160,6 +221,7 @@ const styles = StyleSheet.create({
   settingText: { flex: 1, paddingRight: 16, gap: 2 },
   settingLabel: { fontSize: 15 },
   settingSub: { fontSize: 12 },
-  testBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 54, borderRadius: 16, gap: 10, marginTop: 4, shadowColor: '#0D9488', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
-  testBtnText: { color: '#fff', fontSize: 15, fontFamily: 'Inter-SemiBold' },
+  testBtnGroup: { gap: 12, marginTop: 4 },
+  testBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 50, borderRadius: 16, gap: 10, shadowColor: '#0057FF', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 4 },
+  testBtnText: { color: '#fff', fontSize: 14, fontFamily: 'Inter-SemiBold' },
 });
