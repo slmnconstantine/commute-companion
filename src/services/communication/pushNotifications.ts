@@ -8,10 +8,58 @@ import { handleServiceError } from '@/utils/errorHelper';
 // Note: Foreground notification display handler is dynamically configured in NotificationContext
 // to respect user preferences (pushEnabled, soundEnabled).
 
+// Setup Android notification channel immediately
+export async function setupNotificationChannelsAsync() {
+  if (Platform.OS !== 'android') return;
+  try {
+    await Notifications.setNotificationChannelAsync('default', {
+      name: 'Default Notifications',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#0057FF',
+      enableVibrate: true,
+      showBadge: true,
+    });
+  } catch (e) {
+    console.warn('[PUSH] Failed to setup notification channel:', e);
+  }
+}
+
+// Initialize channel as early as possible on Android
+if (Platform.OS === 'android') {
+  setupNotificationChannelsAsync();
+}
+
+export async function requestNotificationPermissionsAsync(): Promise<boolean> {
+  if (Platform.OS === 'web') return false;
+  try {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync().catch(() => ({ status: 'undetermined' }));
+    let finalStatus = existingStatus;
+
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync().catch(() => ({ status: 'denied' }));
+      finalStatus = status;
+    }
+    return finalStatus === 'granted';
+  } catch (e) {
+    console.warn('[PUSH] Permission check error:', e);
+    return false;
+  }
+}
+
 export async function registerForPushNotificationsAsync() {
   if (Platform.OS === 'web') {
     return null;
   }
+
+  // Ensure notification channel exists regardless of physical device vs emulator
+  await setupNotificationChannelsAsync();
+
+  const hasPermission = await requestNotificationPermissionsAsync();
+  if (!hasPermission) {
+    return null;
+  }
+
   if (!Device.isDevice) {
     console.log('[PUSH] Bypassing push token registration: running on an emulator/simulator.');
     return null;
@@ -20,27 +68,6 @@ export async function registerForPushNotificationsAsync() {
   let token = null;
 
   try {
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'default',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#0057FF', // App Primary Color (Signal Blue)
-      }).catch(() => {});
-    }
-
-    const { status: existingStatus } = await Notifications.getPermissionsAsync().catch(() => ({ status: 'undetermined' }));
-    let finalStatus = existingStatus;
-
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync().catch(() => ({ status: 'denied' }));
-      finalStatus = status;
-    }
-
-    if (finalStatus !== 'granted') {
-      return null;
-    }
-
     const projectId = Constants?.expoConfig?.extra?.eas?.projectId
       ?? Constants?.easConfig?.projectId;
 
@@ -85,6 +112,8 @@ export async function sendPushNotification(
     title,
     body,
     data: payloadData,
+    channelId: 'default',
+    priority: 'high',
   };
 
   try {
@@ -94,7 +123,10 @@ export async function sendPushNotification(
     }
 
     // 2. Dispatch push notification over Expo if valid token exists
-    if (expoPushToken && typeof expoPushToken === 'string' && expoPushToken.startsWith('ExponentPushToken')) {
+    const isValidToken = typeof expoPushToken === 'string' && 
+      (expoPushToken.startsWith('ExponentPushToken') || expoPushToken.startsWith('ExpoPushToken'));
+
+    if (isValidToken) {
       const response = await fetch('https://exp.host/--/api/v2/push/send', {
         method: 'POST',
         headers: {

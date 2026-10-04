@@ -120,7 +120,7 @@ export default function BecomeDriverBanner({
           style={styles.bannerButton}
         >
           <Ionicons name="arrow-forward" size={18} color="#fff" />
-          <Text style={[styles.bannerButtonText, { fontFamily: 'Inter-SemiBold' }]}>Become a Driver</Text>
+          <Text style={[styles.bannerButtonText, { fontFamily: 'Inter-SemiBold'      }]}>Become a Driver</Text>
 
           {/* Shimmer sweep */}
           <Animated.View
