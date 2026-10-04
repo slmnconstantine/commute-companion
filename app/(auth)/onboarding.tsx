@@ -24,16 +24,16 @@ const SLIDES = [
     icon: 'car-sport',
     badge: 'Carpool Ecosystem',
     tag1: { icon: 'people', text: '2+ Companion' },
-    tag2: { icon: 'leaf', text: 'Save ₱150/day' },
+    tag2: { icon: 'leaf', text: 'Save ₱/day' },
   },
   {
     id: '2',
     title: 'Find Your Perfect Ride',
-    description: 'Set your regular commute route and we will match you with drivers going the same way.',
+    description: 'Set your regular commute route and we will match you with commuters going the same way.',
     icon: 'navigate',
     badge: 'Smart Route Matching',
     tag1: { icon: 'flash', text: 'Instant Match' },
-    tag2: { icon: 'location', text: 'Door-to-Door' },
+    tag2: { icon: 'location', text: 'Pick-Up/Drop-Off' },
   },
   {
     id: '3',
@@ -42,7 +42,7 @@ const SLIDES = [
     icon: 'shield-checkmark',
     badge: 'ID Verified Safety',
     tag1: { icon: 'shield-checkmark', text: 'Govt ID Checked' },
-    tag2: { icon: 'star', text: '5.0 Rated Peers' },
+    tag2: { icon: 'star', text: 'Rated Peers' },
   },
 ];
 

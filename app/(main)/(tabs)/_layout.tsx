@@ -1,4 +1,4 @@
-import { Tabs } from 'expo-router';
+import { Tabs, useLocalSearchParams } from 'expo-router';
 import { Platform, View, StyleSheet, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
@@ -6,7 +6,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNotifications } from '@/context/NotificationContext';
 import { useAuth } from '@/context/AuthContext';
 import * as Haptics from 'expo-haptics';
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import FeatureTourTooltip from '@/components/common/FeatureTourTooltip';
 
 function AnimatedTabIcon({ name, focused, color }: { name: string; focused: boolean; color: any }) {
   const scale = useRef(new Animated.Value(1)).current;
@@ -52,9 +54,52 @@ export default function TabLayout() {
   const { profile } = useAuth();
   const insets = useSafeAreaInsets();
   const { driverPendingCount, commuterUpcomingCount } = useNotifications();
+  const params = useLocalSearchParams<{ showTour?: string }>();
+  const [showFeatureTour, setShowFeatureTour] = useState(false);
+
+  // Check if first-time user tour should be displayed
+  useEffect(() => {
+    let isMounted = true;
+    async function checkTourStatus() {
+      if (!profile?.id) return;
+
+      if (params.showTour === 'true') {
+        setShowFeatureTour(true);
+        return;
+      }
+
+      try {
+        const key = `@has_seen_feature_tour_${profile.id}`;
+        const seen = await AsyncStorage.getItem(key);
+        if (!seen && isMounted) {
+          const timer = setTimeout(() => {
+            if (isMounted) setShowFeatureTour(true);
+          }, 900);
+          return () => clearTimeout(timer);
+        }
+      } catch (e) {
+        console.warn('Error checking feature tour status:', e);
+      }
+    }
+
+    checkTourStatus();
+    return () => {
+      isMounted = false;
+    };
+  }, [profile?.id, params.showTour]);
+
+  const handleTourComplete = async () => {
+    setShowFeatureTour(false);
+    if (profile?.id) {
+      try {
+        await AsyncStorage.setItem(`@has_seen_feature_tour_${profile.id}`, 'true');
+      } catch {}
+    }
+  };
 
   return (
-    <Tabs
+    <>
+      <Tabs
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: theme.colors.primary,
@@ -153,5 +198,11 @@ export default function TabLayout() {
         }}
       />
     </Tabs>
-  );
+    <FeatureTourTooltip
+      visible={showFeatureTour}
+      onComplete={handleTourComplete}
+      onSkip={handleTourComplete}
+    />
+  </>
+);
 }

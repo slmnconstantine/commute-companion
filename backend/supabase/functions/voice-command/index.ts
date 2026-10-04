@@ -138,6 +138,20 @@ serve(async (req: Request) => {
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
+      const trimmedTranscript = activeTranscript.trim();
+      const isWakeWordOnly = /^(?:(?:hey|hi|hello|ok|okay|yo|hoy)\s+)?coco[\s!.,?]*$/i.test(trimmedTranscript);
+      if (isWakeWordOnly) {
+        return new Response(JSON.stringify({
+          type: 'NOOP',
+          params: {},
+          spokenReply: "I'm listening! How can I help with your commute?",
+          requiresConfirmation: false,
+          transcript: activeTranscript
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const parsedTranscript = trimmedTranscript.replace(/^(?:(?:hey|hi|hello|ok|okay|yo|hoy)\s+)?coco[,:\s]*/i, '').trim() || trimmedTranscript;
+
       if (!context) {
         throw new Error('Missing context payload for intent parsing');
       }
@@ -197,7 +211,7 @@ For spokenReply:
           model: Deno.env.get('AI_INTENT_MODEL') || 'openai/gpt-oss-20b',
           messages: [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: `User said: "${activeTranscript}"` }
+            { role: 'user', content: `User said: "${parsedTranscript}"` }
           ],
           response_format: { type: 'json_object' },
           temperature: 0.1

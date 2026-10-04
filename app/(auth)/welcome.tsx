@@ -114,7 +114,7 @@ export default function WelcomeScreen() {
           <FeatureItem
             icon="location"
             title="Smart Route Matching"
-            subtitle="Find the best routes along your commute instantly."
+            subtitle="Set your regular commute route and we will match you with commuters going the same way."
             isLight={isLight}
           />
           <View style={[styles.divider, { backgroundColor: isLight ? '#F0EFEA' : 'rgba(255, 255, 255, 0.06)' }]} />

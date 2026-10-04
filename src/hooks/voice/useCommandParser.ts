@@ -10,8 +10,19 @@ interface IntentPattern {
   requiresConfirmation: boolean;
 }
 
+// Wake word patterns
+export const WAKE_WORD_REGEX = /^(?:(?:hey|hi|hello|ok|okay|yo|hoy)\s+)?coco[,:\s]*/i;
+export const IS_WAKE_WORD_ONLY = /^(?:(?:hey|hi|hello|ok|okay|yo|hoy)\s+)?coco[\s!.,?]*$/i;
+
 // Local offline fallback patterns (used only when network is unavailable)
 const OFFLINE_FALLBACK_INTENTS: IntentPattern[] = [
+  {
+    pattern: /^(?:(?:hey|hi|hello|ok|okay|yo|hoy)\s+)?coco[\s!.,?]*$/i,
+    command: 'NOOP',
+    params: () => ({}),
+    spokenReply: () => "I'm listening! How can I help with your commute?",
+    requiresConfirmation: false
+  },
   {
     pattern: /^(?:hello|hi|hey|kamusta|kumusta|mabuhay)[\s!.,?]*$/i,
     command: 'NOOP',
@@ -94,12 +105,28 @@ function matchOfflineIntent(text: string, context: any): AssistantCommand | null
 
 export function useCommandParser() {
   const parseCommand = async (text: string, context: any, profile: any): Promise<AssistantCommand> => {
+    const trimmed = text.trim();
+
+    // Check if the user only spoke the wake word (e.g. "Hey Coco", "Coco")
+    if (IS_WAKE_WORD_ONLY.test(trimmed)) {
+      return {
+        type: 'NOOP',
+        params: {},
+        spokenReply: "I'm listening! How can I help with your commute?",
+        requiresConfirmation: false,
+        transcript: text
+      };
+    }
+
+    // Strip wake word prefix if user said e.g. "Hey Coco, find rides to Makati"
+    const cleanedText = trimmed.replace(WAKE_WORD_REGEX, '').trim() || trimmed;
+
     // 1. PRIMARY: Use the AI Model (Groq LLM) for natural language understanding
     try {
       const { data, error } = await supabase.functions.invoke('voice-command', {
         body: {
           action: 'parse',
-          transcript: text,
+          transcript: cleanedText,
           context: {
             userId: profile?.id,
             role: profile?.role,
@@ -128,9 +155,12 @@ export function useCommandParser() {
     }
 
     // 2. SECONDARY: Offline regex matching if AI network request fails
-    const offlineMatch = matchOfflineIntent(text, context);
+    const offlineMatch = matchOfflineIntent(cleanedText, context);
     if (offlineMatch) {
-      return offlineMatch;
+      return {
+        ...offlineMatch,
+        transcript: text,
+      };
     }
 
     // 3. Fallback for unmapped speech when offline

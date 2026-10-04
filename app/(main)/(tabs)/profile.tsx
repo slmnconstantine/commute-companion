@@ -147,13 +147,18 @@ export default function ProfileScreen() {
       title: 'App',
       items: [
         {
+          icon: 'bulb-outline',
+          label: 'App Feature Tour',
+          onPress: () => router.push('/(main)/(tabs)?showTour=true' as any),
+        },
+        {
           icon: 'notifications-outline',
           label: 'Notifications',
           onPress: () => router.push('/(main)/settings/notifications' as any),
         },
         {
           icon: 'sparkles-outline',
-          label: 'AI Assistant',
+          label: 'AI Assistant & "Hey Coco"',
           onPress: () => router.push('/(main)/assistant-demo' as any),
         },
       ],

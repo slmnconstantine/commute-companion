@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, useWindowDimensions } from 'react-native';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue, useAnimatedStyle, withSpring, withRepeat,
@@ -15,7 +15,7 @@ import { haptics } from '@/utils/haptics';
 
 export default function VoiceAssistantFab() {
   const { theme } = useTheme();
-  const { startRecording, state, conversation } = useVoiceAssistant();
+  const { startRecording, state, conversation, isWakeWordEnabled } = useVoiceAssistant();
   const { activeRoute } = useRoute();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
@@ -200,6 +200,11 @@ export default function VoiceAssistantFab() {
             style={styles.fabGradient}
           >
             <Ionicons name="mic" size={24} color="#fff" />
+            {isWakeWordEnabled && (
+              <View style={[styles.wakeWordBadge, { backgroundColor: theme.colors.success }]}>
+                <Ionicons name="radio" size={8} color="#fff" />
+              </View>
+            )}
           </LinearGradient>
         </Animated.View>
       </GestureDetector>
@@ -228,6 +233,18 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  wakeWordBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#fff',
   },
   glowLayer: {
     position: 'absolute',

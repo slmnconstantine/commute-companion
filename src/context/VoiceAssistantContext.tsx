@@ -6,6 +6,8 @@ import { AssistantState, AssistantCommand, VoiceMessage } from '@/types/voice';
 import { useVoiceRecorder } from '@/hooks/voice/useVoiceRecorder';
 import { useCommandParser } from '@/hooks/voice/useCommandParser';
 import { useCommandExecutor } from '@/hooks/voice/useCommandExecutor';
+import { useWakeWord } from '@/hooks/voice/useWakeWord';
+import { haptics } from '@/utils/haptics';
 
 interface VoiceAssistantContextValue {
   state: AssistantState;
@@ -20,6 +22,10 @@ interface VoiceAssistantContextValue {
   confirmAction: () => Promise<void>;
   clearConversation: () => void;
   processTextInput: (text: string, contextData?: any) => Promise<void>;
+  isWakeWordEnabled: boolean;
+  setIsWakeWordEnabled: (enabled: boolean) => Promise<void>;
+  isWakeWordListening: boolean;
+  triggerWakeWordActivation: (initialPhrase?: string) => Promise<void>;
 }
 
 const VoiceAssistantContext = createContext<VoiceAssistantContextValue | undefined>(undefined);
@@ -316,6 +322,50 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
     }
   }, [parseCommand, profile, activeRoute, handleParsedCommand, confirmAction, cancelAction]);
 
+  const triggerWakeWordActivation = useCallback(async (initialPhrase?: string) => {
+    haptics.success();
+    try { Speech.stop(); } catch {}
+
+    const trimmed = initialPhrase?.trim() || '';
+    const isWakeWordOnly = !trimmed || /^(?:(?:hey|hi|hello|ok|okay|yo|hoy)\s+)?coco[\s!.,?]*$/i.test(trimmed);
+
+    if (!isWakeWordOnly) {
+      // The user spoke both the wake word and an explicit command (e.g. "Hey Coco, find rides to Makati")
+      await processTextInput(trimmed);
+      return;
+    }
+
+    // Wake word only ("Hey Coco")
+    setCommand(null);
+    setTranscript(trimmed || 'Hey Coco');
+    const greeting = "I'm listening! How can I help with your commute?";
+    setSpokenReply(greeting);
+    setConversation([
+      { id: Date.now().toString(), role: 'user', text: trimmed || 'Hey Coco' },
+      { id: (Date.now() + 1).toString(), role: 'assistant', text: greeting },
+    ]);
+
+    try {
+      Speech.speak(greeting, {
+        onError: (err) => console.warn('Speech TTS error:', err),
+      });
+    } catch {}
+
+    // Open assistant sheet and transition to recording so they can speak hands-free right away
+    setTimeout(async () => {
+      try {
+        await startRecording(undefined, true);
+      } catch (err) {
+        console.warn('Failed to start recording after wake word:', err);
+      }
+    }, 1000);
+  }, [processTextInput, startRecording]);
+
+  const { isWakeWordEnabled, isWakeWordListening, setIsWakeWordEnabled } = useWakeWord({
+    assistantState: state,
+    onWakeWord: triggerWakeWordActivation,
+  });
+
   const cancel = useCallback(() => {
     cancelRecording();
     try { Speech.stop(); } catch {}
@@ -343,7 +393,11 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
       cancelAction,
       confirmAction,
       clearConversation,
-      processTextInput
+      processTextInput,
+      isWakeWordEnabled,
+      setIsWakeWordEnabled,
+      isWakeWordListening,
+      triggerWakeWordActivation,
     }}>
       {children}
     </VoiceAssistantContext.Provider>
