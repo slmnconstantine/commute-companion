@@ -7,6 +7,22 @@ import { isOlderThan24Hours } from '@/utils/dateFormatter';
 
 /** Create a booking request */
 export async function createBooking(bookingData: Omit<Booking, 'id' | 'created_at'>): Promise<{ data: Booking | null; error: Error | null }> {
+  // Prevent double booking: verify commuter does not already have an active request for this trip
+  const { data: existingActive } = await supabase
+    .from('bookings')
+    .select('id, status')
+    .eq('trip_id', bookingData.trip_id)
+    .eq('commuter_id', bookingData.commuter_id)
+    .in('status', ['pending', 'accepted'])
+    .maybeSingle();
+
+  if (existingActive) {
+    return {
+      data: null,
+      error: new Error('Double booking prevented: You already have an active booking request for this ride.')
+    };
+  }
+
   const { data, error } = await supabase
     .rpc('create_booking_if_available', {
       p_trip_id: bookingData.trip_id,

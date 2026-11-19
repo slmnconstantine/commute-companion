@@ -8,7 +8,7 @@
  * - Background/Foreground push notification response
  */
 
-import { Alert } from 'react-native';
+import { Alert, DeviceEventEmitter } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { isOlderThan24Hours } from '@/utils/dateFormatter';
 
@@ -283,9 +283,10 @@ export async function handleNotificationNavigation(
     case 'hub_like':
     case 'hub_comment':
       if (postId) {
+        DeviceEventEmitter.emit('focus_hub_post', { postId });
         router.push({
           pathname: '/(main)/(tabs)/community',
-          params: { postId },
+          params: { postId, highlightPostId: postId, t: Date.now().toString() },
         } as any);
         return;
       }
@@ -321,9 +322,10 @@ export async function handleNotificationNavigation(
           router.push(`/(main)/ride/${tripId}` as any);
         }
       } else if (postId) {
+        DeviceEventEmitter.emit('focus_hub_post', { postId });
         router.push({
           pathname: '/(main)/(tabs)/community',
-          params: { postId },
+          params: { postId, highlightPostId: postId, t: Date.now().toString() },
         } as any);
       } else {
         router.push('/(main)/(tabs)/rides' as any);

@@ -108,10 +108,16 @@ export default function RidesScreen() {
   const { driverPendingCount, refreshCounts } = useNotifications();
   const router = useRouter();
   const isVerifiedDriver = Boolean(profile?.role === 'driver' && profile?.is_verified && profile?.verified_badge);
-  const isDriverPending = Boolean(profile?.role === 'driver' && (!profile?.is_verified || !profile?.verified_badge));
+  const hasDriverDocs = Boolean(profile?.vehicle_photo_url || profile?.or_cr_url || (profile?.police_clearance_url && !profile?.is_verified));
+  const isDriverPending = Boolean(
+    !isVerifiedDriver && (
+      (profile?.role === 'driver' && (!profile?.is_verified || !profile?.verified_badge)) ||
+      (profile?.role === 'commuter' && hasDriverDocs)
+    )
+  );
   const isDriver = isVerifiedDriver;
   const isVerifiedCommuter = Boolean(profile?.is_verified || profile?.verified_badge);
-  const isCommuterPending = Boolean(!isVerifiedCommuter && profile?.government_id_url);
+  const isCommuterPending = Boolean(!isVerifiedCommuter && profile?.government_id_url && !hasDriverDocs);
 
   const params = useLocalSearchParams<{
     from_set_route?: string;
@@ -606,7 +612,7 @@ export default function RidesScreen() {
         pastPostedRides.sort((a, b) => {
           return new Date(b.departure_time).getTime() - new Date(a.departure_time).getTime();
         });
-        
+
         // Group by route to avoid duplicates
         const uniqueRoutes: TripWithDriver[] = [];
         const seenRoutes = new Set<string>();
@@ -636,8 +642,8 @@ export default function RidesScreen() {
     // Search Query Filter
     if (searchQuery.trim().length > 0) {
       const q = searchQuery.toLowerCase().trim();
-      result = result.filter(trip => 
-        (trip.origin_label && trip.origin_label.toLowerCase().includes(q)) || 
+      result = result.filter(trip =>
+        (trip.origin_label && trip.origin_label.toLowerCase().includes(q)) ||
         (trip.destination_label && trip.destination_label.toLowerCase().includes(q))
       );
     }
@@ -645,10 +651,10 @@ export default function RidesScreen() {
     // Status Filter: 'open' shows only open rides, plus ongoing rides if they still have available seats.
     // Trips joined by the commuter are always kept visible so they don't lose track of their rides!
     if (filterStatus === 'open') {
-      result = result.filter(trip => 
-        commuterBookings[trip.id] === 'accepted' || 
+      result = result.filter(trip =>
+        commuterBookings[trip.id] === 'accepted' ||
         commuterBookings[trip.id] === 'ongoing' ||
-        trip.status === 'open' || 
+        trip.status === 'open' ||
         (trip.status === 'ongoing' && trip.available_seats > 0)
       );
     }
@@ -828,18 +834,18 @@ export default function RidesScreen() {
                       style={[
                         styles.postRequestBtn,
                         isVerifiedCommuter
-                          ? { backgroundColor: theme.colors.primary }
+                          ? { backgroundColor: theme.colors.primary, justifyContent: 'center' }
                           : [
-                              styles.postRequestBtnDisabled,
-                              {
-                                backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : '#F1F5F9',
-                                borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#CBD5E1',
-                              },
-                            ],
+                            styles.postRequestBtnDisabled,
+                            {
+                              backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : '#F1F5F9',
+                              borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#CBD5E1',
+                            },
+                          ],
                       ]}
                       onPress={handlePostRequestPress}
                     >
-                      <View style={styles.postRequestContent}>
+                      <View style={[styles.postRequestContent, isVerifiedCommuter && styles.postRequestContentCentered]}>
                         <Ionicons
                           name={isVerifiedCommuter ? 'megaphone-outline' : 'lock-closed-outline'}
                           size={18}
@@ -866,8 +872,8 @@ export default function RidesScreen() {
                               backgroundColor: isCommuterPending
                                 ? 'rgba(245, 158, 11, 0.15)'
                                 : isDark
-                                ? 'rgba(255, 255, 255, 0.1)'
-                                : '#E2E8F0',
+                                  ? 'rgba(255, 255, 255, 0.1)'
+                                  : '#E2E8F0',
                             },
                           ]}
                         >
@@ -878,8 +884,8 @@ export default function RidesScreen() {
                               isCommuterPending
                                 ? '#D97706'
                                 : isDark
-                                ? '#CBD5E1'
-                                : '#475569'
+                                  ? '#CBD5E1'
+                                  : '#475569'
                             }
                           />
                           <Text
@@ -889,8 +895,8 @@ export default function RidesScreen() {
                                 color: isCommuterPending
                                   ? '#D97706'
                                   : isDark
-                                  ? '#CBD5E1'
-                                  : '#475569',
+                                    ? '#CBD5E1'
+                                    : '#475569',
                               },
                             ]}
                           >
@@ -923,19 +929,19 @@ export default function RidesScreen() {
                       style={[
                         styles.postRequestBtn,
                         isVerifiedCommuter
-                          ? { backgroundColor: theme.colors.primary, marginTop: 4 }
+                          ? { backgroundColor: theme.colors.primary, marginTop: 4, justifyContent: 'center' }
                           : [
-                              styles.postRequestBtnDisabled,
-                              {
-                                backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : '#F1F5F9',
-                                borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#CBD5E1',
-                                marginTop: 4,
-                              },
-                            ],
+                            styles.postRequestBtnDisabled,
+                            {
+                              backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : '#F1F5F9',
+                              borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#CBD5E1',
+                              marginTop: 4,
+                            },
+                          ],
                       ]}
                       onPress={handlePostRequestPress}
                     >
-                      <View style={styles.postRequestContent}>
+                      <View style={[styles.postRequestContent, isVerifiedCommuter && styles.postRequestContentCentered]}>
                         <Ionicons
                           name={isVerifiedCommuter ? 'megaphone-outline' : 'lock-closed-outline'}
                           size={18}
@@ -962,8 +968,8 @@ export default function RidesScreen() {
                               backgroundColor: isCommuterPending
                                 ? 'rgba(245, 158, 11, 0.15)'
                                 : isDark
-                                ? 'rgba(255, 255, 255, 0.1)'
-                                : '#E2E8F0',
+                                  ? 'rgba(255, 255, 255, 0.1)'
+                                  : '#E2E8F0',
                             },
                           ]}
                         >
@@ -974,8 +980,8 @@ export default function RidesScreen() {
                               isCommuterPending
                                 ? '#D97706'
                                 : isDark
-                                ? '#CBD5E1'
-                                : '#475569'
+                                  ? '#CBD5E1'
+                                  : '#475569'
                             }
                           />
                           <Text
@@ -985,8 +991,8 @@ export default function RidesScreen() {
                                 color: isCommuterPending
                                   ? '#D97706'
                                   : isDark
-                                  ? '#CBD5E1'
-                                  : '#475569',
+                                    ? '#CBD5E1'
+                                    : '#475569',
                               },
                             ]}
                           >
@@ -1194,7 +1200,7 @@ export default function RidesScreen() {
                   </View>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingBottom: 8 }}>
                     {recentDriverTrips.map(trip => (
-                      <Pressable 
+                      <Pressable
                         key={trip.id}
                         style={{
                           backgroundColor: theme.colors.surface,
@@ -1736,6 +1742,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     marginRight: 8,
+  },
+  postRequestContentCentered: {
+    justifyContent: 'center',
+    marginRight: 0,
   },
   postRequestBtnText: {
     color: '#fff',

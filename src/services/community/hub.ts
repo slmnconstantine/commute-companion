@@ -255,6 +255,56 @@ export const togglePinPost = async (
   }
 };
 
+export interface CommentReplyMeta {
+  id: string;
+  authorName: string;
+  authorId?: string;
+  text?: string;
+}
+
+export interface ParsedCommentContent {
+  text: string;
+  replyTo?: CommentReplyMeta;
+  reactions: Record<string, string[]>; // reactionType -> array of userIds
+}
+
+export function parseCommentContent(rawContent: string): ParsedCommentContent {
+  if (!rawContent) return { text: '', reactions: {} };
+  const metaMatch = rawContent.match(/^<!--cc_meta:([\s\S]*?)-->([\s\S]*)$/);
+  if (metaMatch) {
+    try {
+      const meta = JSON.parse(metaMatch[1]);
+      return {
+        text: metaMatch[2] || '',
+        replyTo: meta.replyTo,
+        reactions: meta.reactions || {},
+      };
+    } catch {}
+  }
+  return {
+    text: rawContent,
+    replyTo: undefined,
+    reactions: {},
+  };
+}
+
+export function serializeCommentContent(
+  text: string,
+  replyTo?: CommentReplyMeta,
+  reactions: Record<string, string[]> = {}
+): string {
+  const hasReactions = Object.keys(reactions).length > 0;
+  if (!replyTo && !hasReactions) {
+    return text;
+  }
+  const meta = { replyTo, reactions };
+  return `<!--cc_meta:${JSON.stringify(meta)}-->${text}`;
+}
+
+export function getCommentDisplayText(rawContent: string): string {
+  return parseCommentContent(rawContent).text;
+}
+
 export const getComments = async (postId: string): Promise<PostCommentWithAuthor[]> => {
   const { data, error } = await supabase
     .from('post_comments')
@@ -276,13 +326,19 @@ export const getComments = async (postId: string): Promise<PostCommentWithAuthor
   }));
 };
 
-export const createComment = async (postId: string, userId: string, content: string) => {
+export const createComment = async (
+  postId: string,
+  userId: string,
+  content: string,
+  replyTo?: CommentReplyMeta
+) => {
+  const rawContent = serializeCommentContent(content, replyTo);
   const { data, error } = await supabase
     .from('post_comments')
     .insert({
       post_id: postId,
       author_id: userId,
-      content
+      content: rawContent
     })
     .select(`
       *,
@@ -292,13 +348,34 @@ export const createComment = async (postId: string, userId: string, content: str
 
   if (error) throw error;
   
+  const commenterName = Array.isArray(data.author) ? data.author[0]?.full_name : data.author?.full_name;
+
+  // Send push notification to the user being replied to if applicable
+  if (replyTo?.authorId && replyTo.authorId !== userId) {
+    const { data: repliedUserData } = await supabase.from('profiles').select('id, push_token').eq('id', replyTo.authorId).single();
+    if (repliedUserData?.id && commenterName) {
+      sendPushNotification(
+        repliedUserData.push_token,
+        'New Reply',
+        `${commenterName} replied to your comment: "${content.slice(0, 80)}"`,
+        { type: 'hub_post', postId },
+        repliedUserData.id
+      );
+    }
+  }
+
   // Send push notification to the post author
   const { data: postData } = await supabase.from('hub_posts').select('author_id').eq('id', postId).single();
-  if (postData && postData.author_id !== userId) {
+  if (postData && postData.author_id !== userId && postData.author_id !== replyTo?.authorId) {
     const { data: authorData } = await supabase.from('profiles').select('id, push_token').eq('id', postData.author_id).single();
-    const commenterName = Array.isArray(data.author) ? data.author[0].full_name : data.author.full_name;
     if (authorData?.id && commenterName) {
-      sendPushNotification(authorData.push_token, 'New Comment', `${commenterName} commented: "${content}"`, { type: 'hub_post', postId }, authorData.id);
+      sendPushNotification(
+        authorData.push_token,
+        'New Comment',
+        `${commenterName} commented: "${content.slice(0, 80)}"`,
+        { type: 'hub_post', postId },
+        authorData.id
+      );
     }
   }
   
@@ -306,6 +383,61 @@ export const createComment = async (postId: string, userId: string, content: str
     ...data,
     author: Array.isArray(data.author) ? data.author[0] : data.author
   } as PostCommentWithAuthor;
+};
+
+export const deleteComment = async (commentId: string): Promise<boolean> => {
+  try {
+    const { error } = await supabase.from('post_comments').delete().eq('id', commentId);
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    handleServiceError('Error deleting comment:', err);
+    return false;
+  }
+};
+
+export const toggleCommentReaction = async (
+  commentId: string,
+  currentRawContent: string,
+  userId: string,
+  reactionType: string = 'like'
+): Promise<{ success: boolean; newContent: string; activeReaction: string | null }> => {
+  try {
+    const parsed = parseCommentContent(currentRawContent);
+    const reactions = { ...parsed.reactions };
+    let activeReaction: string | null = null;
+
+    // Check if user already reacted with this type
+    const userAlreadyReacted = (reactions[reactionType] || []).includes(userId);
+
+    // Remove user from all reaction types first
+    for (const key of Object.keys(reactions)) {
+      reactions[key] = (reactions[key] || []).filter((id) => id !== userId);
+      if (reactions[key].length === 0) {
+        delete reactions[key];
+      }
+    }
+
+    if (!userAlreadyReacted) {
+      // Add user to this reaction
+      reactions[reactionType] = [...(reactions[reactionType] || []), userId];
+      activeReaction = reactionType;
+    }
+
+    const newContent = serializeCommentContent(parsed.text, parsed.replyTo, reactions);
+
+    const { error } = await supabase
+      .from('post_comments')
+      .update({ content: newContent })
+      .eq('id', commentId);
+
+    if (error) throw error;
+
+    return { success: true, newContent, activeReaction };
+  } catch (err) {
+    handleServiceError('Error toggling comment reaction:', err);
+    return { success: false, newContent: currentRawContent, activeReaction: null };
+  }
 };
 
 export const createPost = async (
@@ -633,12 +765,22 @@ export const subscribeToHubPosts = (
   };
 };
 
+export type CommentRealtimeCallbacks = {
+  onInsert?: (comment: PostCommentWithAuthor) => void;
+  onUpdate?: (comment: PostCommentWithAuthor) => void;
+  onDelete?: (commentId: string) => void;
+};
+
 /** Subscribe to Realtime Comments for a post */
 export const subscribeToComments = (
   postId: string,
-  onComment: (comment: PostCommentWithAuthor) => void
+  handlers: ((comment: PostCommentWithAuthor) => void) | CommentRealtimeCallbacks
 ) => {
   const channelName = `post_comments_${postId}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const onInsert = typeof handlers === 'function' ? handlers : handlers.onInsert;
+  const onUpdate = typeof handlers === 'object' ? handlers.onUpdate : undefined;
+  const onDelete = typeof handlers === 'object' ? handlers.onDelete : undefined;
+
   const channel = supabase
     .channel(channelName)
     .on(
@@ -650,16 +792,54 @@ export const subscribeToComments = (
         filter: `post_id=eq.${postId}`,
       },
       async (payload) => {
+        if (!onInsert) return;
         const { data } = await supabase
           .from('post_comments')
           .select(`*, author:profiles!post_comments_author_id_fkey(*)`)
           .eq('id', payload.new.id)
           .single();
         if (data) {
-          onComment({
+          onInsert({
             ...data,
             author: Array.isArray(data.author) ? data.author[0] : data.author,
           });
+        }
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'post_comments',
+        filter: `post_id=eq.${postId}`,
+      },
+      async (payload) => {
+        if (!onUpdate) return;
+        const { data } = await supabase
+          .from('post_comments')
+          .select(`*, author:profiles!post_comments_author_id_fkey(*)`)
+          .eq('id', payload.new.id)
+          .single();
+        if (data) {
+          onUpdate({
+            ...data,
+            author: Array.isArray(data.author) ? data.author[0] : data.author,
+          });
+        }
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'post_comments',
+        filter: `post_id=eq.${postId}`,
+      },
+      (payload) => {
+        if (onDelete && payload.old?.id) {
+          onDelete(payload.old.id);
         }
       }
     )

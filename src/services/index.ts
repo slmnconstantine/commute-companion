@@ -30,7 +30,6 @@ export * from './communication/pushNotifications';
 
 // Community & Moderation
 export * from './community/hub';
-export * from './community/hubPosts';
 export * from './community/reports';
 export * from './community/reviews';
 

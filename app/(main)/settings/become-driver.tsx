@@ -39,7 +39,7 @@ export default function BecomeDriverScreen() {
   const [plateNumber, setPlateNumber] = useState('');
   const [gcashNumber, setGcashNumber] = useState(profile?.gcash_number || '');
   const [gcashName, setGcashName] = useState(profile?.gcash_name || '');
-  const [vehicleType, setVehicleType] = useState<'sedan' | 'suv' | 'van' | 'motorcycle'>('sedan');
+  const [vehicleType, setVehicleType] = useState<'motorcycle' | 'tricycle' | 'sedan' | 'suv'>('sedan');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [docUrls, setDocUrls] = useState<Record<string, string>>({});
@@ -47,10 +47,10 @@ export default function BecomeDriverScreen() {
   const buttonScale = useRef(new Animated.Value(1)).current;
 
   const vehicleTypes = [
-    { key: 'sedan' as const, icon: 'car-sport', label: 'Sedan' },
-    { key: 'suv' as const, icon: 'car', label: 'SUV' },
-    { key: 'van' as const, icon: 'bus', label: 'Van' },
-    { key: 'motorcycle' as const, icon: 'bicycle', label: 'Motorcycle' },
+    { key: 'motorcycle' as const, icon: 'bicycle', label: 'Motorcycle', seats: '1', category: 'private' },
+    { key: 'tricycle' as const, icon: 'speedometer-outline', label: 'Tricycle', seats: '3', category: 'public' },
+    { key: 'sedan' as const, icon: 'car-sport', label: 'Sedan', seats: '4', category: 'private' },
+    { key: 'suv' as const, icon: 'car', label: 'SUV / MPV', seats: '6', category: 'private' },
   ];
 
   const validate = () => {
@@ -78,7 +78,7 @@ export default function BecomeDriverScreen() {
     setLoading(true);
     try {
       const updates: Record<string, any> = {
-        role: 'driver',
+        // Role remains commuter until verified and approved by admin
         is_verified: false, // Requires manual verification
         gcash_number: gcashNumber.trim().replace(/\s|-/g, ''),
         gcash_name: gcashName.trim(),
@@ -92,6 +92,12 @@ export default function BecomeDriverScreen() {
           updates.government_id_url = docUrls.police_clearance;
         }
       }
+      if (docUrls.vehicle_photo) {
+        updates.vehicle_photo_url = docUrls.vehicle_photo;
+      }
+      if (docUrls.or_cr) {
+        updates.or_cr_url = docUrls.or_cr;
+      }
       const { error } = await updateProfile(updates);
 
       if (error) {
@@ -99,12 +105,15 @@ export default function BecomeDriverScreen() {
       } else {
         try {
           if (profile?.id) {
+            const selectedConfig = vehicleTypes.find((v) => v.key === vehicleType);
             await addVehicle(
               profile.id,
               plateNumber.trim(),
-              'private',
-              `${vehicleModel.trim()} (${vehicleType.toUpperCase()})`,
-              vehicleType === 'motorcycle' ? '1' : vehicleType === 'van' ? '12' : '4'
+              selectedConfig?.category || 'private',
+              `${vehicleModel.trim()} (${selectedConfig?.label.toUpperCase() || 'VEHICLE'})`,
+              selectedConfig?.seats || '4',
+              docUrls.vehicle_photo,
+              docUrls.or_cr
             );
           }
         } catch (vErr) {
@@ -136,8 +145,12 @@ export default function BecomeDriverScreen() {
           onPress: () => processDriverOverride('public', 'Tricycle (TODA)', '3'),
         },
         {
-          text: 'Private Vehicle (Car)',
+          text: 'Sedan',
           onPress: () => processDriverOverride('private', 'Sedan (Private)', '4'),
+        },
+        {
+          text: 'SUV / MPV',
+          onPress: () => processDriverOverride('private', 'SUV / MPV', '6'),
         },
         {
           text: 'Motorcycle',
@@ -236,6 +249,8 @@ export default function BecomeDriverScreen() {
                 color={vehicleType === vt.key ? theme.colors.primary : theme.colors.textMuted}
               />
               <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
                 style={[
                   styles.vehicleTypeLabel,
                   {
@@ -352,8 +367,8 @@ export default function BecomeDriverScreen() {
         />
         <UploadCard
           icon="shield-checkmark-outline"
-          title="National Police Clearance (NPC)"
-          description="Upload your valid National Police Clearance document"
+          title="NBI Clearance"
+          description="Upload your valid NBI Clearance document"
           theme={theme}
           docType="police_clearance"
           userId={profile?.id}
@@ -509,16 +524,18 @@ const styles = StyleSheet.create({
 
   sectionTitle: { fontSize: 15, marginBottom: 10 },
 
-  vehicleTypeRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
+  vehicleTypeRow: { flexDirection: 'row', gap: 8, marginBottom: 20 },
   vehicleTypeCard: {
     flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
     paddingVertical: 14,
+    paddingHorizontal: 4,
     borderRadius: 14,
     borderWidth: 1.5,
   },
-  vehicleTypeLabel: { fontSize: 11 },
+  vehicleTypeLabel: { fontSize: 11, textAlign: 'center' },
 
   inputContainer: {
     flexDirection: 'row',

@@ -23,6 +23,16 @@ interface NotificationPopupProps {
   handleDismissPopup: () => void;
 }
 
+function getNotificationDisplayTitle(title?: string, type?: string): string {
+  if (!title || title === 'hub_post') {
+    if (type === 'hub_comment') return 'New Comment';
+    if (type === 'hub_like') return 'New Reaction';
+    if (type === 'hub_mention') return 'New Mention';
+    return 'Community Hub';
+  }
+  return title;
+}
+
 export default function NotificationPopup({ centerPopupNotification, popupScaleAnim, handleDismissPopup }: NotificationPopupProps) {
   const { theme, mode } = useTheme();
   const router = useRouter();
@@ -85,6 +95,8 @@ export default function NotificationPopup({ centerPopupNotification, popupScaleA
 
   const gradientColors = theme.colors.gradientPrimary;
 
+  const displayTitle = getNotificationDisplayTitle(centerPopupNotification?.title, centerPopupNotification?.data?.type);
+
   return (
     <Animated.View style={[styles.popupOverlay, { opacity: fadeAnim }]}>
       {/* Dim overlay without blur */}
@@ -133,7 +145,7 @@ export default function NotificationPopup({ centerPopupNotification, popupScaleA
                 { color: theme.colors.text, fontFamily: 'Inter-Bold' },
               ]}
             >
-              {centerPopupNotification.title}
+              {displayTitle}
             </Text>
 
             {/* Subtitle */}

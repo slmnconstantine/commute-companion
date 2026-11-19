@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
-import { isValidEmail, isValidPassword, isNotEmpty } from '@/utils/validators';
+import { isValidEmail, isValidPassword, isNotEmpty, checkEmailDomainMX } from '@/utils/validators';
 import AuthBackground from '@/components/common/AuthBackground';
 
 // Signal Blue Palette
@@ -75,10 +75,29 @@ export default function SignUpScreen() {
     if (!validate()) return;
     setLoading(true);
     try {
+      // Check if domain exists and can receive email
+      const domainCheck = await checkEmailDomainMX(email.trim());
+      if (!domainCheck.valid) {
+        setErrors((prev) => ({ ...prev, email: domainCheck.message || 'Domain cannot receive emails' }));
+        setLoading(false);
+        return;
+      }
+
       // All users default to 'commuter' role
       const { error, session } = await signUp(email.trim(), password, username.trim(), fullName.trim(), 'commuter');
       if (error) {
-        Alert.alert('Registration Failed', error.message || 'Could not create account.');
+        if (error.message.includes('already exists') || error.message.toLowerCase().includes('already registered')) {
+          Alert.alert(
+            'Account Exists',
+            error.message,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Sign In', onPress: () => router.replace('/(auth)/sign-in') },
+            ]
+          );
+        } else {
+          Alert.alert('Registration Failed', error.message || 'Could not create account.');
+        }
       } else if (session) {
         Alert.alert(
           'Welcome to Commute Companion!',

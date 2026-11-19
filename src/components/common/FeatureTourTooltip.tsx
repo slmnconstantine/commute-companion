@@ -35,11 +35,11 @@ const TOUR_STEPS: TourStep[] = [
     id: 'route',
     badge: 'Step 1 of 5 • Route Corridor',
     title: 'Pin Your Commute Route',
-    description: 'Pin where you start and end your daily commute to automatically match with carpools and commuters traveling your way.',
+    description: "Tap the highlighted 'Set Route' button on your home card to pin where you start and end your daily commute to automatically match with carpools and commuters traveling your way.",
     icon: 'navigate-circle',
     iconColor: '#0057FF',
     position: 'top',
-    targetLabel: 'Top Search Bar',
+    targetLabel: 'Set Route Button',
     route: '/(main)/(tabs)',
   },
   {
@@ -167,7 +167,7 @@ export default function FeatureTourTooltip({
       if (Platform.OS !== 'web') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
-    } catch {}
+    } catch { }
 
     if (isLastStep) {
       // Return to Home tab on tour completion
@@ -204,7 +204,7 @@ export default function FeatureTourTooltip({
         if (Platform.OS !== 'web') {
           Haptics.selectionAsync();
         }
-      } catch {}
+      } catch { }
 
       const prevIndex = currentStepIndex - 1;
       const prevStep = TOUR_STEPS[prevIndex];
@@ -220,7 +220,7 @@ export default function FeatureTourTooltip({
       if (Platform.OS !== 'web') {
         Haptics.selectionAsync();
       }
-    } catch {}
+    } catch { }
 
     // Return to Home tab on skip
     router.push('/(main)/(tabs)' as any);
@@ -264,49 +264,27 @@ export default function FeatureTourTooltip({
         {/* Semi-transparent Dimming Mask */}
         <Pressable style={StyleSheet.absoluteFill} onPress={handleNext} />
 
-        {/* Dynamic Target Pointer / Beacon */}
-        {step.position === 'top' && (
-          <View style={[styles.topPointerWrap, { top: insets.top + 16 }]}>
+        {/* Target Pointer / Beacon - Only active for 'set route' step */}
+        {step.id === 'route' && (
+          <View style={[styles.setRoutePointerWrap, { bottom: 104, left: 34 }]}>
             <Animated.View
               style={[
-                styles.targetBeacon,
+                styles.setRouteHighlightBorder,
                 {
-                  borderColor: step.iconColor,
                   transform: [{ scale: pulseAnim }],
                 },
               ]}
             />
-            <View style={[styles.targetDot, { backgroundColor: step.iconColor }]} />
-          </View>
-        )}
-
-        {step.position === 'bottom-right' && (
-          <View style={[styles.fabPointerWrap, { bottom: 90, right: 24 }]}>
-            <Animated.View
-              style={[
-                styles.targetBeacon,
-                {
-                  borderColor: step.iconColor,
-                  transform: [{ scale: pulseAnim }],
-                },
-              ]}
-            />
-            <View style={[styles.targetDot, { backgroundColor: step.iconColor }]} />
-          </View>
-        )}
-
-        {step.position === 'bottom' && (
-          <View style={[styles.bottomPointerWrap, { bottom: 20 }]}>
-            <Animated.View
-              style={[
-                styles.targetBeacon,
-                {
-                  borderColor: step.iconColor,
-                  transform: [{ scale: pulseAnim }],
-                },
-              ]}
-            />
-            <View style={[styles.targetDot, { backgroundColor: step.iconColor }]} />
+            <Pressable
+              style={[styles.setRouteHighlightBtn, { backgroundColor: step.iconColor }]}
+              onPress={() => {
+                onComplete();
+                router.push('/(main)/ride/set-route' as any);
+              }}
+            >
+              <Ionicons name="navigate" size={14} color="#fff" />
+              <Text style={styles.setRouteBtnText}>Set Route</Text>
+            </Pressable>
           </View>
         )}
 
@@ -384,8 +362,8 @@ export default function FeatureTourTooltip({
                         idx === currentStepIndex
                           ? theme.colors.primary
                           : isDark
-                          ? 'rgba(255, 255, 255, 0.2)'
-                          : '#E2E8F0',
+                            ? 'rgba(255, 255, 255, 0.2)'
+                            : '#E2E8F0',
                       width: idx === currentStepIndex ? 18 : 6,
                     },
                   ]}
@@ -466,6 +444,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 100000,
+  },
+  setRoutePointerWrap: {
+    position: 'absolute',
+    zIndex: 100000,
+  },
+  setRouteHighlightBorder: {
+    position: 'absolute',
+    top: -5,
+    left: -5,
+    right: -5,
+    bottom: -5,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    zIndex: 10,
+    elevation: 8,
+  },
+  setRouteHighlightBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    shadowColor: '#0057FF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  setRouteBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    marginLeft: 4,
   },
   targetBeacon: {
     position: 'absolute',

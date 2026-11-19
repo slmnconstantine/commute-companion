@@ -146,6 +146,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async (email: string, password: string, username: string, fullName: string, role: 'driver' | 'commuter') => {
+    // Check if username is already taken
+    const { data: existingUser } = await supabase
+      .from('profiles')
+      .select('id')
+      .ilike('username', username.trim())
+      .maybeSingle();
+
+    if (existingUser) {
+      return {
+        error: new Error('This username is already taken. Please choose another one.'),
+        session: null,
+      };
+    }
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -157,6 +171,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     if (error) return { error: error as Error | null, session: null };
     
+    // When Supabase email enumeration protection is active, duplicate emails return 200 with empty identities
+    if (data.user && (!data.user.identities || data.user.identities.length === 0)) {
+      return {
+        error: new Error('An account with this email already exists. Please sign in instead.'),
+        session: null,
+      };
+    }
+
     return { error: null, session: data.session };
   };
 

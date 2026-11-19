@@ -20,6 +20,16 @@ interface NotificationBannerProps {
   handleDismiss: () => void;
 }
 
+function getNotificationDisplayTitle(title?: string, type?: string): string {
+  if (!title || title === 'hub_post') {
+    if (type === 'hub_comment') return 'New Comment';
+    if (type === 'hub_like') return 'New Reaction';
+    if (type === 'hub_mention') return 'New Mention';
+    return 'Community Hub';
+  }
+  return title;
+}
+
 export default function NotificationBanner({ activeNotification, slideAnim, handleDismiss }: NotificationBannerProps) {
   const { theme, mode } = useTheme();
   const router = useRouter();
@@ -131,6 +141,8 @@ export default function NotificationBanner({ activeNotification, slideAnim, hand
   const actionBtnConfig = getActionBtnConfig();
   const gradientColors = theme.colors.gradientPrimary;
 
+  const displayTitle = getNotificationDisplayTitle(activeNotification?.title, activeNotification?.data?.type);
+
   return (
     <Animated.View
       {...panResponder.panHandlers}
@@ -183,7 +195,7 @@ export default function NotificationBanner({ activeNotification, slideAnim, hand
               ]}
               numberOfLines={1}
             >
-              {activeNotification.title}
+              {displayTitle}
             </Text>
             <Text
               style={[

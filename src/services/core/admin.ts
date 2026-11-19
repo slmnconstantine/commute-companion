@@ -145,7 +145,7 @@ export async function validateDriverApplication(
   try {
     const updates = approve
       ? { is_verified: true, verified_badge: true, role: 'driver' }
-      : { is_verified: false, verified_badge: false };
+      : { is_verified: false, verified_badge: false, role: 'commuter' };
 
     const { data: updatedProfile, error } = await supabase
       .from('profiles')

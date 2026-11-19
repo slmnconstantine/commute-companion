@@ -60,7 +60,7 @@ The app uses `expo-router` with two main navigation groups: `(auth)` for authent
 | :--- | :--- | :--- | :--- |
 | **Home** (`index`) | `app/(main)/(tabs)/index.tsx` | **Home Dashboard:** Main hub featuring map view, route search bar, active commute banner, quick action tiles (Offer a Ride, Find a Ride, Voice Assistant), vehicle status (for drivers), and saved routes. | Renders `MapLibre`/`RNMaps`, integrates `RouteContext` and `VoiceAssistantContext`. |
 | **Rides** (`rides`) | `app/(main)/(tabs)/rides.tsx` | **Ride Discovery & Driver Management:** Dual-mode screen. Commuters browse & filter available rides (time, price, seats). Drivers view created trips, manage seat availability, and respond to booking requests. | React Query hooks (`useQuery`, `useMutation`) for `trips.ts` & `bookings.ts`. Tab badges alert driver of pending bookings. |
-| **Hub** (`community`) | `app/(main)/(tabs)/community.tsx` | **Community Hub Feed:** Social feed where commuters post real-time traffic updates, carpool requests, and tips. Supports category filter tags, likes, and comment threads. | Renders post list cards, category selector (`AnimatedSegmentControl`), connects to `hubPosts.ts`. |
+| **Hub** (`community`) | `app/(main)/(tabs)/community.tsx` | **Community Hub Feed:** Social feed where commuters post real-time traffic updates, carpool requests, and tips. Supports category filter tags, likes, and comment threads. | Renders post list cards, category selector (`AnimatedSegmentControl`), connects to `hub.ts`. |
 | **Activity** (`activity`) | `app/(main)/(tabs)/activity.tsx` | **Ride History & Bookings:** Timeline of user's past and upcoming booked rides, booking status badges (Pending, Confirmed, Completed, Cancelled), fare breakdowns, and trip details. | Fetches user trip history via `trips.ts` and `bookings.ts`, provides direct links to trip summaries and chats. |
 | **Profile** (`profile`) | `app/(main)/(tabs)/profile.tsx` | **User Profile & Stats:** User dashboard displaying avatar, eco-stats (carbon saved, total rides, rating), driver status, verification badge, and quick navigation to settings. | Displays `profile` state from `AuthContext`, links to edit profile, vehicle management, and ID verification. |
 
@@ -83,7 +83,7 @@ The app uses `expo-router` with two main navigation groups: `(auth)` for authent
 
 | Route Path | Screen File | Page Architecture & Description | Key Operations & Interactions |
 | :--- | :--- | :--- | :--- |
-| `/hub/create-post` | `app/(main)/hub/create-post.tsx` | **Create Community Post:** Modal form to post announcements or carpool requests to the Hub. Supports category selection, image upload, and location tagging. | Uploads image to Supabase storage bucket (`storage.ts`) and posts via `hubPosts.ts`. |
+| `/hub/create-post` | `app/(main)/hub/create-post.tsx` | **Create Community Post:** Modal form to post announcements or carpool requests to the Hub. Supports category selection, image upload, and location tagging. | Uploads image to Supabase storage bucket (`storage.ts`) and posts via `hub.ts`. |
 | `/chat/[id]` | `app/(main)/chat/[id].tsx` | **Real-time Ride Chat:** One-on-one or group chat room between driver and passengers for a specific ride. Supports real-time text messages, voice messages, location sharing, and quick trip status updates. | Listens to Supabase Realtime channel subscriptions (`messages.ts` / `chatRooms.ts`). |
 
 ---

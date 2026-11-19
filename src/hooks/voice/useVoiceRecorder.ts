@@ -10,18 +10,57 @@ export function useVoiceRecorder() {
     if (!permission.granted) {
       throw new Error('Microphone permission denied');
     }
+
     try {
       await setAudioModeAsync({
         playsInSilentMode: true,
         interruptionMode: 'doNotMix',
       } as any);
     } catch {}
-    await recorder.prepareToRecordAsync();
+
+    // Check if recorder is already running and safely stop it
+    try {
+      const status = recorder.getStatus?.();
+      if (status?.isRecording || recorder.isRecording) {
+        await recorder.stop();
+      }
+    } catch {}
+
+    // Prepare recorder if not already prepared
+    try {
+      const status = recorder.getStatus?.();
+      if (!status?.canRecord) {
+        await recorder.prepareToRecordAsync();
+      }
+    } catch (prepErr: any) {
+      // If error indicates already prepared, we can safely proceed to record
+      if (prepErr?.message?.includes('already been prepared')) {
+        // Safe to continue to record()
+      } else {
+        // Try one reset cycle
+        try {
+          await recorder.stop();
+          await recorder.prepareToRecordAsync();
+        } catch {
+          if (!recorder.getStatus?.()?.canRecord) {
+            throw prepErr;
+          }
+        }
+      }
+    }
+
     recorder.record();
   };
 
   const stopAudioAndTranscribe = async (): Promise<string> => {
-    await recorder.stop();
+    try {
+      if (recorder.isRecording || recorder.getStatus?.()?.isRecording) {
+        await recorder.stop();
+      }
+    } catch (stopErr) {
+      console.warn('Recorder stop warning:', stopErr);
+    }
+
     if (!recorder.uri) throw new Error('No audio recorded');
 
     const audioBase64 = await FileSystem.readAsStringAsync(recorder.uri, {
@@ -40,9 +79,11 @@ export function useVoiceRecorder() {
     return data.transcript || '';
   };
 
-  const cancelRecording = () => {
+  const cancelRecording = async () => {
     try {
-      recorder.stop();
+      if (recorder.isRecording || recorder.getStatus?.()?.isRecording) {
+        await recorder.stop();
+      }
     } catch {}
   };
 

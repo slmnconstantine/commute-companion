@@ -32,13 +32,13 @@ export default function AnimatedSplashScreen({
   const exitOpacity = useRef(new Animated.Value(1)).current;
 
   // 1. Commuter dots converging from left and right
-  const leftDotX = useRef(new Animated.Value(-55)).current;
-  const rightDotX = useRef(new Animated.Value(55)).current;
+  const leftDotX = useRef(new Animated.Value(-90)).current;
+  const rightDotX = useRef(new Animated.Value(90)).current;
   const dotsOpacity = useRef(new Animated.Value(0)).current;
 
   // 2. The empty Pin dropping & blooming in
   const pinScale = useRef(new Animated.Value(0.3)).current;
-  const pinTranslateY = useRef(new Animated.Value(-16)).current;
+  const pinTranslateY = useRef(new Animated.Value(-22)).current;
   const pinOpacity = useRef(new Animated.Value(0)).current;
 
   // 3. Logo container scale
@@ -51,7 +51,7 @@ export default function AnimatedSplashScreen({
 
   // 5. Brand Name wordmark
   const textOpacity = useRef(new Animated.Value(0)).current;
-  const textTranslateY = useRef(new Animated.Value(12)).current;
+  const textTranslateY = useRef(new Animated.Value(16)).current;
 
   const [minTimeElapsed, setMinTimeElapsed] = useState(false);
   const [hasFinished, setHasFinished] = useState(false);
@@ -315,32 +315,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
-    height: 180,
   },
   dotsContainer: {
     position: 'absolute',
-    top: 36,
-    width: 140,
-    height: 20,
+    top: 38,
+    width: 240,
+    height: 18,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
   },
   commuterDot: {
     position: 'absolute',
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     backgroundColor: '#0057FF',
     shadowColor: '#0057FF',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.45,
+    shadowRadius: 8,
+    elevation: 5,
   },
   cardContainer: {
-    width: 80,
-    height: 80,
+    width: 120,
+    height: 120,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
@@ -350,17 +349,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   logoImage: {
-    width: 62,
-    height: 62,
+    width: 112,
+    height: 112,
   },
   textContainer: {
-    marginTop: 20,
+    marginTop: 24,
     alignItems: 'center',
   },
   title: {
     fontFamily: 'Outfit-Bold',
-    fontSize: 23,
-    letterSpacing: -0.4,
+    fontSize: 32,
+    letterSpacing: -0.6,
+    lineHeight: 40,
     textAlign: 'center',
   },
 });

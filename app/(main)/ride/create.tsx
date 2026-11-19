@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import {
-  View, Text, TextInput, StyleSheet, ScrollView, Pressable, Alert, Animated, Platform, Modal, Image, KeyboardAvoidingView,
+  View, Text, TextInput, StyleSheet, ScrollView, Pressable, Alert, Animated, Platform, Modal, Image, KeyboardAvoidingView, Keyboard,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -122,6 +122,39 @@ export default function CreateRideScreen() {
   const [showLiveCaptureModal, setShowLiveCaptureModal] = useState(false);
   const [captureConfidence, setCaptureConfidence] = useState<number>(98);
   const step2ScrollRef = useRef<ScrollView>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [focusedInput, setFocusedInput] = useState<'fare' | 'description' | null>(null);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+      }
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (keyboardHeight > 0) {
+      setTimeout(() => {
+        if (focusedInput === 'description') {
+          step2ScrollRef.current?.scrollToEnd({ animated: true });
+        } else if (focusedInput === 'fare') {
+          step2ScrollRef.current?.scrollTo({ y: 260, animated: true });
+        }
+      }, 100);
+    }
+  }, [keyboardHeight, focusedInput]);
 
   // Prevent unverified accounts from creating rides
   useEffect(() => {
@@ -763,7 +796,10 @@ export default function CreateRideScreen() {
           <ScrollView
             ref={step2ScrollRef}
             style={styles.detailsContainer}
-            contentContainerStyle={[styles.detailsContent, { paddingBottom: 350 }]}
+            contentContainerStyle={[
+              styles.detailsContent,
+              { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 60 : 48 },
+            ]}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
@@ -882,10 +918,12 @@ export default function CreateRideScreen() {
                   value={manualFare}
                   onChangeText={setManualFare}
                   onFocus={() => {
+                    setFocusedInput('fare');
                     setTimeout(() => {
                       step2ScrollRef.current?.scrollTo({ y: 260, animated: true });
                     }, 150);
                   }}
+                  onBlur={() => setFocusedInput(null)}
                 />
                 {!manualFare.trim() ? (
                   <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginTop: 6, fontFamily: 'Inter-Regular' }}>
@@ -938,10 +976,12 @@ export default function CreateRideScreen() {
               onChangeText={setDescription}
               textAlignVertical="top"
               onFocus={() => {
+                setFocusedInput('description');
                 setTimeout(() => {
                   step2ScrollRef.current?.scrollToEnd({ animated: true });
-                }, 150);
+                }, 200);
               }}
+              onBlur={() => setFocusedInput(null)}
             />
             <Text style={{ color: theme.colors.textMuted, fontSize: 11, textAlign: 'right', marginTop: 4, fontFamily: 'Inter-Regular' }}>
               {description.length}/300
@@ -949,10 +989,9 @@ export default function CreateRideScreen() {
 
             <Pressable 
               style={[
-                styles.nextButton, 
+                styles.step2NextButton, 
                 { 
                   backgroundColor: isStep2Valid ? theme.colors.primary : theme.colors.primary + '80', 
-                  marginTop: 24,
                   opacity: isStep2Valid ? 1 : 0.6,
                 }
               ]} 
@@ -1224,6 +1263,12 @@ const styles = StyleSheet.create({
     position: 'absolute', bottom: 24, left: 16, right: 16,
     height: 56, borderRadius: 16,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    shadowColor: '#0057FF', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.28, shadowRadius: 12, elevation: 6,
+  },
+  step2NextButton: {
+    height: 56, borderRadius: 16,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    marginTop: 20,
     shadowColor: '#0057FF', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.28, shadowRadius: 12, elevation: 6,
   },
   nextButtonText: { color: '#fff', fontSize: 16, fontFamily: 'Inter-SemiBold' },

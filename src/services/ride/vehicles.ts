@@ -21,28 +21,12 @@ export const addVehicle = async (
   plateNumber: string, 
   type: string, 
   model: string, 
-  capacity: string
+  capacity: string,
+  photoUrl?: string,
+  orCrUrl?: string
 ): Promise<Vehicle | null> => {
   const { data: { user } } = await supabase.auth.getUser();
   const targetDriverId = user?.id || driverId;
-
-  // Ensure user has driver role in profiles so driver-specific RLS policies pass
-  try {
-    const { data: prof } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', targetDriverId)
-      .single();
-
-    if (prof && prof.role !== 'driver') {
-      await supabase
-        .from('profiles')
-        .update({ role: 'driver' })
-        .eq('id', targetDriverId);
-    }
-  } catch (e) {
-    // Non-critical check
-  }
 
   // Satisfy database check constraint: vehicles_type_check (type IN ('private', 'public'))
   const normalizedType =
@@ -50,16 +34,21 @@ export const addVehicle = async (
       ? 'public'
       : 'private';
 
+  const insertPayload: Record<string, any> = {
+    driver_id: targetDriverId,
+    plate_number: plateNumber,
+    type: normalizedType,
+    model,
+    capacity,
+    is_active: true
+  };
+
+  if (photoUrl) insertPayload.photo_url = photoUrl;
+  if (orCrUrl) insertPayload.or_cr_url = orCrUrl;
+
   const { data, error } = await supabase
     .from('vehicles')
-    .insert({
-      driver_id: targetDriverId,
-      plate_number: plateNumber,
-      type: normalizedType,
-      model,
-      capacity,
-      is_active: true
-    })
+    .insert(insertPayload)
     .select()
     .single();
 

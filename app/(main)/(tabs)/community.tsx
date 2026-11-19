@@ -39,6 +39,11 @@ import {
   createPost,
   getComments,
   createComment,
+  deleteComment,
+  toggleCommentReaction,
+  parseCommentContent,
+  serializeCommentContent,
+  CommentReplyMeta,
   deletePost,
   updatePost,
   getUserExpiringPosts,
@@ -118,15 +123,37 @@ function formatCommentTime(dateStr: string) {
   }
 }
 
+function renderCommentMessageWithMentions(text: string, primaryColor: string) {
+  if (!text) return null;
+  const parts = text.split(/(@[\w.-]+)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith('@')) {
+      return (
+        <Text key={index} style={{ color: primaryColor, fontFamily: 'Inter-Bold' }}>
+          {part}
+        </Text>
+      );
+    }
+    return part;
+  });
+}
+
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
 export default function CommunityScreen() {
-  const { theme } = useTheme();
+  const { theme, mode } = useTheme();
+  const isDark = mode === 'dark';
   const { activeRoute, recentRoutes, setActiveRoute } = useRoute();
   const { profile } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { mention, postId } = useLocalSearchParams<{ mention?: string; postId?: string }>();
+  const { mention, postId, highlightPostId, t } = useLocalSearchParams<{
+    mention?: string;
+    postId?: string;
+    highlightPostId?: string;
+    t?: string;
+  }>();
+  const incomingTargetId = highlightPostId || postId;
 
   const [routeModalVisible, setRouteModalVisible] = useState(false);
   const [posts, setPosts] = useState<HubPostWithAuthor[]>([]);
@@ -139,8 +166,11 @@ export default function CommunityScreen() {
   const [selectedFilterTag, setSelectedFilterTag] = useState('all');
 
   // Highlighted post from notification
-  const [highlightedPostId, setHighlightedPostId] = useState<string | null>(postId || null);
-  const lastScrolledPostId = useRef<string | null>(null);
+  const [highlightedPostId, setHighlightedPostId] = useState<string | null>(incomingTargetId || null);
+  const pendingFocusPostId = useRef<string | null>(incomingTargetId || null);
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const postsRef = useRef<HubPostWithAuthor[]>([]);
+  postsRef.current = posts;
 
   // Realtime new updates toast
   const [unreadNewCount, setUnreadNewCount] = useState(0);
@@ -160,6 +190,8 @@ export default function CommunityScreen() {
   const [activePost, setActivePost] = useState<HubPostWithAuthor | null>(null);
   const [comments, setComments] = useState<PostCommentWithAuthor[]>([]);
   const [newComment, setNewComment] = useState('');
+  const [replyingTo, setReplyingTo] = useState<CommentReplyMeta | null>(null);
+  const commentInputRef = useRef<TextInput>(null);
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
 
@@ -195,9 +227,10 @@ export default function CommunityScreen() {
     }
 
     const offset = reset ? 0 : posts.length;
-    // When navigating from a mention notification with a postId, load an expanded batch
+    // When navigating from a notification with a target post, load an expanded batch
     // so all preceding posts are loaded and visible in their natural feed order
-    const fetchLimit = reset && postId ? 50 : 20;
+    const targetPostId = incomingTargetId || pendingFocusPostId.current;
+    const fetchLimit = reset && targetPostId ? 50 : 20;
 
     let data = await getPosts(routeHash, profileId, {
       tag: selectedFilterTag,
@@ -205,15 +238,15 @@ export default function CommunityScreen() {
       offset,
     });
 
-    // If reset and postId is specified, make sure the target post is included in the loaded feed
-    if (reset && postId && !data.some((p) => p.id === postId)) {
+    // If reset and targetPostId is specified, make sure the target post is included in the loaded feed
+    if (reset && targetPostId && !data.some((p) => p.id === targetPostId)) {
       const expandedData = await getPosts(routeHash, profileId, {
         tag: selectedFilterTag,
         limit: 100,
         offset: 0,
       });
 
-      if (expandedData.some((p) => p.id === postId)) {
+      if (expandedData.some((p) => p.id === targetPostId)) {
         data = expandedData;
       } else {
         // As a resilient fallback, fetch the target post and place it in its chronological position
@@ -227,7 +260,7 @@ export default function CommunityScreen() {
               post_likes(count),
               post_comments(count)
             `)
-            .eq('id', postId)
+            .eq('id', targetPostId)
             .maybeSingle();
 
           if (targetPostData) {
@@ -259,7 +292,7 @@ export default function CommunityScreen() {
       setHasMore(data.length >= 20);
       setLoadingMore(false);
     }
-  }, [activeRoute?.route_hash, profile?.id, selectedFilterTag, posts.length, postId]);
+  }, [activeRoute?.route_hash, profile?.id, selectedFilterTag, posts.length, incomingTargetId]);
 
   // Handle Tag or ActiveRoute changes
   useEffect(() => {
@@ -330,14 +363,31 @@ export default function CommunityScreen() {
   useEffect(() => {
     if (!commentsVisible || !activePost) return;
 
-    const unsubscribe = subscribeToComments(activePost.id, (incomingComment) => {
-      setComments((prev) => {
-        if (prev.some((c) => c.id === incomingComment.id)) return prev;
-        return [...prev, incomingComment];
-      });
-      setPosts((prev) =>
-        prev.map((p) => (p.id === activePost.id ? { ...p, comments_count: (p.comments_count || 0) + 1 } : p))
-      );
+    const unsubscribe = subscribeToComments(activePost.id, {
+      onInsert: (incomingComment) => {
+        setComments((prev) => {
+          if (prev.some((c) => c.id === incomingComment.id)) return prev;
+          setPosts((pList) =>
+            pList.map((p) => (p.id === activePost.id ? { ...p, comments_count: (p.comments_count || 0) + 1 } : p))
+          );
+          return [...prev, incomingComment];
+        });
+      },
+      onUpdate: (updatedComment) => {
+        setComments((prev) =>
+          prev.map((c) => (c.id === updatedComment.id ? updatedComment : c))
+        );
+      },
+      onDelete: (deletedCommentId) => {
+        setComments((prev) => prev.filter((c) => c.id !== deletedCommentId));
+        setPosts((pList) =>
+          pList.map((p) =>
+            p.id === activePost.id
+              ? { ...p, comments_count: Math.max(0, (p.comments_count || 1) - 1) }
+              : p
+          )
+        );
+      },
     });
 
     return () => {
@@ -433,6 +483,8 @@ export default function CommunityScreen() {
 
   const openComments = useCallback(async (post: HubPostWithAuthor) => {
     setActivePost(post);
+    setReplyingTo(null);
+    setNewComment('');
     setCommentsVisible(true);
     setCommentsLoading(true);
     const data = await getComments(post.id);
@@ -440,48 +492,113 @@ export default function CommunityScreen() {
     setCommentsLoading(false);
   }, []);
 
-  // Ensure 'all' filter is active if navigating with a postId
-  useEffect(() => {
-    if (postId && selectedFilterTag !== 'all') {
-      setSelectedFilterTag('all');
+  // Focus and highlight post logic with 3-second highlight and smooth scrolling
+  const focusAndHighlightPost = useCallback((targetId: string) => {
+    if (!targetId) return;
+
+    // Reset filter tag to 'all' so target post is visible in feed
+    setSelectedFilterTag('all');
+
+    // Visually highlight target post
+    setHighlightedPostId(targetId);
+
+    // Clear previous timer if any
+    if (highlightTimerRef.current) {
+      clearTimeout(highlightTimerRef.current);
     }
-  }, [postId]);
 
-  useEffect(() => {
-    if (!postId) return;
-    setHighlightedPostId(postId);
+    // Highlight for exactly 3 seconds
+    highlightTimerRef.current = setTimeout(() => {
+      setHighlightedPostId((curr) => (curr === targetId ? null : curr));
+    }, 3000);
 
-    // Wait until feed is loaded and posts are present
-    if (loading || posts.length === 0) return;
+    // Scroll to the post in FlatList
+    const attemptScroll = (retryCount = 0) => {
+      const currentPosts = postsRef.current;
+      const index = currentPosts.findIndex((p) => p.id === targetId);
 
-    if (lastScrolledPostId.current === postId) return;
-
-    const index = posts.findIndex((p) => p.id === postId);
-    if (index !== -1) {
-      lastScrolledPostId.current = postId;
-      // Allow FlatList to settle layout, then smoothly scroll down to the specific post
-      const scrollTimer = setTimeout(() => {
+      if (index !== -1) {
         try {
           flatListRef.current?.scrollToIndex({
             index,
             animated: true,
-            viewPosition: 0.2,
+            viewPosition: 0.15,
           });
-        } catch (err) {
-          console.warn('[Community] scrollToIndex error:', err);
+        } catch {
+          flatListRef.current?.scrollToOffset({
+            offset: Math.max(0, index * 260),
+            animated: true,
+          });
         }
-      }, 400);
+      } else if (retryCount < 6) {
+        setTimeout(() => attemptScroll(retryCount + 1), 250);
+      }
+    };
 
-      const highlightTimer = setTimeout(() => {
-        setHighlightedPostId((curr) => (curr === postId ? null : curr));
-      }, 6000);
+    setTimeout(() => attemptScroll(0), 150);
+  }, []);
 
-      return () => {
-        clearTimeout(scrollTimer);
-        clearTimeout(highlightTimer);
-      };
+  // Cleanup highlight timer on unmount
+  useEffect(() => {
+    return () => {
+      if (highlightTimerRef.current) {
+        clearTimeout(highlightTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Listen to focus_hub_post event (emitted when tapping in-app notifications or push while app is open)
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(
+      'focus_hub_post',
+      ({ postId: targetId }: { postId?: string }) => {
+        if (!targetId) return;
+        pendingFocusPostId.current = targetId;
+
+        if (selectedFilterTag !== 'all') {
+          setSelectedFilterTag('all');
+        }
+
+        if (postsRef.current.some((p) => p.id === targetId)) {
+          focusAndHighlightPost(targetId);
+        } else {
+          loadPosts(true);
+        }
+      }
+    );
+
+    return () => {
+      sub.remove();
+    };
+  }, [selectedFilterTag, loadPosts, focusAndHighlightPost]);
+
+  // Handle URL / Route param updates (when navigated from background push or notification inbox)
+  useEffect(() => {
+    if (!incomingTargetId) return;
+    pendingFocusPostId.current = incomingTargetId;
+
+    if (selectedFilterTag !== 'all') {
+      setSelectedFilterTag('all');
     }
-  }, [postId, loading, posts]);
+
+    if (!loading && posts.length > 0) {
+      if (posts.some((p) => p.id === incomingTargetId)) {
+        pendingFocusPostId.current = null;
+        focusAndHighlightPost(incomingTargetId);
+      }
+    }
+  }, [incomingTargetId, t, loading, posts, selectedFilterTag, focusAndHighlightPost]);
+
+  // When posts update or finish loading, fulfill pending scroll/highlight if any
+  useEffect(() => {
+    if (pendingFocusPostId.current && !loading && posts.length > 0) {
+      const targetId = pendingFocusPostId.current;
+      if (posts.some((p) => p.id === targetId)) {
+        pendingFocusPostId.current = null;
+        focusAndHighlightPost(targetId);
+      }
+    }
+  }, [posts, loading, focusAndHighlightPost]);
 
   useEffect(() => {
     checkExpiringPosts();
@@ -694,27 +811,118 @@ export default function CommunityScreen() {
     if (!profile || !activePost || !newComment.trim() || isSubmittingComment) return;
 
     const commentText = newComment.trim();
+    const currentReplyTo = replyingTo;
     setIsSubmittingComment(true);
     setNewComment('');
+    setReplyingTo(null);
 
     try {
-      const comment = await createComment(activePost.id, profile.id, commentText);
-      setComments((prev) => [...prev, comment]);
-
-      setPosts((prev) =>
-        prev.map((p) => {
-          if (p.id === activePost.id) {
-            return { ...p, comments_count: (p.comments_count || 0) + 1 };
-          }
-          return p;
-        })
+      const comment = await createComment(
+        activePost.id,
+        profile.id,
+        commentText,
+        currentReplyTo || undefined
       );
+
+      setComments((prev) => {
+        if (prev.some((c) => c.id === comment.id)) return prev;
+        setPosts((pList) =>
+          pList.map((p) => (p.id === activePost.id ? { ...p, comments_count: (p.comments_count || 0) + 1 } : p))
+        );
+        return [...prev, comment];
+      });
     } catch (err) {
       console.error('Error submitting comment:', err);
       setNewComment(commentText);
+      if (currentReplyTo) setReplyingTo(currentReplyTo);
     } finally {
       setIsSubmittingComment(false);
     }
+  };
+
+  const handleDeleteComment = (comment: PostCommentWithAuthor) => {
+    if (!profile || !activePost) return;
+    const isCommentAuthor = comment.author_id === profile.id;
+    const isPostAuthor = activePost.author_id === profile.id;
+
+    if (!isCommentAuthor && !isPostAuthor) return;
+
+    Alert.alert(
+      'Delete Comment',
+      isPostAuthor && !isCommentAuthor
+        ? 'As the post author, delete this comment from your post?'
+        : 'Are you sure you want to delete your comment?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            // Optimistic removal
+            setComments((prev) => prev.filter((c) => c.id !== comment.id));
+            setPosts((prev) =>
+              prev.map((p) =>
+                p.id === activePost.id
+                  ? { ...p, comments_count: Math.max(0, (p.comments_count || 1) - 1) }
+                  : p
+              )
+            );
+
+            const success = await deleteComment(comment.id);
+            if (!success) {
+              const fresh = await getComments(activePost.id);
+              setComments(fresh);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleCommentReaction = async (comment: PostCommentWithAuthor, reactionType: string = 'like') => {
+    if (!profile) return;
+
+    const parsed = parseCommentContent(comment.content);
+    const reactions = { ...parsed.reactions };
+    const userAlreadyReacted = (reactions[reactionType] || []).includes(profile.id);
+
+    // Remove user from all reaction types first
+    for (const key of Object.keys(reactions)) {
+      reactions[key] = (reactions[key] || []).filter((id) => id !== profile.id);
+      if (reactions[key].length === 0) {
+        delete reactions[key];
+      }
+    }
+
+    if (!userAlreadyReacted) {
+      reactions[reactionType] = [...(reactions[reactionType] || []), profile.id];
+    }
+
+    const optimisticContent = serializeCommentContent(parsed.text, parsed.replyTo, reactions);
+
+    setComments((prev) =>
+      prev.map((c) => (c.id === comment.id ? { ...c, content: optimisticContent } : c))
+    );
+
+    const result = await toggleCommentReaction(comment.id, comment.content, profile.id, reactionType);
+    if (!result.success) {
+      setComments((prev) =>
+        prev.map((c) => (c.id === comment.id ? { ...c, content: comment.content } : c))
+      );
+    }
+  };
+
+  const handleStartReply = (comment: PostCommentWithAuthor) => {
+    const parsed = parseCommentContent(comment.content);
+    setReplyingTo({
+      id: comment.id,
+      authorName: comment.author?.full_name || 'User',
+      authorId: comment.author_id,
+      text: parsed.text.slice(0, 50),
+    });
+    setTimeout(() => {
+      commentInputRef.current?.focus();
+    }, 100);
   };
 
   const hasRoute = !!activeRoute;
@@ -1159,45 +1367,160 @@ export default function CommunityScreen() {
                   </Text>
                 </View>
               ) : (
-                comments.map((c) => (
-                  <View key={c.id} style={[styles.commentItem, { borderBottomColor: `${theme.colors.border}40` }]}>
-                    <Pressable
-                      onPress={() => {
-                        if (c.author_id) {
-                          setSelectedProfileId(c.author_id);
-                          setProfileModalVisible(true);
-                        }
-                      }}
-                    >
-                      {c.author?.avatar_url ? (
-                        <Image source={{ uri: c.author.avatar_url }} style={styles.commentAvatar} />
-                      ) : (
-                        <View style={[styles.commentAvatar, { backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center' }]}>
-                          <Text style={{ color: theme.colors.white, fontSize: 11, fontFamily: 'Inter-SemiBold' }}>
-                            {c.author?.full_name?.charAt(0).toUpperCase() || '?'}
+                comments
+                  .filter((c, idx, arr) => arr.findIndex((item) => item.id === c.id) === idx)
+                  .map((c) => {
+                    const parsed = parseCommentContent(c.content);
+                    const isPostAuthor = activePost?.author_id === profile?.id;
+                    const isCommentAuthor = c.author_id === profile?.id;
+                    const canDelete = isCommentAuthor || isPostAuthor;
+
+                    const totalReactions = Object.values(parsed.reactions).reduce((sum, ids) => sum + ids.length, 0);
+                    const userReacted = profile?.id ? Object.values(parsed.reactions).some((ids) => ids.includes(profile.id)) : false;
+                    const userReactionType = profile?.id ? Object.keys(parsed.reactions).find((type) => parsed.reactions[type].includes(profile.id)) : null;
+
+                    return (
+                      <View key={c.id} style={[styles.commentItem, { borderBottomColor: `${theme.colors.border}40` }]}>
+                        <Pressable
+                          onPress={() => {
+                            if (c.author_id) {
+                              setSelectedProfileId(c.author_id);
+                              setProfileModalVisible(true);
+                            }
+                          }}
+                        >
+                          {c.author?.avatar_url ? (
+                            <Image source={{ uri: c.author.avatar_url }} style={styles.commentAvatar} />
+                          ) : (
+                            <View style={[styles.commentAvatar, { backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center' }]}>
+                              <Text style={{ color: theme.colors.white, fontSize: 11, fontFamily: 'Inter-SemiBold' }}>
+                                {c.author?.full_name?.charAt(0).toUpperCase() || '?'}
+                              </Text>
+                            </View>
+                          )}
+                        </Pressable>
+
+                        <View style={styles.commentBubble}>
+                          <View style={styles.commentHeaderRow}>
+                            <Text style={{ fontFamily: 'Inter-SemiBold', color: theme.colors.text, fontSize: 13 }}>
+                              {c.author?.full_name || 'Anonymous'}
+                            </Text>
+                            {c.author_id === activePost?.author_id && (
+                              <View style={{ backgroundColor: `${theme.colors.primary}20`, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, marginLeft: 6 }}>
+                                <Text style={{ fontSize: 9, fontFamily: 'Inter-Bold', color: theme.colors.primary }}>Author</Text>
+                              </View>
+                            )}
+                            {c.created_at && (
+                              <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginLeft: 6 }}>
+                                • {formatCommentTime(c.created_at)}
+                              </Text>
+                            )}
+                            {canDelete && (
+                              <Pressable
+                                onPress={() => handleDeleteComment(c)}
+                                style={{ marginLeft: 'auto', padding: 4 }}
+                                hitSlop={8}
+                              >
+                                <Ionicons name="trash-outline" size={14} color={theme.colors.error} />
+                              </Pressable>
+                            )}
+                          </View>
+
+                          {/* Quoted reply banner if replying to a comment */}
+                          {parsed.replyTo && (
+                            <View
+                              style={[
+                                styles.replyQuoteBanner,
+                                {
+                                  backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)',
+                                  borderColor: `${theme.colors.border}80`,
+                                },
+                              ]}
+                            >
+                              <Ionicons name="return-down-forward" size={12} color={theme.colors.primary} />
+                              <Text style={{ color: theme.colors.primary, fontSize: 11, fontFamily: 'Inter-SemiBold' }} numberOfLines={1}>
+                                Replying to {parsed.replyTo.authorName}
+                              </Text>
+                              {parsed.replyTo.text && (
+                                <Text style={{ color: theme.colors.textMuted, fontSize: 11, fontFamily: 'Inter-Regular', flexShrink: 1 }} numberOfLines={1}>
+                                  : "{parsed.replyTo.text}"
+                                </Text>
+                              )}
+                            </View>
+                          )}
+
+                          {/* Comment Content */}
+                          <Text style={{ color: theme.colors.text, marginTop: 4, fontSize: 14, lineHeight: 19, fontFamily: 'Inter-Regular' }}>
+                            {renderCommentMessageWithMentions(parsed.text, theme.colors.primary)}
                           </Text>
+
+                          {/* Action Footer: React & Reply */}
+                          <View style={styles.commentActionsRow}>
+                            <Pressable
+                              style={styles.commentActionBtn}
+                              onPress={() => handleCommentReaction(c, userReactionType || 'like')}
+                              hitSlop={6}
+                            >
+                              <Ionicons
+                                name={userReacted ? 'heart' : 'heart-outline'}
+                                size={14}
+                                color={userReacted ? (theme.colors.error || '#EF4444') : theme.colors.textMuted}
+                              />
+                              {totalReactions > 0 && (
+                                <Text
+                                  style={{
+                                    fontSize: 11,
+                                    color: userReacted ? (theme.colors.error || '#EF4444') : theme.colors.textMuted,
+                                    fontFamily: 'Inter-SemiBold',
+                                    marginLeft: 4,
+                                  }}
+                                >
+                                  {totalReactions}
+                                </Text>
+                              )}
+                            </Pressable>
+
+                            <Pressable
+                              style={styles.commentActionBtn}
+                              onPress={() => handleStartReply(c)}
+                              hitSlop={6}
+                            >
+                              <Ionicons name="chatbubble-outline" size={13} color={theme.colors.textMuted} />
+                              <Text style={{ color: theme.colors.textMuted, fontSize: 11, fontFamily: 'Inter-Medium', marginLeft: 4 }}>
+                                Reply
+                              </Text>
+                            </Pressable>
+                          </View>
                         </View>
-                      )}
-                    </Pressable>
-                    <View style={styles.commentBubble}>
-                      <View style={styles.commentHeaderRow}>
-                        <Text style={{ fontFamily: 'Inter-SemiBold', color: theme.colors.text, fontSize: 13 }}>
-                          {c.author?.full_name || 'Anonymous'}
-                        </Text>
-                        {c.created_at && (
-                          <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginLeft: 6 }}>
-                            • {formatCommentTime(c.created_at)}
-                          </Text>
-                        )}
                       </View>
-                      <Text style={{ color: theme.colors.text, marginTop: 4, fontSize: 14, lineHeight: 18, fontFamily: 'Inter-Regular' }}>
-                        {c.content}
-                      </Text>
-                    </View>
-                  </View>
-                ))
+                    );
+                  })
               )}
             </ScrollView>
+
+            {/* Replying Preview Banner */}
+            {replyingTo && (
+              <View
+                style={[
+                  styles.replyingBar,
+                  {
+                    backgroundColor: isDark ? 'rgba(59, 130, 246, 0.12)' : '#EFF6FF',
+                    borderColor: `${theme.colors.primary}40`,
+                  },
+                ]}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, marginRight: 8 }}>
+                  <Ionicons name="return-down-forward" size={14} color={theme.colors.primary} />
+                  <Text style={{ color: theme.colors.text, fontSize: 12, fontFamily: 'Inter-Medium' }} numberOfLines={1}>
+                    Replying to <Text style={{ fontFamily: 'Inter-Bold', color: theme.colors.primary }}>{replyingTo.authorName}</Text>
+                    {replyingTo.text ? `: "${replyingTo.text}"` : ''}
+                  </Text>
+                </View>
+                <Pressable onPress={() => setReplyingTo(null)} hitSlop={8} style={{ padding: 4 }}>
+                  <Ionicons name="close-circle" size={18} color={theme.colors.textMuted} />
+                </Pressable>
+              </View>
+            )}
 
             <View style={[styles.commentInputRow, { borderTopColor: theme.colors.border, paddingBottom: insets.bottom || 10 }]}>
               {profile?.avatar_url ? (
@@ -1210,8 +1533,9 @@ export default function CommunityScreen() {
                 </View>
               )}
               <TextInput
+                ref={commentInputRef}
                 style={[styles.commentInput, { color: theme.colors.text, backgroundColor: theme.colors.surface }]}
-                placeholder="Write a comment..."
+                placeholder={replyingTo ? `Reply to ${replyingTo.authorName}...` : "Write a comment..."}
                 placeholderTextColor={theme.colors.textMuted}
                 value={newComment}
                 onChangeText={setNewComment}
@@ -1522,6 +1846,40 @@ const styles = StyleSheet.create({
   commentAvatar: { width: 32, height: 32, borderRadius: 16 },
   commentBubble: { flex: 1, marginLeft: 10 },
   commentHeaderRow: { flexDirection: 'row', alignItems: 'center' },
+  replyQuoteBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    marginBottom: 4,
+    marginTop: 3,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+  },
+  commentActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    gap: 16,
+  },
+  commentActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 2,
+  },
+  replyingBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+  },
   commentInputRow: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, paddingTop: 12 },
   commentInput: { flex: 1, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, marginRight: 8, fontSize: 14 },
   sendCircleBtn: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Image, DeviceEventEmitter } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Image, DeviceEventEmitter, Share } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
@@ -721,6 +721,36 @@ export default function TripDetailScreen() {
     );
   };
 
+  const handleShareWithFamily = async () => {
+    if (!trip) return;
+    const originClean = trip.origin_label ? trip.origin_label.split(',')[0] : 'Origin';
+    const destClean = trip.destination_label ? trip.destination_label.split(',')[0] : 'Destination';
+    const driverName = (trip.driver as any)?.full_name || 'Driver';
+    const vehicleInfo = trip.vehicle ? `${trip.vehicle.model || trip.vehicle.type} (${trip.vehicle.plate_number})` : 'Registered Vehicle';
+    const depTime = formatDepartureTime(trip.departure_time);
+
+    const shareMsg = [
+      `🛡️ [COMMUTE COMPANION - TRIP SAFETY SHARE]`,
+      `I am sharing my carpool trip details with you for safety:`,
+      `• Route: ${originClean} → ${destClean}`,
+      `• Driver: ${driverName}`,
+      `• Vehicle: ${vehicleInfo}`,
+      `• Departure: ${depTime}`,
+      `• Status: ${trip.status.toUpperCase()}`,
+      `• Trip ID: ${trip.id}`,
+      `• Live Route: https://commutecompanion.app/track/${trip.id}`,
+    ].join('\n');
+
+    try {
+      await Share.share({
+        title: 'Commute Companion - Live Trip Details',
+        message: shareMsg,
+      });
+    } catch (e) {
+      // User cancelled
+    }
+  };
+
   const handleShareToHub = () => {
     if (!trip || !profile?.id) return;
 
@@ -1003,6 +1033,28 @@ export default function TripDetailScreen() {
                   <Ionicons name="share-social" size={13} color={theme.colors.primary} />
                   <Text style={{ fontSize: 12, color: theme.colors.primary, fontFamily: 'Inter-SemiBold' }}>
                     Share to Hub
+                  </Text>
+                </Pressable>
+              )}
+              {(trip.status === 'open' || trip.status === 'full' || trip.status === 'ongoing') && (
+                <Pressable
+                  onPress={handleShareWithFamily}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 4,
+                    paddingVertical: 4,
+                    paddingHorizontal: 10,
+                    borderRadius: 8,
+                    backgroundColor: `${theme.colors.success}18`,
+                    borderWidth: 1,
+                    borderColor: `${theme.colors.success}30`,
+                    opacity: pressed ? 0.75 : 1,
+                  })}
+                >
+                  <Ionicons name="shield-checkmark" size={13} color={theme.colors.success} />
+                  <Text style={{ fontSize: 12, color: theme.colors.success, fontFamily: 'Inter-SemiBold' }}>
+                    Share with Family
                   </Text>
                 </Pressable>
               )}

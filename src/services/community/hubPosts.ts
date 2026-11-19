@@ -1,8 +1,13 @@
 import { supabase } from '@/lib/supabase';
 import { HubPost, HubPostWithAuthor } from '@/types/database';
 
+// Re-export full domain service for clean unified access
+export * from './hub';
+
 /** Create a hub post */
-export async function createHubPost(postData: Omit<HubPost, 'id' | 'created_at'>): Promise<{ data: HubPost | null, error: Error | null }> {
+export async function createHubPost(
+  postData: Omit<HubPost, 'id' | 'created_at'>
+): Promise<{ data: HubPost | null; error: Error | null }> {
   const { data, error } = await supabase
     .from('hub_posts')
     .insert(postData)
@@ -12,7 +17,10 @@ export async function createHubPost(postData: Omit<HubPost, 'id' | 'created_at'>
 }
 
 /** Get hub post feed */
-export async function getHubPosts(limit: number = 20, offset: number = 0): Promise<HubPostWithAuthor[]> {
+export async function getHubPosts(
+  limit: number = 20,
+  offset: number = 0
+): Promise<HubPostWithAuthor[]> {
   const { data, error } = await supabase
     .from('hub_posts')
     .select(`*, author:profiles!hub_posts_author_id_fkey(*), trip:trips(*)`)
@@ -23,7 +31,9 @@ export async function getHubPosts(limit: number = 20, offset: number = 0): Promi
 }
 
 /** Get posts by route hash */
-export async function getPostsByRoute(routeHash: string): Promise<HubPostWithAuthor[]> {
+export async function getPostsByRoute(
+  routeHash: string
+): Promise<HubPostWithAuthor[]> {
   const { data, error } = await supabase
     .from('hub_posts')
     .select(`*, author:profiles!hub_posts_author_id_fkey(*), trip:trips(*)`)

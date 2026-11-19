@@ -142,14 +142,15 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   };
 
   // Configure Expo Notification Handler dynamically:
-  // Allow OS push banners and sounds when enabled, while in-app banners provide rich interactive actions.
+  // When the user is inside the app, suppress the OS heads-up alert banner
+  // so it does not collide with the app's custom interactive in-app banner.
   useEffect(() => {
     if (Platform.OS === 'web') return;
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
-        shouldShowAlert: pushEnabled,
-        shouldShowBanner: pushEnabled,
-        shouldShowList: pushEnabled,
+        shouldShowAlert: false, // Suppress OS heads-up banner in foreground to avoid overlapping in-app banner
+        shouldShowBanner: false,
+        shouldShowList: pushEnabled, // Still record in Android notification shade / drawer
         shouldPlaySound: soundEnabled,
         shouldSetBadge: pushEnabled,
       }),
@@ -169,8 +170,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     }
 
-    // Trigger OS-level notification so the system status bar and heads-up alert appear
-    if (Platform.OS !== 'web' && push) {
+    // Only trigger OS-level notification if the user is outside the app (background or inactive)
+    if (Platform.OS !== 'web' && push && AppState.currentState !== 'active') {
       Notifications.scheduleNotificationAsync({
         content: {
           title,

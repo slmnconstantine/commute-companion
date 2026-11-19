@@ -1,0 +1,63 @@
+# Dependencies
+node_modules/
+node_modules.zip
+*.zip
+
+# Expo & Metro
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+.metro-health-check*
+
+# Native Keystores & Certs
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.pem
+
+# Build Artefacts
+*.apk
+*.aab
+*.ipa
+
+# Debug & Logs
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.log
+
+# OS Generated Files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
+
+# Environment Files
+.env
+.env*.local
+
+# TypeScript
+*.tsbuildinfo
+
+# IDE & Editor Temporary Files
+*.swp
+*.swo
+*~
+.eslintcache
+
+# Generated native folders
+/ios
+/android
+
+# Project specific non-app assets
+poster/
+backend/
+scripts/
+*.docx
+*.zip
+*.csv

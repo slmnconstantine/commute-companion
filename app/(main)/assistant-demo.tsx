@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Pressable, Animated, Easing, Dimensions,
+  View, Text, StyleSheet, ScrollView, Pressable, Animated, Easing, Dimensions, Switch, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
+import { useVoiceAssistant } from '@/context/VoiceAssistantContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -177,6 +178,7 @@ const STATE_CONFIG: Record<string, { label: string; icon: string }> = {
 export default function AssistantDemoScreen() {
   const { theme, mode } = useTheme();
   const router = useRouter();
+  const { isWakeWordEnabled, setIsWakeWordEnabled } = useVoiceAssistant();
 
   const [demoState, setDemoState] = useState<DemoState>('idle');
   const [demoMessages, setDemoMessages] = useState<DemoMessage[]>([]);
@@ -262,6 +264,35 @@ export default function AssistantDemoScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* ─── Hands-Free Wake Word Setting Card ─── */}
+        <View style={[styles.wakeWordCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+          <View style={[styles.wakeWordIconWrap, { backgroundColor: `${isWakeWordEnabled ? theme.colors.primary : theme.colors.textMuted}15` }]}>
+            <Ionicons name={isWakeWordEnabled ? 'mic' : 'mic-off'} size={22} color={isWakeWordEnabled ? theme.colors.primary : theme.colors.textMuted} />
+          </View>
+          <View style={styles.wakeWordTextWrap}>
+            <Text style={[styles.wakeWordTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>
+              Hands-Free "Hey Coco"
+            </Text>
+            <Text style={[styles.wakeWordDesc, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
+              {isWakeWordEnabled
+                ? 'Microphone is active on-device listening for "Hey Coco" while app is open'
+                : 'Turn on to wake up the assistant hands-free with your voice'}
+            </Text>
+          </View>
+          <Switch
+            value={isWakeWordEnabled}
+            onValueChange={async (val) => {
+              try {
+                await setIsWakeWordEnabled(val);
+              } catch (e: any) {
+                Alert.alert('Microphone Permission', e?.message || 'Could not access microphone.');
+              }
+            }}
+            trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+            thumbColor="#FFFFFF"
+          />
+        </View>
+
         {/* ─── Interactive Demo Section ─── */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text, fontFamily: 'Inter-Bold' }]}>
@@ -891,5 +922,32 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     marginTop: 1,
+  },
+  wakeWordCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    marginBottom: 20,
+    gap: 12,
+  },
+  wakeWordIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  wakeWordTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  wakeWordTitle: {
+    fontSize: 15,
+  },
+  wakeWordDesc: {
+    fontSize: 12,
+    lineHeight: 16,
   },
 });

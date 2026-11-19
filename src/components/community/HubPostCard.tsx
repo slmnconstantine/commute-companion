@@ -9,6 +9,7 @@ import Avatar from '@/components/common/Avatar';
 import Skeleton from '@/components/common/Skeleton';
 import ReactionPicker from './ReactionPicker';
 import { HUB_REACTIONS, HubReactionType } from '@/lib/constants';
+import { getCommentDisplayText } from '@/services/community/hub';
 
 interface HubPostCardProps {
   post?: HubPostWithAuthor;
@@ -166,13 +167,6 @@ function HubPostCard({
   const reactionIcon = activeReaction ? (activeReaction.icon as any) : (post.user_has_liked ? 'heart' : 'heart-outline');
   const reactionColor = activeReaction ? activeReaction.color : (post.user_has_liked ? (theme.colors.error || '#EF4444') : theme.colors.textMuted);
 
-  // Reaction types breakdown
-  const topReactions = Object.entries(post.reactions_count || {})
-    .filter(([_, count]) => count > 0)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3)
-    .map(([type]) => HUB_REACTIONS.find((r) => r.type === type))
-    .filter(Boolean);
 
   return (
     <Pressable
@@ -180,10 +174,10 @@ function HubPostCard({
         styles.container,
         {
           backgroundColor: isHighlighted
-            ? (isDark ? 'rgba(59, 130, 246, 0.12)' : '#EFF6FF')
+            ? (isDark ? 'rgba(59, 130, 246, 0.16)' : '#EFF6FF')
             : theme.colors.surface,
           borderColor: isHighlighted
-            ? (isDark ? '#3B82F6' : '#BFDBFE')
+            ? (isDark ? '#3B82F6' : '#2563EB')
             : theme.colors.border,
           opacity: pressed && onPress ? 0.97 : 1,
           transform: [{ scale: pressed && onPress ? 0.99 : 1 }],
@@ -366,8 +360,8 @@ function HubPostCard({
                       post.trip.status === 'open'
                         ? `${theme.colors.success}20`
                         : post.trip.status === 'full'
-                        ? 'rgba(139, 92, 246, 0.2)'
-                        : `${theme.colors.textMuted}20`,
+                          ? 'rgba(139, 92, 246, 0.2)'
+                          : `${theme.colors.textMuted}20`,
                   },
                 ]}
               >
@@ -379,16 +373,16 @@ function HubPostCard({
                         post.trip.status === 'open'
                           ? theme.colors.success
                           : post.trip.status === 'full'
-                          ? '#8B5CF6'
-                          : theme.colors.textMuted,
+                            ? '#8B5CF6'
+                            : theme.colors.textMuted,
                     },
                   ]}
                 >
                   {post.trip.status === 'open'
                     ? `${post.trip.available_seats || 1} seat${(post.trip.available_seats || 1) !== 1 ? 's' : ''} left`
                     : post.trip.status === 'full'
-                    ? 'Ride Full'
-                    : post.trip.status.toUpperCase()}
+                      ? 'Ride Full'
+                      : post.trip.status.toUpperCase()}
                 </Text>
               </View>
             )}
@@ -425,8 +419,8 @@ function HubPostCard({
                 {currentUserId && post.trip?.driver_id === currentUserId
                   ? 'View My Ride'
                   : post.trip?.status === 'open'
-                  ? 'Click here to join my ride'
-                  : 'View Ride'}
+                    ? 'Click here to join my ride'
+                    : 'View Ride'}
               </Text>
               <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
             </View>
@@ -462,21 +456,6 @@ function HubPostCard({
               <Text style={[styles.actionText, { color: reactionColor }]}>
                 {post.likes_count || 0}
               </Text>
-
-              {/* Reaction breakdown icons */}
-              {topReactions.length > 0 && (
-                <View style={styles.topReactionsRow}>
-                  {topReactions.map((r, i) => (
-                    <Ionicons
-                      key={i}
-                      name={r!.icon as any}
-                      size={11}
-                      color={r!.color}
-                      style={{ marginLeft: i > 0 ? -3 : 2 }}
-                    />
-                  ))}
-                </View>
-              )}
             </Pressable>
           )}
 
@@ -505,7 +484,7 @@ function HubPostCard({
                 {comment.author?.full_name?.split(' ')[0] || 'User'}:
               </Text>
               <Text style={[styles.recentCommentText, { color: theme.colors.textMuted }]} numberOfLines={1}>
-                {comment.content}
+                {getCommentDisplayText(comment.content)}
               </Text>
             </View>
           ))}
@@ -622,11 +601,6 @@ const styles = StyleSheet.create({
   actionText: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-  },
-  topReactionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: 4,
   },
   recentCommentsBox: {
     borderRadius: 10,

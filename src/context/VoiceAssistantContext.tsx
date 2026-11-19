@@ -345,20 +345,28 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
       { id: (Date.now() + 1).toString(), role: 'assistant', text: greeting },
     ]);
 
+    let recordingStarted = false;
+    const beginListeningAfterGreeting = () => {
+      if (recordingStarted) return;
+      recordingStarted = true;
+      startRecording(undefined, true).catch((err) => {
+        console.warn('Failed to start recording after wake word:', err);
+      });
+    };
+
     try {
       Speech.speak(greeting, {
-        onError: (err) => console.warn('Speech TTS error:', err),
+        onDone: beginListeningAfterGreeting,
+        onError: (err) => {
+          console.warn('Speech TTS error:', err);
+          beginListeningAfterGreeting();
+        },
       });
-    } catch {}
-
-    // Open assistant sheet and transition to recording so they can speak hands-free right away
-    setTimeout(async () => {
-      try {
-        await startRecording(undefined, true);
-      } catch (err) {
-        console.warn('Failed to start recording after wake word:', err);
-      }
-    }, 1000);
+      // Safety fallback in case onDone doesn't fire on some platforms
+      setTimeout(beginListeningAfterGreeting, 2500);
+    } catch {
+      beginListeningAfterGreeting();
+    }
   }, [processTextInput, startRecording]);
 
   const { isWakeWordEnabled, isWakeWordListening, setIsWakeWordEnabled } = useWakeWord({

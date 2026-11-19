@@ -26,6 +26,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import SafeLottieView from '@/components/common/SafeLottieView';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
+import { useVoiceAssistant } from '@/context/VoiceAssistantContext';
 import Avatar from '@/components/common/Avatar';
 import Badge from '@/components/common/Badge';
 import ThemeToggle from '@/components/common/ThemeToggle';
@@ -51,7 +52,19 @@ interface MenuSection {
 export default function ProfileScreen() {
   const { theme, mode, toggleTheme } = useTheme();
   const { profile, signOut, updateProfile, refreshProfile } = useAuth();
+  const { isWakeWordEnabled, setIsWakeWordEnabled } = useVoiceAssistant();
   const router = useRouter();
+
+  const handleToggleWakeWord = async (val: boolean) => {
+    try {
+      await setIsWakeWordEnabled(val);
+    } catch (err: any) {
+      Alert.alert(
+        'Microphone Permission',
+        err?.message || 'Microphone access is needed for hands-free wake word.'
+      );
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -60,6 +73,9 @@ export default function ProfileScreen() {
   );
 
   const isDriver = profile?.role === 'driver';
+  const isDriverApplicationPending = Boolean(
+    !isDriver && (profile?.vehicle_photo_url || profile?.or_cr_url || (profile?.police_clearance_url && !profile?.is_verified))
+  );
 
   const memberSince = profile?.created_at
     ? new Date(profile.created_at).toLocaleDateString('en-PH', {
@@ -76,6 +92,7 @@ export default function ProfileScreen() {
         style: 'destructive',
         onPress: async () => {
           await signOut();
+          router.replace('/(auth)/sign-in' as any);
         },
       },
     ]);
@@ -147,18 +164,27 @@ export default function ProfileScreen() {
       title: 'App',
       items: [
         {
-          icon: 'bulb-outline',
-          label: 'App Feature Tour',
-          onPress: () => router.push('/(main)/(tabs)?showTour=true' as any),
-        },
-        {
           icon: 'notifications-outline',
           label: 'Notifications',
           onPress: () => router.push('/(main)/settings/notifications' as any),
         },
         {
+          icon: isWakeWordEnabled ? 'mic' : 'mic-off',
+          label: 'Hands-Free "Hey Coco"',
+          color: isWakeWordEnabled ? theme.colors.primary : theme.colors.textMuted,
+          onPress: () => handleToggleWakeWord(!isWakeWordEnabled),
+          rightElement: (
+            <Switch
+              value={isWakeWordEnabled}
+              onValueChange={handleToggleWakeWord}
+              trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+              thumbColor="#FFFFFF"
+            />
+          ),
+        },
+        {
           icon: 'sparkles-outline',
-          label: 'AI Assistant & "Hey Coco"',
+          label: 'AI Assistant Guide & Commands',
           onPress: () => router.push('/(main)/assistant-demo' as any),
         },
       ],
@@ -381,27 +407,59 @@ export default function ProfileScreen() {
 
         {/* ── Become a Driver Card (Commuters only) ────────────────── */}
         {!isDriver && (
-          <BouncyPressable
-            scaleTo={0.98}
-            hapticType="light"
-            style={[styles.upgradeCard, { backgroundColor: theme.colors.surface, shadowColor: theme.colors.shadow }]}
-            onPress={() => router.push('/(main)/settings/become-driver' as any)}
-          >
-            <View style={[styles.upgradeIconContainer, { backgroundColor: `${theme.colors.primary}15` }]}>
-              <Ionicons name="car-sport" size={32} color={theme.colors.primary} />
-            </View>
-            <View style={styles.upgradeTextContainer}>
-              <Text style={[styles.upgradeTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>
-                Become a Driver
-              </Text>
-              <Text style={[styles.upgradeDesc, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
-                Start offering rides, share your commute, and earn by carpooling with others.
-              </Text>
-            </View>
-            <View style={[styles.upgradeArrow, { backgroundColor: theme.colors.primary }]}>
-              <Ionicons name="arrow-forward" size={18} color={theme.colors.white} />
-            </View>
-          </BouncyPressable>
+          isDriverApplicationPending ? (
+            <BouncyPressable
+              scaleTo={0.98}
+              hapticType="light"
+              style={[
+                styles.upgradeCard,
+                {
+                  backgroundColor: theme.colors.surface,
+                  shadowColor: theme.colors.shadow,
+                  borderWidth: 1,
+                  borderColor: '#F59E0B',
+                },
+              ]}
+              onPress={() => router.push('/(main)/verification' as any)}
+            >
+              <View style={[styles.upgradeIconContainer, { backgroundColor: 'rgba(245, 158, 11, 0.15)' }]}>
+                <Ionicons name="time" size={32} color="#F59E0B" />
+              </View>
+              <View style={styles.upgradeTextContainer}>
+                <Text style={[styles.upgradeTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>
+                  Driver Application Under Review
+                </Text>
+                <Text style={[styles.upgradeDesc, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
+                  Your driver documents are currently under review by our admin team.
+                </Text>
+              </View>
+              <View style={[styles.upgradeArrow, { backgroundColor: '#F59E0B' }]}>
+                <Ionicons name="chevron-forward" size={18} color={theme.colors.white} />
+              </View>
+            </BouncyPressable>
+          ) : (
+            <BouncyPressable
+              scaleTo={0.98}
+              hapticType="light"
+              style={[styles.upgradeCard, { backgroundColor: theme.colors.surface, shadowColor: theme.colors.shadow }]}
+              onPress={() => router.push('/(main)/settings/become-driver' as any)}
+            >
+              <View style={[styles.upgradeIconContainer, { backgroundColor: `${theme.colors.primary}15` }]}>
+                <Ionicons name="car-sport" size={32} color={theme.colors.primary} />
+              </View>
+              <View style={styles.upgradeTextContainer}>
+                <Text style={[styles.upgradeTitle, { color: theme.colors.text, fontFamily: 'Inter-SemiBold' }]}>
+                  Become a Driver
+                </Text>
+                <Text style={[styles.upgradeDesc, { color: theme.colors.textMuted, fontFamily: 'Inter-Regular' }]}>
+                  Start offering rides, share your commute, and earn by carpooling with others.
+                </Text>
+              </View>
+              <View style={[styles.upgradeArrow, { backgroundColor: theme.colors.primary }]}>
+                <Ionicons name="arrow-forward" size={18} color={theme.colors.white} />
+              </View>
+            </BouncyPressable>
+          )
         )}
 
         {/* ── Menu Sections ───────────────────────────────────────── */}

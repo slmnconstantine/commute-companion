@@ -16,7 +16,7 @@ interface UseWakeWordOptions {
 }
 
 export function useWakeWord({ assistantState, onWakeWord }: UseWakeWordOptions) {
-  const [isWakeWordEnabled, setIsWakeWordEnabledState] = useState(true);
+  const [isWakeWordEnabled, setIsWakeWordEnabledState] = useState(false);
   const [isWakeWordListening, setIsWakeWordListening] = useState(false);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -193,8 +193,9 @@ export function useWakeWord({ assistantState, onWakeWord }: UseWakeWordOptions) 
     const transcript = ev.results[0]?.transcript || '';
     if (WAKE_WORD_CHECK_REGEX.test(transcript.trim())) {
       haptics.success();
+      setIsWakeWordListening(false);
       try {
-        ExpoSpeechRecognitionModule?.stop();
+        ExpoSpeechRecognitionModule?.abort();
       } catch {}
       onWakeWordRef.current(transcript);
     }
@@ -215,7 +216,9 @@ export function useWakeWord({ assistantState, onWakeWord }: UseWakeWordOptions) 
 
   useSpeechRecognitionEvent('error', (err) => {
     if (Platform.OS === 'web') return;
-    if (err.error !== 'no-speech' && err.error !== 'aborted') {
+    const ignorableErrors = ['no-speech', 'aborted', 'audio-capture', 'network'];
+    const isServerDisconnected = err.message?.toLowerCase().includes('server disconnected');
+    if (!ignorableErrors.includes(err.error) && !isServerDisconnected) {
       console.warn('Native speech recognition warning:', err.error, err.message);
     }
   });

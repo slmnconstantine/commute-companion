@@ -20,6 +20,8 @@ export interface Profile {
   verified_badge: boolean;
   government_id_url: string | null;
   police_clearance_url?: string | null;
+  vehicle_photo_url?: string | null;
+  or_cr_url?: string | null;
   avatar_url: string | null;
   rating_avg: number | null;
   total_ratings: number;
@@ -38,6 +40,8 @@ export interface Vehicle {
   model: string;
   capacity: string;
   is_active: boolean;
+  photo_url?: string | null;
+  or_cr_url?: string | null;
   created_at: string;
 }
 

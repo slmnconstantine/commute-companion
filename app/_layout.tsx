@@ -97,7 +97,7 @@ function RootLayoutNav() {
         if (hasCompletedOnboarding === false) {
           router.replace('/(auth)/onboarding');
         } else {
-          router.replace('/(auth)/welcome');
+          router.replace('/(auth)/sign-in');
         }
       } else if (isVerifyEmail) {
         router.replace('/(auth)/sign-in');

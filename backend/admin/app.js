@@ -981,7 +981,9 @@ function renderVerificationInbox() {
     return;
   }
 
-  submissionsContainer.innerHTML = pendingUsers.map(user => `
+  submissionsContainer.innerHTML = pendingUsers.map(user => {
+    const isDriverApp = Boolean(user.vehicle || user.vehicle_photo_url || user.or_cr_url || user.police_clearance_url);
+    return `
     <div class="submission-item ${selectedUserId === user.id ? 'active' : ''}" onclick="selectSubmission('${user.id}')">
       <div class="submission-item-meta">
         <div class="user-avatar" style="${user.avatar_url ? `background-image: url(${user.avatar_url})` : ''}">
@@ -989,12 +991,13 @@ function renderVerificationInbox() {
         </div>
         <div class="submission-item-details">
           <h4>${escapeHTML(user.full_name)}</h4>
-          <span>@${escapeHTML(user.username || 'unnamed')} • ${user.role}</span>
+          <span>@${escapeHTML(user.username || 'unnamed')} • ${isDriverApp ? 'Driver Applicant' : user.role}</span>
         </div>
       </div>
       <i data-lucide="chevron-right" class="text-dark"></i>
     </div>
-  `).join('');
+  `;
+  }).join('');
 
   if (!selectedUserId) {
     selectedUserId = pendingUsers[0].id;
@@ -1002,6 +1005,7 @@ function renderVerificationInbox() {
 
   const selectedUser = pendingUsers.find(u => u.id === selectedUserId);
   if (selectedUser) {
+    const isDriverApp = Boolean(selectedUser.vehicle || selectedUser.vehicle_photo_url || selectedUser.or_cr_url || selectedUser.police_clearance_url);
     viewerContainer.innerHTML = `
       <div class="viewer-header">
         <div class="viewer-user-profile">
@@ -1013,6 +1017,7 @@ function renderVerificationInbox() {
             <span>Username: @${escapeHTML(selectedUser.username || 'unnamed')} • ID: ${selectedUser.id}</span>
             <div class="viewer-pills">
               <span class="badge-role ${selectedUser.role}">${selectedUser.role}</span>
+              ${isDriverApp ? `<span class="badge-role" style="background: rgba(14, 165, 233, 0.12); color: #0284C7;"><i data-lucide="car" style="width: 12px; height: 12px; vertical-align: middle;"></i> Driver Applicant</span>` : ''}
               <span class="badge-verify pending"><i data-lucide="hourglass"></i> Pending Approval</span>
               ${selectedUser.gcash_number ? `<span class="badge-role" style="background: rgba(0, 125, 254, 0.12); color: #007DFE;">GCash: ${selectedUser.gcash_number}</span>` : ''}
             </div>
@@ -1032,24 +1037,58 @@ function renderVerificationInbox() {
         </div>
       ` : ''}
 
-      <div class="document-view-container">
-        <div class="document-title">Uploaded Government Document / Driver's License</div>
-        <div class="document-image-frame" onclick="openLightbox('${selectedUser.government_id_url}', '${escapeHTML(selectedUser.full_name)}\\'s Document')">
-          <img src="${selectedUser.government_id_url}" alt="Government ID" onerror="handleImageLoadError(this)">
-          <div class="image-zoom-overlay">
-            <i data-lucide="maximize-2"></i>
-            Click to expand and inspect
+      ${selectedUser.government_id_url ? `
+        <div class="document-view-container">
+          <div class="document-title" style="display: flex; align-items: center; gap: 6px; color: var(--accent-primary, #6366F1);">
+            <i data-lucide="id-card" style="width: 16px; height: 16px;"></i> Driver's License / Government ID
+          </div>
+          <div class="document-image-frame" onclick="openLightbox('${selectedUser.government_id_url}', '${escapeHTML(selectedUser.full_name)}\\'s Driver\\'s License')">
+            <img src="${selectedUser.government_id_url}" alt="Government ID" onerror="handleImageLoadError(this)">
+            <div class="image-zoom-overlay">
+              <i data-lucide="maximize-2"></i>
+              Click to expand and inspect
+            </div>
           </div>
         </div>
-      </div>
+      ` : ''}
 
       ${selectedUser.police_clearance_url ? `
         <div class="document-view-container" style="margin-top: 16px;">
           <div class="document-title" style="display: flex; align-items: center; gap: 6px; color: var(--accent-secondary, #0D9488);">
-            <i data-lucide="shield-check" style="width: 16px; height: 16px;"></i> National Police Clearance (NPC)
+            <i data-lucide="shield-check" style="width: 16px; height: 16px;"></i> NBI / Police Clearance
           </div>
-          <div class="document-image-frame" onclick="openLightbox('${selectedUser.police_clearance_url}', '${escapeHTML(selectedUser.full_name)}\\'s Police Clearance')">
-            <img src="${selectedUser.police_clearance_url}" alt="Police Clearance" onerror="handleImageLoadError(this)">
+          <div class="document-image-frame" onclick="openLightbox('${selectedUser.police_clearance_url}', '${escapeHTML(selectedUser.full_name)}\\'s NBI Clearance')">
+            <img src="${selectedUser.police_clearance_url}" alt="NBI Clearance" onerror="handleImageLoadError(this)">
+            <div class="image-zoom-overlay">
+              <i data-lucide="maximize-2"></i>
+              Click to expand and inspect
+            </div>
+          </div>
+        </div>
+      ` : ''}
+
+      ${(selectedUser.or_cr_url || selectedUser.vehicle?.or_cr_url) ? `
+        <div class="document-view-container" style="margin-top: 16px;">
+          <div class="document-title" style="display: flex; align-items: center; gap: 6px; color: #2563EB;">
+            <i data-lucide="file-text" style="width: 16px; height: 16px;"></i> Vehicle Registration (OR/CR)
+          </div>
+          <div class="document-image-frame" onclick="openLightbox('${selectedUser.or_cr_url || selectedUser.vehicle.or_cr_url}', '${escapeHTML(selectedUser.full_name)}\\'s OR/CR')">
+            <img src="${selectedUser.or_cr_url || selectedUser.vehicle.or_cr_url}" alt="OR/CR Document" onerror="handleImageLoadError(this)">
+            <div class="image-zoom-overlay">
+              <i data-lucide="maximize-2"></i>
+              Click to expand and inspect
+            </div>
+          </div>
+        </div>
+      ` : ''}
+
+      ${(selectedUser.vehicle_photo_url || selectedUser.vehicle?.photo_url) ? `
+        <div class="document-view-container" style="margin-top: 16px;">
+          <div class="document-title" style="display: flex; align-items: center; gap: 6px; color: #F59E0B;">
+            <i data-lucide="car" style="width: 16px; height: 16px;"></i> Vehicle Photo
+          </div>
+          <div class="document-image-frame" onclick="openLightbox('${selectedUser.vehicle_photo_url || selectedUser.vehicle.photo_url}', '${escapeHTML(selectedUser.full_name)}\\'s Vehicle Photo')">
+            <img src="${selectedUser.vehicle_photo_url || selectedUser.vehicle.photo_url}" alt="Vehicle Photo" onerror="handleImageLoadError(this)">
             <div class="image-zoom-overlay">
               <i data-lucide="maximize-2"></i>
               Click to expand and inspect
@@ -1092,12 +1131,12 @@ async function approveVerification(userId) {
     if (rpcErr) {
       const { error } = await supabaseClient
         .from('profiles')
-        .update({ is_verified: true, verified_badge: true })
+        .update({ role: 'driver', is_verified: true, verified_badge: true })
         .eq('id', userId);
       if (error) throw error;
     }
 
-    showToast(`Verification approved successfully.`, 'success');
+    showToast(`Verification approved successfully! User upgraded to Driver.`, 'success');
     await refreshData();
   } catch (err) {
     console.error('Approve failed:', err);
@@ -1119,12 +1158,20 @@ async function rejectVerification(userId) {
     if (rpcErr) {
       const { error } = await supabaseClient
         .from('profiles')
-        .update({ government_id_url: null, is_verified: false, verified_badge: false })
+        .update({
+          role: 'commuter',
+          government_id_url: null,
+          police_clearance_url: null,
+          vehicle_photo_url: null,
+          or_cr_url: null,
+          is_verified: false,
+          verified_badge: false
+        })
         .eq('id', userId);
       if (error) throw error;
     }
 
-    showToast(`ID Submission rejected. User record reset.`, 'success');
+    showToast(`ID Submission rejected. User record reset to Commuter.`, 'success');
     await refreshData();
   } catch (err) {
     console.error('Reject failed:', err);
