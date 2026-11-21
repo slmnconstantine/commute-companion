@@ -61,6 +61,12 @@ npm run admin
 ```
 The server will run on `http://localhost:8080`.
 
+> **Required:** the admin portal refuses to start a session without `ADMIN_PASSWORD`.
+> Set it in your `.env` before running `npm run admin`. If it is unset, `/api/login`
+> **fails closed** and returns HTTP `503` (*"Administrator password is not configured"*)
+> instead of accepting any password. The same applies to the Vercel deployment —
+> set `ADMIN_PASSWORD` in the project environment variables.
+
 ## Recent Changes
 
 - **Project Restructuring:** Separated backend components (Supabase & Admin) into a dedicated `/backend` directory, while keeping Expo frontend files securely configured at the root.
