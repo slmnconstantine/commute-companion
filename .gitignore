@@ -55,3 +55,6 @@ ehthumbs.db
 # Generated native folders
 /ios
 /android
+
+# Submission credentials — kept on disk for flash drive only
+CREDENTIALS.txt
