@@ -25,8 +25,15 @@ module.exports = async (req, res) => {
     const configuredPassword = (
       process.env.ADMIN_PASSWORD ||
       process.env.ADMIN_SECRET ||
-      'admin123'
+      ''
     ).trim();
+
+    if (!configuredPassword) {
+      return res.status(503).json({
+        success: false,
+        message: 'Administrator password is not configured'
+      });
+    }
 
     if (!submittedPassword) {
       return res.status(400).json({

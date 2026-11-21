@@ -66,7 +66,13 @@ const server = http.createServer((req, res) => {
       try {
         const parsed = JSON.parse(body || '{}');
         const submitted = (parsed.password || '').trim();
-        const expected = (env.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || 'admin123').trim();
+        const expected = (env.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || '').trim();
+
+        if (!expected) {
+          res.writeHead(503, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, message: 'Administrator password is not configured' }));
+          return;
+        }
 
         if (submitted && submitted === expected) {
           res.writeHead(200, {
